@@ -19,9 +19,16 @@ import subprocess
 #import multitracker
 #from multitracker import util 
 
+base_dir_default = os.path.expanduser('~/data/multitracker/projects')
+
+def get_frames_dir(project_dir, video_id):
+    return os.path.join(project_dir,str(video_id),'frames')
+
+def get_project_dir(base_dir, project_id):
+    return os.path.join(base_dir,str(project_id))
 
 def add_video_to_project(base_dir, project_id, source_video_file):
-    project_dir = os.path.join(base_dir,str(project_id))
+    project_dir = get_project_dir(base_dir, project_id)
 
     video_dir = os.path.join(project_dir,"videos")
     if not os.path.isdir(video_dir ):
@@ -32,8 +39,7 @@ def add_video_to_project(base_dir, project_id, source_video_file):
     video_id = 0
     #connector.execute("""insert into videos (project_id, video, inserted_at) values (%i, '%s', '%s');""" % (project_id, video_file, multitracker.util.get_now()))
 
-
-    frames_dir = os.path.join(project_dir,str(video_id),'frames')
+    frames_dir = get_frames_dir(project_dir, video_id)
     if not os.path.isdir(frames_dir):
         os.makedirs(os.path.join(frames_dir,"train"))
         os.makedirs(os.path.join(frames_dir,"test"))
@@ -64,7 +70,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-add_project',type=int,required=True)
     parser.add_argument('-add_video',type=str,required=True)
-    parser.add_argument('-base_dir',required=False,default = os.path.expanduser('~/data/multitracker/projects'))
+    parser.add_argument('-base_dir',required=False,default = base_dir_default)
     args = parser.parse_args()
 
     add_video_to_project(args.base_dir, args.add_project, args.add_video)
