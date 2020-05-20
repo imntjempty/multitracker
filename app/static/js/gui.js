@@ -10,7 +10,7 @@ function init_gui(){
     });
 
     document.getElementById("bu_send").onclick = function(){
-        let url = "/di/labeling";
+        let url = "/labeling";
         let package = get_labeling_data();
         if(package !== null){
             post(url,package,redirect_next_task);
@@ -18,7 +18,7 @@ function init_gui(){
     };
 
     document.getElementById("bu_skip").onclick = function(){
-        let url = "/di/skip_labeling";
+        let url = "/skip_labeling";
         let package = get_skip_data();
         if(package !== null){
             post(url,package,redirect_next_task);

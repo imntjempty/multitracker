@@ -71,28 +71,21 @@
     </tr>
 
     
-    <tr><td><input type="button" id="bu_send" value="Weiter"></td></tr>
-    <tr><td><input type="button" id="bu_skip" value="Problem melden!"></td></tr>
+    <tr><td><input type="button" id="bu_send" value="Next"></td></tr>
+    <tr><td><input type="button" id="bu_skip" value="Skip!"></td></tr>
     
     <tr><td><div id="container_gui"></div></td></tr>
     </table>
 </dialog>
 
-{% for file in files %}
-    <div id="container_{{file['id']}}" style="height: 100%;"></div>
-{% endfor %}
+<div id="container" style="height: 100%;"></div>
+
 <script src="/static/js/labeling.js"></script>
 <script src="/static/js/gui.js"></script>
 <script>
-    let user_id = {{user_id}};
-    let task_id = {{task_id}};
-    let group_id = {{group_id}};
-    let started_at = "{{started_at}}";
-
-    let files = [];
-    {% for file in files %}
-        files.push({'id':{{file['id']}} });
-    {% endfor %}
+    let project_id = {{project_id}};
+    let video_id = {{video_id}};
+    let frame_idx = "{{frame_idx}}";
 
     init_fe();
     init_gui();
