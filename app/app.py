@@ -10,12 +10,14 @@ from flask import Flask, render_template, Response, send_file, abort
 from flask import request
 import os 
 import json
+from glob import glob 
+from random import shuffle 
 
 import numpy as np 
 import cv2 as cv 
 
 #from multitracker.be.db.dbconnection import get_connector
-
+from multitracker.be import video
 
 app = Flask(__name__)
 
@@ -24,6 +26,11 @@ app = Flask(__name__)
 @app.route('/get_next_labeling_frame/<project_id>')
 def render_labeling(project_id):
     video_id = 0
+    frames_dir = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, project_id), video_id),'train')
+    frames = sorted(glob(os.path.join(frames_dir, '*.png')))
+    shuffle(frames)
+    frame_idx = frames[int(len(frames)*np.random.random())]
+    frame_idx = '.'.join(frame_idx.split('/')[-1].split('.')[:-1])
     return render_template('labeling.html',project_id = int(project_id), video_id = int(video_id), frame_idx = frame_idx)
 
 @app.route('/get_frame/<project_id>/<video_id>/<frame_idx>')
@@ -45,8 +52,16 @@ def receive_labeling():
     print('[*] received labeling for frame %i.'%(int(data['frame_idx']) ))
     print(data)
     print()
+    return json.dumps({'success':True}), 200, {'ContentType':'application/json'} 
 
 @app.route('/skip_labeling',methods=["POST"])
 def skip_labeling():
     data = request.get_json(silent=True,force=True)
     print('[*] skip labeling',data)
+
+    return json.dumps({'success':True}), 200, {'ContentType':'application/json'} 
+
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8888)
