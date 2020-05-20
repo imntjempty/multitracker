@@ -40,10 +40,11 @@ def add_video_to_project(base_dir, project_id, source_video_file):
         #os.makedirs(os.path.join(project_dir,"/data"))
 
     # copy file to project directory    
-    shutil.copy(source_video_file, video_file)
+    if not os.path.isfile(video_file):
+        shutil.copy(source_video_file, video_file)
 
     # sample frames 
-    subprocess.call(['ffmpeg','-i',video_file, '-vf', 'fps=30', frames_dir+'/%d.png'])
+    subprocess.call(['ffmpeg','-i',video_file, '-vf', 'fps=30', frames_dir+'/%05d.png'])
     
 
     # split frames into train/test half/half
@@ -52,8 +53,7 @@ def add_video_to_project(base_dir, project_id, source_video_file):
     split_frame_idx = num_frames // 2
     for i in range(split_frame_idx):
         os.rename(frames[i], os.path.join(frames_dir,'train',frames[i].split('/')[-1]))
-    for i in range(split_frame_idx,num_frames):
-        os.rename(frames[i], os.path.join(frames_dir,'test',frames[i].split('/')[-1]))
+        os.rename(frames[i+split_frame_idx], os.path.join(frames_dir,'test',frames[i+split_frame_idx].split('/')[-1]))
 
     print('[*] added video %s to project %i with new video id %i.' % (source_video_file, project_id, video_id))
 
@@ -64,7 +64,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-add_project',type=int,required=True)
     parser.add_argument('-add_video',type=str,required=True)
-    parser.add_argument('-base_dir',required=False,default = os.path.expanduser('~/data/multitracker'))
+    parser.add_argument('-base_dir',required=False,default = os.path.expanduser('~/data/multitracker/projects'))
     args = parser.parse_args()
 
     add_video_to_project(args.base_dir, args.add_project, args.add_video)
