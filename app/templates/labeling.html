@@ -1,0 +1,101 @@
+<html>
+<head>
+    <title>Multitracker labeling</title>
+    <script src="/static/js/konva.min.js"></script>
+    <meta charset="utf-8">
+    <style>
+        body {
+          margin: 0;
+          /*overflow: hidden;*/
+          padding: 0;
+          background-color: #999999;
+        }
+        [data-tip] {
+            position:relative;
+
+        }
+        [data-tip]:before {
+            content:'';
+            /* hides the tooltip when not hovered */
+            display:none;
+            content:'';
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-bottom: 5px solid #1a1a1a;	
+            position:absolute;
+            top:30px;
+            left:35px;
+            z-index:8;
+            font-size:0;
+            line-height:0;
+            width:0;
+            height:0;
+        }
+        [data-tip]:after {
+            display:none;
+            content:attr(data-tip);
+            position:absolute;
+            top:35px;
+            left:-200px;
+            padding:5px 8px;
+            background:#1a1a1a;
+            color:#fff;
+            z-index:9;
+            font-size: 0.75em;
+            height:18px;
+            line-height:18px;
+            -webkit-border-radius: 3px;
+            -moz-border-radius: 3px;
+            border-radius: 3px;
+            white-space:nowrap;
+            word-wrap:normal;
+        }
+        [data-tip]:hover:before,
+        [data-tip]:hover:after {
+            display:block;
+        }
+    </style>
+    <script src="/static/js/network.js"></script>
+    <script src="/static/js/util.js"></script>
+</head>
+<body>
+<dialog id="gui" style="position:fixed;top:75px; left:85%; background-color:lightgrey;padding: 10px 10px 10px 10px; z-index:1000001;" open>
+    <table>
+    <tr><td><h2>Tools</h2></td></tr>
+    <tr>
+        <td><div data-tip='Entfernung direkt eingeben (zB "10")'>
+            Gemessen in Papier-cm:</div></td>
+            <td><div data-tip='oder dargestellte Länge in cm mit Maßstab (zB "400/50")'>
+            <input type="input" id="inp_ruler_cm" size="6" value="30"></div></td>
+        
+    </tr>
+
+    
+    <tr><td><input type="button" id="bu_send" value="Weiter"></td></tr>
+    <tr><td><input type="button" id="bu_skip" value="Problem melden!"></td></tr>
+    
+    <tr><td><div id="container_gui"></div></td></tr>
+    </table>
+</dialog>
+
+{% for file in files %}
+    <div id="container_{{file['id']}}" style="height: 100%;"></div>
+{% endfor %}
+<script src="/static/js/labeling.js"></script>
+<script src="/static/js/gui.js"></script>
+<script>
+    let user_id = {{user_id}};
+    let task_id = {{task_id}};
+    let group_id = {{group_id}};
+    let started_at = "{{started_at}}";
+
+    let files = [];
+    {% for file in files %}
+        files.push({'id':{{file['id']}} });
+    {% endfor %}
+
+    init_fe();
+    init_gui();
+    //gui.showModal();
+</script>
+</body></html>
