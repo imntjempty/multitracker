@@ -5,7 +5,7 @@ from multitracker.be import util
     === Project Handler ===
     create project logic with cli 
     
-    python3.7 -m multitracker.be.project -name A -manager ADolokov -keypoint_names nose,tail,left_ear,right_ear,left_front_feet,right_front_feet,left_back_feet,right_back_feet
+    python3.7 -m multitracker.be.project -name Superenrichment_Gruppe3 -manager ADolokov -keypoint_names nose,tail,left_ear,right_ear,left_front_feet,right_front_feet,left_back_feet,right_back_feet
 """
 
 def create_project(name, manager, keypoint_names):

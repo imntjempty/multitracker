@@ -26,7 +26,7 @@ db = dbconnection.DatabaseConnection()
 
 @app.route('/get_next_labeling_frame/<project_id>')
 def render_labeling(project_id):
-    video_id = 1#db.get_random_project_video(project_id)
+    video_id = db.get_random_project_video(project_id)
     print('video_id',video_id)
 
     frames_dir = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, project_id), video_id),'train')
