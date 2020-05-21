@@ -58,13 +58,15 @@ class DatabaseConnection(object):
     def save_labeling(self, data):
         keypoint_names = self.get_keypoint_names(int(data['project_id']),split=True)
         num_parts = len(keypoint_names)
-        for i, [x,y] in enumerate(data['keypoints']):
-            query = """ insert into keypoint_positions (video_id, frame_idx, keypoint_name, individual_id, keypoint_x, keypoint_y) values (?,?,?,?,?,?); """
+        for i, d in enumerate(data['keypoints']):
+            x, y = d['x'], d['y']
+            if not (x == -100 and y == -100):
+                id_ind = d['id_ind']
+                keypoint_name = d['keypoint_name']
+                query = """ insert into keypoint_positions (video_id, frame_idx, keypoint_name, individual_id, keypoint_x, keypoint_y) values (?,?,?,?,?,?); """
 
-            id_ind = i // num_parts 
-            keypoint_name = keypoint_names[i % num_parts]
-            values = (int(data['video_id']), str(data['frame_idx']), keypoint_name, id_ind, x, y)
-            self.insert(query, values)
+                values = (int(data['video_id']), str(data['frame_idx']), keypoint_name, id_ind, x, y)
+                self.insert(query, values)
         print('[*] saved labeling data to database.')
 
 def list_table(table):

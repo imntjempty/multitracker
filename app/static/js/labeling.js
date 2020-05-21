@@ -24,14 +24,15 @@ function add_keypoint(pos = null){
     let layer = stage.findOne('Layer');
     
     let keypoint = new Konva.Group({
-        id: 'keypoint_' + num_indiv.toString(),
+        id: 'keypoint_' + cnt_points.toString(),
+        name: keypoint_names[cnt_keypoints] + '__' + num_indiv.toString(),
         draggable: true,
         x: pos.x,
         y: pos.y
     });
 
     // add tooltip label showing id indiv and keypoint name
-    let label_text = num_indiv.toString() + " - " + keypoint_names[cnt_keypoints];
+    let label_text = cnt_points.toString() + " - " + keypoint_names[cnt_keypoints];
     let label = new Konva.Text({
         x: 1.2 * circle_radius / stage.scaleX(),
         y: 0,
@@ -62,6 +63,7 @@ function add_keypoint(pos = null){
     layer.add(keypoint);
 
     cnt_keypoints++;
+    cnt_points++;
     if (cnt_keypoints == keypoint_names.length){
         cnt_keypoints = 0;
         num_indiv++;
@@ -197,9 +199,14 @@ function get_labeling_data(){
     
     // find all labeled keypoints
     package['keypoints'] = [];
-    for(let i = 0 ; i < num_indiv; i++){
+    for(let i = 0 ; i < cnt_points; i++){
         let konva_kp = stage.findOne("#keypoint_" + i.toString());
-        package['keypoints'].push([konva_kp.x(),konva_kp.y()]);
+        let name_parts = konva_kp.name().split('__');
+        package['keypoints'].push({
+            'x': konva_kp.x(), 'y': konva_kp.y(),
+            'keypoint_name': name_parts[0],
+            'id_ind': name_parts[1]
+        });
     }
     
     console.log('[*] sending data',package);

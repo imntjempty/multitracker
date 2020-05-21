@@ -25,9 +25,14 @@ function init_gui(){
         }
     };
 
+    document.getElementById("bu_skip_keypoint").onclick = function(){
+        add_keypoint({x:-100,y:-100});
+    };
+
     update_gui_title();
 }
 
 function update_gui_title(){
-    document.getElementById('gui_title').innerHTML = "Click Next Point: "+num_indiv.toString()+" - "+keypoint_names[cnt_keypoints];
+    document.getElementById('gui_title').innerHTML = "click next point: "+num_indiv.toString()+" - "+keypoint_names[cnt_keypoints];
+    document.getElementById('bu_skip_keypoint').innerHTML = "skip point: "+num_indiv.toString()+" - "+keypoint_names[cnt_keypoints];
 }
