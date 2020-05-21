@@ -3,6 +3,12 @@
     <title>Multitracker labeling</title>
     <script src="/static/js/konva.min.js"></script>
     <meta charset="utf-8">
+    <link rel="stylesheet" type="text/css" href="https://semantic-ui.com/dist/semantic.min.css">
+    <script
+        src="https://code.jquery.com/jquery-3.1.1.min.js"
+        integrity="sha256-hVVnYaiADRTO2PzUGmuLJr8BLUSjGIZsDYGmIJLv2b8="
+        crossorigin="anonymous"></script>
+    <script src="https://semantic-ui.com/dist/semantic.min.js"></script>
     <style>
         body {
           margin: 0;
@@ -62,17 +68,9 @@
 <dialog id="gui" style="position:fixed;top:75px; left:75%; background-color:lightgrey;padding: 10px 10px 10px 10px; z-index:1000001;" open>
     <table>
     <tr><td><h2 id="gui_title">Click Next Point: 0 - </h2></td></tr>
-    <tr>
-        <td><div data-tip='Entfernung direkt eingeben (zB "10")'>
-            Gemessen in Papier-cm:</div></td>
-            <td><div data-tip='oder dargestellte Länge in cm mit Maßstab (zB "400/50")'>
-            <input type="input" id="inp_ruler_cm" size="6" value="30"></div></td>
-        
-    </tr>
-
     
-    <tr><td><input type="button" id="bu_send" value="Next"></td></tr>
-    <tr><td><input type="button" id="bu_skip" value="Skip!"></td></tr>
+    <tr><td><input type="button" id="bu_send" value="Next" class="positive ui button"></td></tr>
+    <tr><td><input type="button" id="bu_skip" value="Skip!" class="negative ui button"></td></tr>
     
     <tr><td><div id="container_gui"></div></td></tr>
     </table>
