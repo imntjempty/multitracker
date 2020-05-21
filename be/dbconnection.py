@@ -1,6 +1,7 @@
 import sqlite3
 from sqlite3 import Error
 import os 
+from random import shuffle 
 
 class DatabaseConnection(object):
     def __init__(self,file_db = os.path.expanduser("~/data/multitracker/data.db")):
