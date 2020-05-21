@@ -35,7 +35,7 @@ class DatabaseConnection(object):
         rows = self.cur.fetchall()
         if len(rows) == 0:
             raise Exception("[ERROR] no keypoint names found for project %s" % str(project_id))
-        return rows[0]
+        return rows[0][0]
 
 def list_table(table):
     print('[*] list of %s:' % table)

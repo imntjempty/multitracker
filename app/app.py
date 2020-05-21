@@ -21,17 +21,20 @@ from multitracker.be import video
 
 app = Flask(__name__)
 
-
+from multitracker.be import dbconnection
+db = dbconnection.DatabaseConnection()
 
 @app.route('/get_next_labeling_frame/<project_id>')
 def render_labeling(project_id):
-    video_id = 0
+    video_id = 1
     frames_dir = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, project_id), video_id),'train')
     frames = sorted(glob(os.path.join(frames_dir, '*.png')))
     shuffle(frames)
     frame_idx = frames[int(len(frames)*np.random.random())]
     frame_idx = '.'.join(frame_idx.split('/')[-1].split('.')[:-1])
-    return render_template('labeling.html',project_id = int(project_id), video_id = int(video_id), frame_idx = frame_idx)
+
+    keypoint_names = db.get_keypoint_names(project_id)
+    return render_template('labeling.html',project_id = int(project_id), video_id = int(video_id), frame_idx = frame_idx, keypoint_names = keypoint_names, sep = db.list_sep)
 
 @app.route('/get_frame/<project_id>/<video_id>/<frame_idx>')
 def get_frame(project_id,video_id,frame_idx):
