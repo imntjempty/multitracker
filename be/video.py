@@ -18,6 +18,7 @@ import subprocess
 
 #import multitracker
 #from multitracker import util 
+from multitracker.be import dbconnection
 
 base_dir_default = os.path.expanduser('~/data/multitracker/projects')
 
@@ -35,9 +36,10 @@ def add_video_to_project(base_dir, project_id, source_video_file):
         os.makedirs(video_dir)
     video_file = os.path.join(video_dir,source_video_file.split('/')[-1])
 
-    # insert video into db
-    video_id = 0
-    #connector.execute("""insert into videos (project_id, video, inserted_at) values (%i, '%s', '%s');""" % (project_id, video_file, multitracker.util.get_now()))
+    # save video to db
+    query = "insert into videos (name, project_id) values (?,?)"
+    conn = dbconnection.DatabaseConnection()
+    video_id = conn.insert(query, (video_file, int(project_id)) )
 
     frames_dir = get_frames_dir(project_dir, video_id)
     if not os.path.isdir(frames_dir):
