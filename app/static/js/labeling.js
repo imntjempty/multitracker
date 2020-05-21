@@ -11,6 +11,7 @@ let stage = null;
 
 let num_indiv = 0;
 let cnt_keypoints = 0;
+let cnt_points = 0;
 
 colors = ['red','yellow','blue','green','brown','magenta','cyan','gray','purple','lightblue','lightred'];
 
@@ -32,7 +33,7 @@ function add_keypoint(pos = null){
     });
 
     // add tooltip label showing id indiv and keypoint name
-    let label_text = cnt_points.toString() + " - " + keypoint_names[cnt_keypoints];
+    let label_text = num_indiv.toString() + " - " + keypoint_names[cnt_keypoints];
     let label = new Konva.Text({
         x: 1.2 * circle_radius / stage.scaleX(),
         y: 0,

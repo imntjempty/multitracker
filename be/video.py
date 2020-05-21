@@ -4,7 +4,7 @@
         copy video to project dir
         sample all frames, each video different directory
     
-    python3.7 -m multitracker.be.video -add_project 0 -add_video /home/alex/data/mice/v1/Superenrichment_Gruppe3_2.mts
+    python3.7 -m multitracker.be.video -add_project 1 -add_video /home/alex/data/mice/v1/Superenrichment_Gruppe3_2.mts
 
 """
 
@@ -52,7 +52,7 @@ def add_video_to_project(base_dir, project_id, source_video_file):
         shutil.copy(source_video_file, video_file)
 
     # sample frames 
-    subprocess.call(['ffmpeg','-i',video_file, '-vf', 'fps=30', frames_dir+'/%05d.png'])
+    subprocess.call(['ffmpeg','-i',video_file, '-vf', 'fps=30','-vf', "scale=iw/2:ih/2", frames_dir+'/%05d.png'])
     
 
     # split frames into train/test half/half
