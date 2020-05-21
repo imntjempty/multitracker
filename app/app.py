@@ -27,17 +27,15 @@ db = dbconnection.DatabaseConnection()
 @app.route('/get_next_labeling_frame/<project_id>')
 def render_labeling(project_id):
     video_id = db.get_random_project_video(project_id)
-    print('video_id',video_id)
-
+    
     frames_dir = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, project_id), video_id),'train')
     frames = sorted(glob(os.path.join(frames_dir, '*.png')))
     shuffle(frames)
     frame_idx = frames[int(len(frames)*np.random.random())]
     frame_idx = '.'.join(frame_idx.split('/')[-1].split('.')[:-1])
 
-    db.execute('select frame_idx from keypoint_positions;')
-    num_db_frames = len(list(set([x for x in db.cur.fetchall()])))
-
+    num_db_frames = db.get_count_labeled_frames()
+    
     keypoint_names = db.get_keypoint_names(project_id,split=False)
     return render_template('labeling.html',project_id = int(project_id), video_id = int(video_id), frame_idx = frame_idx, keypoint_names = keypoint_names, sep = db.list_sep, num_db_frames = num_db_frames)
 
