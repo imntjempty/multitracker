@@ -18,9 +18,7 @@ def create_project(name, manager, keypoint_names):
     keypoint_names_str = conn.list_sep.join(keypoint_names)
     
     values = (name,manager, keypoint_names_str, util.get_now())
-    conn.cur.execute(query, values)
-    conn.commit()
-    project_id = conn.get_last_id()
+    project_id = conn.insert(query, values)
     print('[*] created project %i: name: %s, manager: %s, keypoint_names: [%s]' % (project_id,name,manager,', '.join(keypoint_names_str.split(conn.list_sep))))
 
 if __name__ == "__main__":
