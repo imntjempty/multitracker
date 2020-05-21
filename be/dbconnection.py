@@ -34,7 +34,7 @@ class DatabaseConnection(object):
     def get_last_id(self):
         return self.cur.lastrowid
 
-    def get_keypoint_names(self, project_id, split = False):
+    def get_keypoint_names(self, project_id, split = True):
         q = """select keypoint_names from projects where id = %i;""" % int(project_id)
         self.execute(q)
         rows = self.cur.fetchall()
@@ -46,6 +46,8 @@ class DatabaseConnection(object):
         return x 
 
     def get_random_project_video(self, project_id):
+        return 1 
+
         q = "select id from videos where project_id = %i;" % int(project_id)
         self.execute(q)
         video_ids = [x for x in self.cur.fetchall()]
@@ -56,7 +58,7 @@ class DatabaseConnection(object):
         return video_ids[0]
 
     def save_labeling(self, data):
-        keypoint_names = self.get_keypoint_names(int(data['project_id']),split=True)
+        keypoint_names = self.get_keypoint_names(int(data['project_id']))
         num_parts = len(keypoint_names)
         for i, [x,y] in enumerate(data['keypoints']):
             query = """ insert into keypoint_positions (video_id, frame_idx, keypoint_name, individual_id, keypoint_x, keypoint_y) values (?,?,?,?,?,?); """
