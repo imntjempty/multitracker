@@ -35,8 +35,11 @@ def render_labeling(project_id):
     frame_idx = frames[int(len(frames)*np.random.random())]
     frame_idx = '.'.join(frame_idx.split('/')[-1].split('.')[:-1])
 
+    db.execute('select frame_idx from keypoint_positions;')
+    num_db_frames = len(list(set([x for x in db.cur.fetchall()])))
+
     keypoint_names = db.get_keypoint_names(project_id,split=False)
-    return render_template('labeling.html',project_id = int(project_id), video_id = int(video_id), frame_idx = frame_idx, keypoint_names = keypoint_names, sep = db.list_sep)
+    return render_template('labeling.html',project_id = int(project_id), video_id = int(video_id), frame_idx = frame_idx, keypoint_names = keypoint_names, sep = db.list_sep, num_db_frames = num_db_frames)
 
 @app.route('/get_frame/<project_id>/<video_id>/<frame_idx>')
 def get_frame(project_id,video_id,frame_idx):

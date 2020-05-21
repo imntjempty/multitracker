@@ -34,6 +34,7 @@ function init_gui(){
 
 function update_gui_title(){
     document.getElementById('gui_title').innerHTML = num_indiv.toString()+": "+keypoint_names[cnt_keypoints];
+    document.getElementById('bu_send').value = "next frame: "+num_db_frames.toString();
     document.getElementById('bu_skip_keypoint').value = "skip point: "+num_indiv.toString()+": "+keypoint_names[cnt_keypoints];
 
     // update table with key names
