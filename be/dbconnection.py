@@ -26,24 +26,56 @@ class DatabaseConnection(object):
     def commit(self):
         self.conn.commit()
 
+    def insert(self, query, values):
+        self.cur.execute(query, values)
+        self.conn.commit()
+        return  self.get_last_id()
+
     def get_last_id(self):
         return self.cur.lastrowid
 
-    def get_keypoint_names(self, project_id):
+    def get_keypoint_names(self, project_id, split = False):
         q = """select keypoint_names from projects where id = %i;""" % int(project_id)
         self.execute(q)
         rows = self.cur.fetchall()
         if len(rows) == 0:
             raise Exception("[ERROR] no keypoint names found for project %s" % str(project_id))
-        return rows[0][0]
+        x = rows[0][0]
+        if split:
+            x = x.split(self.list_sep)
+        return x 
+
+    def get_random_project_video(self, project_id):
+        q = "select id from videos where project_id = %i;" % int(project_id)
+        self.execute(q)
+        video_ids = [x for x in self.cur.fetchall()]
+        if len(video_ids) == 0:
+            return None 
+
+        shuffle(video_ids)
+        return video_ids[0]
+
+    def save_labeling(self, data):
+        keypoint_names = self.get_keypoint_names(int(data['project_id']),split=True)
+        num_parts = len(keypoint_names)
+        for i, [x,y] in enumerate(data['keypoints']):
+            query = """ insert into keypoint_positions (video_id, frame_idx, keypoint_name, individual_id, keypoint_x, keypoint_y) values (?,?,?,?,?,?); """
+
+            id_ind = i // num_parts 
+            keypoint_name = keypoint_names[i % num_parts]
+            values = (int(data['video_id']), str(data['frame_idx']), keypoint_name, id_ind, x, y)
+            self.insert(query, values)
+        print('[*] saved labeling data to database.')
 
 def list_table(table):
-    print('[*] list of %s:' % table)
+    
     c = DatabaseConnection()
     q = "select * from %s;" % table
     c.execute(q)
-    for row in c.cur.fetchall():
-        print(row)
+    dat = [ row for row in c.cur.fetchall()]
+    print('[*] list of %s: %i counts' % (table,len(dat)))
+    for row in dat[:20]:
+        print(row)        
 
 if __name__ == "__main__":
     import argparse 
