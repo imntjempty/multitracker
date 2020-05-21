@@ -24,4 +24,10 @@ function init_gui(){
             post(url,package,redirect_next_task);
         }
     };
+
+    update_gui_title();
+}
+
+function update_gui_title(){
+    document.getElementById('gui_title').innerHTML = "Click Next Point: "+num_indiv.toString()+" - "+keypoint_names[cnt_keypoints];
 }

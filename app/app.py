@@ -26,7 +26,9 @@ db = dbconnection.DatabaseConnection()
 
 @app.route('/get_next_labeling_frame/<project_id>')
 def render_labeling(project_id):
-    video_id = 1
+    video_id = 1#db.get_random_project_video(project_id)
+    print('video_id',video_id)
+
     frames_dir = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, project_id), video_id),'train')
     frames = sorted(glob(os.path.join(frames_dir, '*.png')))
     shuffle(frames)
@@ -53,8 +55,10 @@ def get_frame(project_id,video_id,frame_idx):
 def receive_labeling():
     data = request.get_json(silent=True,force=True)
     print('[*] received labeling for frame %i.'%(int(data['frame_idx']) ))
-    print(data)
-    print()
+    
+    # save labeling to database
+    db.save_labeling(data)
+
     return json.dumps({'success':True}), 200, {'ContentType':'application/json'} 
 
 @app.route('/skip_labeling',methods=["POST"])

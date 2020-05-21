@@ -1,68 +1,77 @@
 
-function get_idx_by_fileid(file_id){
-    for ( let i in files){
-        if(files[i]['id'] == file_id){
-            return i;
-        }
-    }
-}
-
-let transform_style = { 
-    anchorFill: 'blue',
-    anchorSize: 20, 
-    anchorStroke: 'black',
-    borderStroke: 'black',
-    borderDash: [3, 3],
-    rotateEnabled: false,
-    keepRatio: false
-};
 
 let opacity_disabled = 0.4;
 let opacity_enabled = 0.6;
 
-function append_new_bounding_box(stage,layer,scale,box_typename){
-    /*
-        box_typename in [frame, ruler]
+let circle_stroke_default = 2;
+let circle_stroke_hovered = 4; 
+let circle_radius = 10;
 
-        creates new group with colored transparent rectangle
-    */  
-    let im = layer.findOne("Image");
-    let lw = im.width(), lh = im.height();
-    
-    // frame
-    let p = parseInt(0.025 * Math.min(lw,lh));
-    let color = 'blue';
-    let x = p ;
-    let y = p ;
-    width = lw - x - p;
-    height = lh - y - p;
-
-    if(box_typename == 'ruler'){
-        color = 'red';
-        let ss = Math.min(lw,lh);
-        width = parseInt(ss * 0.15);
-        x = lw/2 - width/2;
-        height = parseInt(ss * 0.04);
-        y = 0.95*lh;
-    }
-    
-    let box = new Konva.Group({
-        id: box_typename
-    });
-    box.add(new Konva.Rect({
-        x: x,
-        y: y,
-        width: width,
-        height: height,
-        fill: color,
-        stroke:'black',
-        opacity:opacity_disabled,
-        draggable: true
-    }));      
-    return box;
-}
-    
 let stage = null;
+
+let num_indiv = 0;
+let cnt_keypoints = 0;
+
+colors = ['red','yellow','blue','green','brown','magenta','cyan','gray','purple','lightblue','lightred'];
+
+function add_keypoint(pos = null){
+    if (pos === null){
+        pos = get_current_mousepos();
+    }
+    let color = colors[num_indiv % colors.length];
+
+    let im = stage.findOne('#image');
+    let layer = stage.findOne('Layer');
+    
+    let keypoint = new Konva.Group({
+        id: 'keypoint_' + num_indiv.toString(),
+        draggable: true,
+        x: pos.x,
+        y: pos.y
+    });
+
+    // add tooltip label showing id indiv and keypoint name
+    let label_text = num_indiv.toString() + " - " + keypoint_names[cnt_keypoints];
+    let label = new Konva.Text({
+        x: 1.2 * circle_radius / stage.scaleX(),
+        y: 0,
+        text: label_text,
+        fontSize: 2 * circle_radius / stage.scaleX(),
+        fontFamily: 'Calibri',
+        fill: color
+    });
+    keypoint.add(label);
+    
+    // add colored circle
+    let circle = new Konva.Circle({
+        name: "background_circle",
+        radius: circle_radius / stage.scaleX(),
+        fill: color,
+        stroke: 'black',
+        strokeWidth: circle_stroke_default / stage.scaleX(),
+        opacity: 0.3
+    });
+    circle.on('mouseenter',function(){ this.strokeWidth(circle_stroke_hovered / stage.scaleX()); layer.batchDraw(); stage.container().style.cursor = 'pointer';});
+    circle.on('mouseleave',function(){ this.strokeWidth(circle_stroke_default / stage.scaleX()); layer.batchDraw(); stage.container().style.cursor = 'default';});
+    keypoint.add(circle);
+    keypoint.add(new Konva.Circle({
+        radius: 1 / stage.scaleX(),
+        fill: 'black'
+    }));
+
+    layer.add(keypoint);
+
+    cnt_keypoints++;
+    if (cnt_keypoints == keypoint_names.length){
+        cnt_keypoints = 0;
+        num_indiv++;
+    }
+
+    // update gui
+    update_gui_title();
+
+    stage.draw();
+}
 
 function init_fe(){
 
@@ -89,10 +98,10 @@ function init_fe(){
 
         let scale = Math.min(width / im.width(), height / im.height() );
         layer.add(im);
-        
-
         stage.add(layer);
         zoom_fit_page(scale);
+
+        im.on("click",function() { add_keypoint(); });
 
         stage.draw();
         layer.draw();
@@ -131,6 +140,14 @@ function zoom(stage,inout,factor = 1.05,ref_point = 0){
     let new_scale = inout==1 ? old_scale * factor : old_scale / factor;
     stage.scale({x:new_scale, y:new_scale});
     
+    stage.find("Circle").each(function(circle){ 
+        circle.radius(circle.radius() * old_scale / new_scale);
+        circle.strokeWidth(circle.strokeWidth() * old_scale / new_scale);
+    });
+    stage.find("Text").each(function (text){
+        text.fontSize(text.fontSize() * old_scale / new_scale);
+        text.x( 1.2 * stage.findOne(".background_circle").radius() * old_scale / new_scale);
+    });
     
     let new_pos = {
         x: -(mouse_point_to.x - ref_point.x/ new_scale) * new_scale,
@@ -177,9 +194,13 @@ function redirect_next_task(){
 
 function get_labeling_data(){
     let package = {"project_id":project_id,"video_id":video_id,"frame_idx":frame_idx};
-    //package['started_at'] = started_at;
-    //package['ended_at'] = get_now();
     
+    // find all labeled keypoints
+    package['keypoints'] = [];
+    for(let i = 0 ; i < num_indiv; i++){
+        let konva_kp = stage.findOne("#keypoint_" + i.toString());
+        package['keypoints'].push([konva_kp.x(),konva_kp.y()]);
+    }
     
     console.log('[*] sending data',package);
     return package;
