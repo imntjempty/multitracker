@@ -72,7 +72,13 @@
     
     <tr><td><input type="button" id="bu_send" value="next frame" class="positive ui button"></td></tr>
     <tr><td><input type="button" id="bu_skip" value="skip frame" class="negative ui button"></td></tr>
-    
+    <table class="ui celled table">
+        <thead><tr><th>keypoint names</th></tr></thead>
+        <tbody>
+            {% for keypoint_name in keypoint_names.split(sep) %}
+                <tr><td data-label="keypoint name" name="kpname">{{keypoint_name}}</td></tr>
+            {% endfor %}
+        </tbody>
     <tr><td><div id="container_gui"></div></td></tr>
     </table>
 </dialog>
