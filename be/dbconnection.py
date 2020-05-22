@@ -47,8 +47,6 @@ class DatabaseConnection(object):
         return x 
 
     def get_random_project_video(self, project_id):
-        return 1 
-
         q = "select id from videos where project_id = %i;" % int(project_id)
         self.execute(q)
         video_ids = [x for x in self.cur.fetchall()]
@@ -56,7 +54,7 @@ class DatabaseConnection(object):
             return None 
 
         shuffle(video_ids)
-        return video_ids[0]
+        return video_ids[0][0]
 
     def get_count_labeled_frames(self):
         self.execute('select frame_idx from keypoint_positions;')

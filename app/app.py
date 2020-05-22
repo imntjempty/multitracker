@@ -30,6 +30,8 @@ def render_labeling(project_id):
     
     frames_dir = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, project_id), video_id),'train')
     frames = sorted(glob(os.path.join(frames_dir, '*.png')))
+    if len(frames) == 0:
+        print('[E] no frames found in directory %s.'%frames_dir)
     shuffle(frames)
     frame_idx = frames[int(len(frames)*np.random.random())]
     frame_idx = '.'.join(frame_idx.split('/')[-1].split('.')[:-1])
