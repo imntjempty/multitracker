@@ -11,44 +11,33 @@ import os
 from random import shuffle 
 from multitracker.be import dbconnection
 
-def gaussian_heatmap(center = (2, 2), image_size = (10, 10), sig = 1):
-    ## https://stackoverflow.com/a/58621239
-    """
-    It produces single gaussian at expected center
-    :param center:  the mean position (X, Y) - where high value expected
-    :param image_size: The total image size (width, height)
-    :param sig: The sigma value
-    :return:
-    """
-    x_axis = np.linspace(0, image_size[0]-1, image_size[0]) - center[0]
-    y_axis = np.linspace(0, image_size[1]-1, image_size[1]) - center[1]
-    xx, yy = np.meshgrid(x_axis, y_axis)
-    kernel = np.exp(-0.5 * (np.square(xx) + np.square(yy)) / np.square(sig))
-    return kernel
 
 def gaussian_k(x0,y0,sigma, height, width):
-        """ Make a square gaussian kernel centered at (x0, y0) with sigma as SD.
-        """
-        x = np.arange(0, width, 1, float) ## (width,)
-        y = np.arange(0, height, 1, float)[:, np.newaxis] ## (height,1)
-        return np.exp(-((x-x0)**2 + (y-y0)**2) / (2*sigma**2))
+    """ Make a square gaussian kernel centered at (x0, y0) with sigma as SD.
+    """
+    x = np.arange(0, width, 1, float) ## (width,)
+    y = np.arange(0, height, 1, float)[:, np.newaxis] ## (height,1)
+    return np.exp(-((x-x0)**2 + (y-y0)**2) / (2*sigma**2))
 
-def generate_hm(height, width ,landmarks, keypoint_names, s=3):
-        ## https://fairyonice.github.io/Achieving-top-5-in-Kaggles-facial-keypoints-detection-using-FCN.html 
-        """ Generate a full Heap Map for every landmarks in an array
-        Args:
-            height    : The height of Heat Map (the height of target output)
-            width     : The width  of Heat Map (the width of target output)
-            joints    : [(x1,y1),(x2,y2)...] containing landmarks
-            maxlenght : Lenght of the Bounding Box
-        """
-        hm = np.zeros((height, width, len(keypoint_names)), dtype = np.float32)
-        for i in range(len(landmarks)):
-            idx = keypoint_names.index(landmarks[i][2])
-            hm[:,:,idx] += gaussian_k(landmarks[i][0],
-                                    landmarks[i][1],
-                                    s,height, width)
-        return hm
+def generate_hm(height, width ,landmarks, keypoint_names, s=17):
+    ## https://fairyonice.github.io/Achieving-top-5-in-Kaggles-facial-keypoints-detection-using-FCN.html 
+    """ Generate a full Heap Map for every landmarks in an array
+    Args:
+        height    : The height of Heat Map (the height of target output)
+        width     : The width  of Heat Map (the width of target output)
+        joints    : [(x1,y1),(x2,y2)...] containing landmarks
+        maxlenght : Lenght of the Bounding Box
+    """
+    hm = 0.* np.ones((height, width, len(keypoint_names)), dtype = np.float32)
+    for i in range(len(landmarks)):
+        idx = keypoint_names.index(landmarks[i][2])
+        x = gaussian_k(landmarks[i][0],
+                                landmarks[i][1],
+                                s,height, width)
+        hm[:,:,idx] = x
+        #hm[:,:,idx][x>0.1] = x 
+    #hm[hm<0.3] = 128.
+    return hm
 
 
 def vis_heatmap(image, keypoint_names, keypoints, horistack=True):
@@ -56,7 +45,7 @@ def vis_heatmap(image, keypoint_names, keypoints, horistack=True):
     hsv_color = hsv_color.astype(np.uint8)
     rgb_color = cv.cvtColor(hsv_color,cv.COLOR_HSV2RGB)[0,0,:]
     hm = generate_hm(image.shape[0], image.shape[1] , [ [int(kp[2]),int(kp[3]),kp[0]] for kp in keypoints ], keypoint_names)
-    
+    #print('hm',hm.shape,hm.min(),hm.max())
     if not horistack:
         # overlay
         hm = np.uint8(255. * hm[:,:,:3])
