@@ -15,28 +15,45 @@ from multitracker.keypoint_detection import heatmap_drawing
 from tensorflow.keras.applications.resnet_v2 import preprocess_input
 
 def Encoder(config,inputs):
-    # takes input image and encodes it with pretrained resnet model
-    #model_name = "ResNet50V2"
+    if config['pretrained_encoder']:
+        return EncoderPretrained(config, inputs)
+    else:
+        return EncoderScratch(config, inputs)
 
-    inputs = preprocess_input(inputs)
-    net = tf.keras.applications.ResNet152V2(input_tensor=inputs,
+def EncoderScratch(config, inputs):
+    x = (inputs-128.)/128. 
+    #x = inputs / 255.
+
+    fs = 32
+    x = upsample(fs,3,-2)(x)
+    
+    while x.shape[1] > 16:
+        fs = min(512, fs * 2)
+        x = upsample(fs,3,1)(x)
+        x = upsample(fs,4,-2)(x)
+    x = upsample(fs,1,1)(x)
+    model = tf.keras.models.Model(name="Scratch Encoder", inputs=inputs,outputs=[x])
+    return model 
+
+def EncoderPretrained(config,inputs):
+    inputss = preprocess_input(inputs)
+    net = tf.keras.applications.ResNet152V2(input_tensor=inputss,
                                             include_top=False,
                                             weights='imagenet',
                                             pooling='avg')
     for i,layer in enumerate(net.layers):
-        print('layer',layer.name,i,layer.output.shape)
+        # print('layer',layer.name,i,layer.output.shape)
         layer.trainable = False 
-    #    if layer.name == "conv4_block6_2_bn":
-    #        feature_activation = net[i]
-    layer_name = ['conv3_block8_1_relu',"max_pooling2d_1"][0]
+    layer_name = ['conv3_block8_1_relu',"conv3_block8_preact_relu","max_pooling2d_1"][1]
     feature_activation = net.get_layer(layer_name)
     model = tf.keras.models.Model(name="ImageNet Encoder",inputs=net.input,outputs=[feature_activation.output])
     return model 
 
 def upsample(nfilters, kernel_size, strides=2, norm_type='batchnorm', act = tf.keras.layers.Activation('relu')):
-    initializer = 'he_normal' #tf.random_normal_initializer(0., 0.02)
+    initializer = ['he_normal', tf.random_normal_initializer(0., 0.02)][1]
 
-    if strides == 1:
+    if strides == 1 or strides < 0:
+        strides = abs(strides)
         func = tf.keras.layers.Conv2D
     else:
         func = tf.keras.layers.Conv2DTranspose
@@ -45,6 +62,7 @@ def upsample(nfilters, kernel_size, strides=2, norm_type='batchnorm', act = tf.k
     result.add(
         func(nfilters, kernel_size, strides=strides,
             padding='same',
+            kernel_regularizer=tf.keras.regularizers.l2(0.01),
             kernel_initializer=initializer))
 
     if norm_type is not None:
@@ -53,7 +71,8 @@ def upsample(nfilters, kernel_size, strides=2, norm_type='batchnorm', act = tf.k
         elif norm_type.lower() == 'instancenorm':
             result.add(InstanceNormalization())
 
-    result.add(act)
+    if act is not None:
+        result.add(act)
 
     return result 
 
@@ -61,21 +80,32 @@ def Decoder(config,encoder):
     # takes encoded tensor and produces image sized heatmaps for each keypoint type
     x = encoder.output
 
-    fs = 2 * x.shape[-1]
+    fs = x.shape[-1]
     x = upsample(fs,7,1)(x)
     
+    x = tf.keras.layers.Dropout(0.5)(x)
+
     while x.shape[1] < config['img_height']:
-        fs = fs // 2 
+        fs = max(32, fs // 2 )
         x = upsample(fs,4)(x)
-        x = upsample(fs,3,1)(x)
+        r = upsample(fs,3,1)(x)
+        r = tf.keras.layers.Dropout(0.5)(r)
+        r = upsample(fs,3,1)(r)
+        x = x + r
         
-    x = upsample(len(config['keypoint_names']),1,1,norm_type=None,act=tf.keras.layers.Activation('sigmoid'))(x)
+    no = len(config['keypoint_names'])+1
+    if config['autoencoding']:
+        no += 3
+    
+    act = [None, tf.keras.layers.Activation('sigmoid'),tf.keras.layers.Activation('softmax')][2]
+    x = upsample(no,1,1,norm_type=None,act=act)(x)    
     #x = x + 1 
     #x = 2*(x + 1)
 
     # add background
-    background = 1 - tf.reduce_max(x,axis=3)
-    x = tf.concat( (x, tf.expand_dims(background,3) ), axis=3 )
+    #background = 1 - tf.reduce_max(x,axis=3)
+    #x = tf.concat( (x, tf.expand_dims(background,3) ), axis=3 )
+    #x = 255. * x 
     return x 
 
 
@@ -95,6 +125,32 @@ def calc_ssim_loss(x, y):
   ssim = tf.reduce_mean(ssim)
   return ssim
 
+def get_loss(predicted_heatmaps, y, config):
+    if config['loss'] == 'l1':
+        loss = tf.reduce_mean(tf.abs(predicted_heatmaps - y))
+    elif config['loss'] == 'dice':
+        a = 2 * tf.reduce_sum(predicted_heatmaps * y, axis=-1 )
+        b = tf.reduce_sum(predicted_heatmaps + y, axis=-1 )
+        loss = tf.reduce_mean(1 - (a+1)/(b+1))
+
+        #loss += tf.reduce_mean(tf.norm(tf.reduce_mean(y,axis=[1,2]) ) - tf.reduce_mean(predicted_heatmaps,axis=[1,2]))
+    elif config['loss'] == 'recall':
+        loss = (1+tf.reduce_mean(y - predicted_heatmaps*y,axis=-1)) / (1+tf.reduce_mean(y+1e-5,axis=-1)) # penalize uncovered y
+        loss = tf.reduce_mean(loss)
+        loss += tf.reduce_mean(tf.abs(predicted_heatmaps - y)) / 10. # abit of l1 
+
+    elif config['loss'] == 'focal':
+        import tensorflow_addons as tfa
+        loss_func = tfa.losses.SigmoidFocalCrossEntropy(False)
+        if config['autoencoding']:
+            loss = loss_func(y[:,:,:,:-3],predicted_heatmaps[:,:,:,:-3])
+        else:
+            loss = loss_func(y, predicted_heatmaps)
+        loss = tf.reduce_mean(loss)
+    else:
+        raise Exception("Loss function not supported! try l1, focal or dice")
+    return loss 
+
 # </network architecture>
 
 # <data>
@@ -104,13 +160,13 @@ def load_raw_dataset(config,mode='train'):
         image = tf.io.read_file(image_file)
         image = tf.image.decode_png(image,channels=3)
         image = tf.cast(image,tf.float32)
-        #image = tf.image.resize_with_pad(image,160,160,antialias=True)
-
+        
         # decompose hstack to dstack
         w = config['input_image_shape'][1] // (2 + len(config['keypoint_names'])//3)
         # now stack depthwise for easy random cropping and other augmentation
         comp = tf.concat((image[:,:w,:], image[:,w:2*w,:], image[:,2*w:3*w,:], image[:,3*w:4*w,:] ),axis=2)
-        
+        comp = comp[:,:,:(3+len(config['keypoint_names']))]
+
         # add background of heatmap
         background = 255 - tf.reduce_max(comp[:,:,3:],axis=2)
         comp = tf.concat((comp,tf.expand_dims(background,axis=2)),axis=2)
@@ -123,7 +179,9 @@ def load_raw_dataset(config,mode='train'):
         #comp = tf.image.resize(comp, size = (int(scaley*H),int(scalex*W)))
 
         # crop
-        crop = tf.image.random_crop( comp, [config['img_height'],config['img_width'], 1+3+len(config['keypoint_names'])])
+        h = config['input_image_shape'][0]
+        crop = tf.image.random_crop( comp, [h,h, 1+3+len(config['keypoint_names'])])
+        crop = tf.image.resize(comp,[config['img_height'],config['img_width']])
         
         # split stack into images and heatmaps
         image = crop[:,:,:3]
@@ -132,6 +190,7 @@ def load_raw_dataset(config,mode='train'):
 
     file_list = tf.data.Dataset.list_files(os.path.join(config['data_dir'],'%s/*.png' % mode))
     data = file_list.map(load_im, num_parallel_calls = tf.data.experimental.AUTOTUNE).batch(config['batch_size']).prefetch(4*config['batch_size'])#.cache()
+    data = data.shuffle(1024)
     #print('[*] loaded images from disk')
     return data 
 
@@ -153,7 +212,7 @@ def create_train_dataset(config):
                 new_f = f.replace(config['data_dir'],config['data_dir']+'/test')
             os.rename(f,new_f)
         
-        if 0 :
+        if 1:
             for i, f in enumerate(files):
                 # augment by random resizing
                 fx = fy = 1.0 
@@ -183,6 +242,7 @@ def train(config):
     heatmaps = Decoder(config,encoder)
 
     optimizer = tf.keras.optimizers.Adam(config['lr'])
+    optimizer_ae = tf.keras.optimizers.Adam(config['lr'])
     model = tf.keras.models.Model(inputs = encoder.input, outputs = heatmaps) #dataset['train'][0],outputsdataset['train'][1])
     model.summary() 
 
@@ -195,16 +255,10 @@ def train(config):
         if not os.path.isdir(_directory):
             os.makedirs(_directory)
 
-    writer = tf.summary.create_file_writer(checkpoint_path)
-    def show_tb_images(batch_step):
-        with tf.device("cpu:0"):
-            with writer.as_default():    
-                _global_step = tf.convert_to_tensor(batch_step, dtype=tf.int64)
-                tf.summary.image("input",(inputs+1.)/2.,step=batch_step)
-                tf.summary.image("heatmap",(heatmaps+1)/2,step=batch_step)
+    writer_train = tf.summary.create_file_writer(checkpoint_path+'/train')
+    writer_test = tf.summary.create_file_writer(checkpoint_path+'/test')
       
-    ckpt = tf.train.Checkpoint(model = model,
-                            optimizer = optimizer)
+    ckpt = tf.train.Checkpoint(model = model, optimizer = optimizer)
     
     ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
 
@@ -213,50 +267,68 @@ def train(config):
         ckpt.restore(ckpt_manager.latest_checkpoint)
         print('[*] Latest checkpoint restored',ckpt_manager.latest_checkpoint)
 
-    def train_step(inp, y, writer, global_step, should_summarize = False):
-        # invert heatmap!
-        #y = 1 - y 
+    def train_step(inp, y, writer_train, writer_test, global_step, should_summarize = False):
+        if y is None:
+            s = inp.shape
+            y = tf.zeros((s[0],s[1],s[2],1+len(config['keypoint_names'])))
+        if config['autoencoding']:
+            y = tf.concat((y,inp),axis=3)
 
         # persistent is set to True because the tape is used more than
         # once to calculate the gradients.
         with tf.GradientTape(persistent=True) as tape:
-            # autoencode inputs
             predicted_heatmaps = model(inp, training=True)
-            
-            # L1 loss
-            loss_l1 = tf.reduce_mean(tf.abs(predicted_heatmaps - y)) 
-            # ssim loss
-            #loss_ssmi = calc_ssim_loss(predicted_heatmaps, y)
-            #loss = 0.5 * loss_l1 + 0.5 * loss_ssmi
-
-            # add loss that penalizes if everything is zero 
-            #loss_allzero = tf.nn.l2_loss(1-predicted_heatmaps)
-            #loss += .66*loss + .33*loss_allzero
-            loss = loss_l1 
+            loss = get_loss(predicted_heatmaps, y, config)
+            #loss_ae = get_loss(predicted_heatmaps[:,:,:,-3:], y[:,:,:,-3:], config)
 
         # gradients
         gradients = tape.gradient(loss,model.trainable_variables)
+        #gradients_ae = tape.gradient(loss_ae,model.trainable_variables)
         # update weights
         optimizer.apply_gradients(zip(gradients,model.trainable_variables))
+        #optimizer_ae.apply_gradients(zip(gradients_ae,model.trainable_variables))
 
         # write summary
         if should_summarize:
+            should_test = should_summarize and global_step % 100 == 0
+            if should_test:
+                # test data
+                test_loss = 0.0
+                nt = 0
+                for xt,yt in dataset_test:
+                    predicted_test = model(xt,training=False)
+                    if config['autoencoding']:
+                        yt = tf.concat((yt,xt),axis=3)
+                    test_loss += get_loss(predicted_test, yt, config)
+                    nt += 1 
+                test_loss = test_loss / nt 
+
             with tf.device("cpu:0"):
-                with writer.as_default():
-                    tf.summary.scalar("l1 loss",loss_l1,step=global_step)
-                    #tf.summary.scalar("ssmi loss",loss_ssmi,step=global_step)
-                    tf.summary.scalar("loss",loss,step=global_step)
-                    def im_summary(name,data):
-                        #tf.summary.image(name,(data+1)/2,step=global_step)
-                        tf.summary.image(name,data,step=global_step)
-                    im_summary('image',inp/256.)
+                def im_summary(name,data):
+                    tf.summary.image(name,data,step=global_step)
+                with writer_train.as_default():
+                    tf.summary.scalar("loss %s" % config['loss'],loss,step=global_step)
+                    im_summary('image',inp/255.)
                     im_summary('heatmaps0',tf.concat((y[:,:,:,:3], predicted_heatmaps[:,:,:,:3]),axis=2))
                     im_summary('heatmaps1',tf.concat((y[:,:,:,3:6], predicted_heatmaps[:,:,:,3:6]),axis=2))
-                    im_summary('heatmaps2',tf.concat((y[:,:,:,6:9], predicted_heatmaps[:,:,:,6:9]),axis=2))
+                    im_summary('heatmaps2',tf.concat((y[:,:,:,6:8], predicted_heatmaps[:,:,:,6:8]),axis=2))
                     im_summary('background', tf.concat((tf.expand_dims(y[:,:,:,-1],axis=3),tf.expand_dims(predicted_heatmaps[:,:,:,-1],axis=3)),axis=2))
-                    #im_summary('heatmaps1',predicted_heatmaps[:,:,:,3:6])
-                    #im_summary('heatmaps2',predicted_heatmaps[:,:,:,6:])
-                    writer.flush()    
+                    
+                    if config['autoencoding']:
+                        im_summary('reconstructed_image',tf.concat((inp/255.,predicted_heatmaps[:,:,:,-3:]),axis=2))
+                    writer_train.flush()    
+
+                if should_test:            
+                    with writer_test.as_default():
+                        tf.summary.scalar("loss %s" % config['loss'],test_loss,step=global_step)
+                        im_summary('image',xt/255.)
+                        im_summary('heatmaps0',tf.concat((yt[:,:,:,:3], predicted_test[:,:,:,:3]),axis=2))
+                        im_summary('heatmaps1',tf.concat((yt[:,:,:,3:6], predicted_test[:,:,:,3:6]),axis=2))
+                        im_summary('background', tf.concat((tf.expand_dims(yt[:,:,:,-1],axis=3),tf.expand_dims(predicted_test[:,:,:,-1],axis=3)),axis=2))
+                        if config['autoencoding']:
+                            im_summary('reconstructed_image',tf.concat((xt/255.,predicted_test[:,:,:,-3:]),axis=2))
+                        writer_test.flush()
+
     n = 0
     
     ddata = {}
@@ -266,13 +338,24 @@ def train(config):
         start = time.time()
     
         for x,y in dataset_train:# </train>
+            # mixup augmentation
+            if config['mixup']:
+                rr = tf.random.uniform(shape=[x.shape[0]],minval=0.0,maxval=0.3)
+                rrr = tf.reshape(rr,(x.shape[0],1,1,1))
+                xx = x[::-1,:,:,:]
+                yy = y[::-1,:,:,:]
+                x = rrr * x + (1. - rrr) * xx 
+                y = rrr * y + (1. - rrr) * yy 
 
             if n < config['max_steps']:
-                should_summarize=n%100==0
-                train_step(x, y, writer, n, should_summarize=should_summarize)
-                n+=1
-            
-            
+                should_summarize=n%50==0
+                train_step(x, y, writer_train, writer_test, n, should_summarize=should_summarize)
+                
+            if n % 1000 == 0:
+                ckpt_save_path = ckpt_manager.save()
+                print('[*] saving model to %s'%ckpt_save_path)
+
+            n+=1
         end = time.time()
         print('[*] epoch %i took %f seconds.'%(epoch,end-start))
 
@@ -282,13 +365,17 @@ def train(config):
 # </train>
 
 def main():
-    config = {'batch_size':32, 'img_height':256,'img_width':256}
+    config = {'batch_size': 32, 'img_height': 256,'img_width': 256}
     config['epochs'] = 1000000
     config['max_steps'] = 400000
-    config['lr'] = 3e-4
+    config['lr'] = 1e-4
+    config['loss'] = ['l1','dice','recall','focal'][3]
+    config['autoencoding'] = [False, True][0]
+    config['pretrained_encoder'] = True
+    config['mixup'] = [False, True][1]
 
     # train on project 2 
-    config['project_id'] = 1 
+    config['project_id'] = 2
 
     config['data_dir'] = os.path.join(os.path.expanduser('~/data/multitracker/projects/%i/data' % config['project_id']))
 

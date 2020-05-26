@@ -19,7 +19,7 @@ def gaussian_k(x0,y0,sigma, height, width):
     y = np.arange(0, height, 1, float)[:, np.newaxis] ## (height,1)
     return np.exp(-((x-x0)**2 + (y-y0)**2) / (2*sigma**2))
 
-def generate_hm(height, width ,landmarks, keypoint_names, s=17):
+def generate_hm(height, width ,landmarks, keypoint_names, s=13):
     ## https://fairyonice.github.io/Achieving-top-5-in-Kaggles-facial-keypoints-detection-using-FCN.html 
     """ Generate a full Heap Map for every landmarks in an array
     Args:
@@ -41,9 +41,9 @@ def generate_hm(height, width ,landmarks, keypoint_names, s=17):
 
 
 def vis_heatmap(image, keypoint_names, keypoints, horistack=True):
-    hsv_color = np.ones((5,5,3))*np.array([int(255.*np.random.random()),128,128])#.reshape((1,1,3))
-    hsv_color = hsv_color.astype(np.uint8)
-    rgb_color = cv.cvtColor(hsv_color,cv.COLOR_HSV2RGB)[0,0,:]
+    #hsv_color = np.ones((5,5,3))*np.array([int(255.*np.random.random()),128,128])#.reshape((1,1,3))
+    #hsv_color = hsv_color.astype(np.uint8)
+    #rgb_color = cv.cvtColor(hsv_color,cv.COLOR_HSV2RGB)[0,0,:]
     hm = generate_hm(image.shape[0], image.shape[1] , [ [int(kp[2]),int(kp[3]),kp[0]] for kp in keypoints ], keypoint_names)
     #print('hm',hm.shape,hm.min(),hm.max())
     if not horistack:
