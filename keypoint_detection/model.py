@@ -88,6 +88,7 @@ def Decoder(config,encoder):
     while x.shape[1] < config['img_height']:
         fs = max(32, fs // 2 )
         x = upsample(fs,4)(x)
+        x = tf.keras.layers.GaussianNoise(0.2)(x)
         r = upsample(fs,3,1)(x)
         r = tf.keras.layers.Dropout(0.5)(r)
         r = upsample(fs,3,1)(r)
@@ -220,14 +221,28 @@ def create_train_dataset(config):
                     # augment by random resizing
                     fx = fy = 1.0 
                     nc = 0 
-                    for fx in [0.85,1.,1.15]:
-                        for fy in [.85,1.,1.15]:
+                    for fx in [1.,1.1,1.25]:
+                        for fy in [1.,1.1,1.25]:
                             if not (fx == 1. and fy == 1.):
-                                im = cv.imread(new_f)
-                                im = cv.resize(im,None,None,fx=fx,fy=fy)
-                                cv.imwrite(f.replace('.png','%i.png'%nc),im)
-                                nc += 1
+                                for j in range(4):
+                                    im = cv.imread(new_f)
+                                    sim = im.shape
+                                    im = cv.resize(im,None,None,fx=fx,fy=fy)
+                                    # random crop
+                                    cx = int(np.random.uniform() * (sim[1]-im.shape[1]))
+                                    cy = int(np.random.uniform() * (sim[0]-im.shape[0]))
+                                    im = im[cy:cy+sim.shape[0],cx:cx+sim.shape[1],:]
 
+                                    cv.imwrite(f.replace('.png','%i_%i.png'%(nc,j)),im)
+                                    nc += 1
+        # rgb gaussian noise
+        if 0:
+            for mode in ['train']: # only augment train set
+                files = sorted(glob(os.path.join(config['data_dir'],mode,'*.png')))
+                for i, f in enumerate(files):
+                    im = cv.imread(f)
+                    for j in range(4):
+                        ''#noise = 
 
     config['input_image_shape'] = cv.imread(glob(os.path.join(config['data_dir'],'train/*.png'))[0]).shape[:2]
     return config 
