@@ -44,7 +44,7 @@ def EncoderPretrained(config,inputs):
     for i,layer in enumerate(net.layers):
         # print('layer',layer.name,i,layer.output.shape)
         layer.trainable = False 
-    layer_name = ['conv3_block8_1_relu',"conv3_block8_preact_relu","max_pooling2d_1"][1]
+    layer_name = ['conv3_block8_1_relu',"conv3_block8_preact_relu","max_pooling2d_1"][0]
     feature_activation = net.get_layer(layer_name)
     model = tf.keras.models.Model(name="ImageNet Encoder",inputs=net.input,outputs=[feature_activation.output])
     return model 
@@ -212,18 +212,21 @@ def create_train_dataset(config):
                 new_f = f.replace(config['data_dir'],config['data_dir']+'/test')
             os.rename(f,new_f)
         
-        if 1:
-            for i, f in enumerate(files):
-                # augment by random resizing
-                fx = fy = 1.0 
-                nc = 0 
-                for fx in [0.75,1.,1.25]:
-                    for fy in [.75,1.,1.25]:
-                        if not (fx == 1. and fy == 1.):
-                            im = cv.imread(new_f)
-                            im = cv.resize(im,None,None,fx=fx,fy=fy)
-                            cv.imwrite(f.replace('.png','%i.png'%nc),im)
-                            nc += 1
+        if 0:
+            for mode in ['train']: # only augment train set
+                files = sorted(glob(os.path.join(config['data_dir'],mode,'*.png')))
+                print('[*] augmenting %i %s files times 8' % (len(files),mode))
+                for i, f in enumerate(files):
+                    # augment by random resizing
+                    fx = fy = 1.0 
+                    nc = 0 
+                    for fx in [0.85,1.,1.15]:
+                        for fy in [.85,1.,1.15]:
+                            if not (fx == 1. and fy == 1.):
+                                im = cv.imread(new_f)
+                                im = cv.resize(im,None,None,fx=fx,fy=fy)
+                                cv.imwrite(f.replace('.png','%i.png'%nc),im)
+                                nc += 1
 
 
     config['input_image_shape'] = cv.imread(glob(os.path.join(config['data_dir'],'train/*.png'))[0]).shape[:2]
@@ -241,8 +244,11 @@ def train(config):
     print('[*] hidden representation',encoder.outputs[0].get_shape().as_list())
     heatmaps = Decoder(config,encoder)
 
-    optimizer = tf.keras.optimizers.Adam(config['lr'])
+    decay_steps, decay_rate = 1000, 0.85
+    lr = tf.keras.optimizers.schedules.ExponentialDecay(config['lr'], decay_steps, decay_rate)
+    optimizer = tf.keras.optimizers.Adam(lr)
     optimizer_ae = tf.keras.optimizers.Adam(config['lr'])
+
     model = tf.keras.models.Model(inputs = encoder.input, outputs = heatmaps) #dataset['train'][0],outputsdataset['train'][1])
     model.summary() 
 
@@ -316,6 +322,8 @@ def train(config):
                     
                     if config['autoencoding']:
                         im_summary('reconstructed_image',tf.concat((inp/255.,predicted_heatmaps[:,:,:,-3:]),axis=2))
+
+                    tf.summary.scalar("learning rate", lr(global_step), step = global_step)
                     writer_train.flush()    
 
                 if should_test:            
@@ -365,7 +373,7 @@ def train(config):
 # </train>
 
 def main():
-    config = {'batch_size': 32, 'img_height': 256,'img_width': 256}
+    config = {'batch_size': 16, 'img_height': 256,'img_width': 256}
     config['epochs'] = 1000000
     config['max_steps'] = 400000
     config['lr'] = 1e-4
