@@ -44,7 +44,7 @@ def EncoderPretrained(config,inputs):
     for i,layer in enumerate(net.layers):
         # print('layer',layer.name,i,layer.output.shape)
         layer.trainable = False 
-    layer_name = ['conv3_block8_1_relu',"conv3_block8_preact_relu","max_pooling2d_1"][0]
+    layer_name = ['conv3_block8_1_relu',"conv3_block8_preact_relu","max_pooling2d_1"][1]
     feature_activation = net.get_layer(layer_name)
     model = tf.keras.models.Model(name="ImageNet Encoder",inputs=net.input,outputs=[feature_activation.output])
     return model 
@@ -98,15 +98,8 @@ def Decoder(config,encoder):
     if config['autoencoding']:
         no += 3
     
-    act = [None, tf.keras.layers.Activation('sigmoid'),tf.keras.layers.Activation('softmax')][2]
+    act = tf.keras.layers.Activation('softmax')
     x = upsample(no,1,1,norm_type=None,act=act)(x)    
-    #x = x + 1 
-    #x = 2*(x + 1)
-
-    # add background
-    #background = 1 - tf.reduce_max(x,axis=3)
-    #x = tf.concat( (x, tf.expand_dims(background,3) ), axis=3 )
-    #x = 255. * x 
     return x 
 
 
@@ -164,6 +157,8 @@ def load_raw_dataset(config,mode='train'):
         
         # decompose hstack to dstack
         w = config['input_image_shape'][1] // (2 + len(config['keypoint_names'])//3)
+        h = config['input_image_shape'][0]
+
         # now stack depthwise for easy random cropping and other augmentation
         comp = tf.concat((image[:,:w,:], image[:,w:2*w,:], image[:,2*w:3*w,:], image[:,3*w:4*w,:] ),axis=2)
         comp = comp[:,:,:(3+len(config['keypoint_names']))]
@@ -175,12 +170,12 @@ def load_raw_dataset(config,mode='train'):
         # apply augmentations
         # resize
         #H, W = config['input_image_shape'][:2]
-        #scalex = np.random.uniform(1.,1.5)
-        #scaley = np.random.uniform(1.,1.5)
-        #comp = tf.image.resize(comp, size = (int(scaley*H),int(scalex*W)))
+        if mode == 'train':
+            scalex = np.random.uniform(1.,1.5)
+            scaley = np.random.uniform(1.,1.5)
+            comp = tf.image.resize(comp, size = (int(scaley*h),int(scalex*w)))
 
         # crop
-        h = config['input_image_shape'][0]
         crop = tf.image.random_crop( comp, [h,h, 1+3+len(config['keypoint_names'])])
         crop = tf.image.resize(comp,[config['img_height'],config['img_width']])
         
@@ -212,37 +207,6 @@ def create_train_dataset(config):
             else:
                 new_f = f.replace(config['data_dir'],config['data_dir']+'/test')
             os.rename(f,new_f)
-        
-        if 0:
-            for mode in ['train']: # only augment train set
-                files = sorted(glob(os.path.join(config['data_dir'],mode,'*.png')))
-                print('[*] augmenting %i %s files times 8' % (len(files),mode))
-                for i, f in enumerate(files):
-                    # augment by random resizing
-                    fx = fy = 1.0 
-                    nc = 0 
-                    for fx in [1.,1.1,1.25]:
-                        for fy in [1.,1.1,1.25]:
-                            if not (fx == 1. and fy == 1.):
-                                for j in range(4):
-                                    im = cv.imread(new_f)
-                                    sim = im.shape
-                                    im = cv.resize(im,None,None,fx=fx,fy=fy)
-                                    # random crop
-                                    cx = int(np.random.uniform() * (sim[1]-im.shape[1]))
-                                    cy = int(np.random.uniform() * (sim[0]-im.shape[0]))
-                                    im = im[cy:cy+sim.shape[0],cx:cx+sim.shape[1],:]
-
-                                    cv.imwrite(f.replace('.png','%i_%i.png'%(nc,j)),im)
-                                    nc += 1
-        # rgb gaussian noise
-        if 0:
-            for mode in ['train']: # only augment train set
-                files = sorted(glob(os.path.join(config['data_dir'],mode,'*.png')))
-                for i, f in enumerate(files):
-                    im = cv.imread(f)
-                    for j in range(4):
-                        ''#noise = 
 
     config['input_image_shape'] = cv.imread(glob(os.path.join(config['data_dir'],'train/*.png'))[0]).shape[:2]
     return config 
@@ -259,7 +223,7 @@ def train(config):
     print('[*] hidden representation',encoder.outputs[0].get_shape().as_list())
     heatmaps = Decoder(config,encoder)
 
-    decay_steps, decay_rate = 1000, 0.85
+    decay_steps, decay_rate = 1000, 0.95
     lr = tf.keras.optimizers.schedules.ExponentialDecay(config['lr'], decay_steps, decay_rate)
     optimizer = tf.keras.optimizers.Adam(lr)
     optimizer_ae = tf.keras.optimizers.Adam(config['lr'])
@@ -388,10 +352,10 @@ def train(config):
 # </train>
 
 def main():
-    config = {'batch_size': 16, 'img_height': 256,'img_width': 256}
+    config = {'batch_size': 8, 'img_height': 256,'img_width': 256}
     config['epochs'] = 1000000
     config['max_steps'] = 400000
-    config['lr'] = 1e-4
+    config['lr'] = 2e-5
     config['loss'] = ['l1','dice','recall','focal'][3]
     config['autoencoding'] = [False, True][0]
     config['pretrained_encoder'] = True
