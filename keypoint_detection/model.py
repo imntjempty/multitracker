@@ -171,10 +171,10 @@ def load_raw_dataset(config,mode='train'):
         # resize
         #H, W = config['input_image_shape'][:2]
         if mode == 'train':
-            scalex = np.random.uniform(1.,1.5)
-            scaley = np.random.uniform(1.,1.5)
+            scalex = np.random.uniform(1.,1.2)
+            scaley = np.random.uniform(1.,1.2)
             comp = tf.image.resize(comp, size = (int(scaley*h),int(scalex*w)))
-
+        
         # crop
         crop = tf.image.random_crop( comp, [h,h, 1+3+len(config['keypoint_names'])])
         crop = tf.image.resize(comp,[config['img_height'],config['img_width']])
@@ -184,10 +184,10 @@ def load_raw_dataset(config,mode='train'):
         heatmaps = crop[:,:,3:] / 255.
         return image, heatmaps
 
-    file_list = tf.data.Dataset.list_files(os.path.join(config['data_dir'],'%s/*.png' % mode))
+    file_list = tf.data.Dataset.list_files(os.path.join(config['data_dir'],'%s/*.png' % mode),shuffle=False)
     data = file_list.map(load_im, num_parallel_calls = tf.data.experimental.AUTOTUNE).batch(config['batch_size']).prefetch(4*config['batch_size'])#.cache()
-    data = data.shuffle(1024)
-    #print('[*] loaded images from disk')
+    if mode == 'train':
+        data = data.shuffle(1024)
     return data 
 
 def create_train_dataset(config):
@@ -210,7 +210,30 @@ def create_train_dataset(config):
 
     config['input_image_shape'] = cv.imread(glob(os.path.join(config['data_dir'],'train/*.png'))[0]).shape[:2]
     return config 
+
+def mixup(x,y):
+    rr = tf.random.uniform(shape=[x.shape[0]],minval=0.0,maxval=0.3)
+    rrr = tf.reshape(rr,(x.shape[0],1,1,1))
+    xx = x[::-1,:,:,:]
+    yy = y[::-1,:,:,:]
+    x = rrr * x + (1. - rrr) * xx 
+    y = rrr * y + (1. - rrr) * yy
+    return x,y 
+
+def cutmix(x,y):
+    # https://arxiv.org/pdf/1906.01916.pdf
+    # fixing the area of the rectangle to half that of the image, while varying the aspect ratio and position
+    s = x.shape
+    # pixel area 
+    pa = s[1] * s[2]
+    M = tf.zeros((s[0],s[1],s[2]))
+    rw = tf.random.uniform((s[0],1),minval = s[2] // 3 , maxval = s[2] )
+    rh = pa / rw 
+    rx = tf.random.uniform((s[0]))
+
+    return x, y 
 # </data>
+
 
 
 # <train>
@@ -223,7 +246,7 @@ def train(config):
     print('[*] hidden representation',encoder.outputs[0].get_shape().as_list())
     heatmaps = Decoder(config,encoder)
 
-    decay_steps, decay_rate = 1000, 0.95
+    decay_steps, decay_rate = 2000, 0.95
     lr = tf.keras.optimizers.schedules.ExponentialDecay(config['lr'], decay_steps, decay_rate)
     optimizer = tf.keras.optimizers.Adam(lr)
     optimizer_ae = tf.keras.optimizers.Adam(config['lr'])
@@ -327,12 +350,12 @@ def train(config):
         for x,y in dataset_train:# </train>
             # mixup augmentation
             if config['mixup']:
-                rr = tf.random.uniform(shape=[x.shape[0]],minval=0.0,maxval=0.3)
-                rrr = tf.reshape(rr,(x.shape[0],1,1,1))
-                xx = x[::-1,:,:,:]
-                yy = y[::-1,:,:,:]
-                x = rrr * x + (1. - rrr) * xx 
-                y = rrr * y + (1. - rrr) * yy 
+                x, y = mixup(x,y) 
+
+            if config['cutmix']:
+                x, y = cutmix(x,y)
+            #x = tf.keras.layers.experimental.preprocessing.RandomContrast(0.4)(x,training=True)
+
 
             if n < config['max_steps']:
                 should_summarize=n%50==0
@@ -350,8 +373,7 @@ def train(config):
     print('Saving checkpoint for epoch {} at {}'.format(config['epochs'], ckpt_save_path))
 
 # </train>
-
-def main():
+def get_config():
     config = {'batch_size': 8, 'img_height': 256,'img_width': 256}
     config['epochs'] = 1000000
     config['max_steps'] = 400000
@@ -360,6 +382,7 @@ def main():
     config['autoencoding'] = [False, True][0]
     config['pretrained_encoder'] = True
     config['mixup'] = [False, True][1]
+    config['cutmix'] = [False, True][0]
 
     # train on project 2 
     config['project_id'] = 2
@@ -369,7 +392,10 @@ def main():
     from multitracker.be import dbconnection
     db = dbconnection.DatabaseConnection()
     config['keypoint_names'] = db.get_keypoint_names(config['project_id'])
+    return config 
 
+def main():
+    config = get_config()
     create_train_dataset(config)
     train(config)
 

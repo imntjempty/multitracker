@@ -10,7 +10,7 @@ import cv2 as cv
 import os 
 from random import shuffle 
 from multitracker.be import dbconnection
-
+from glob import glob 
 
 def gaussian_k(x0,y0,sigma, height, width):
     """ Make a square gaussian kernel centered at (x0, y0) with sigma as SD.
@@ -19,7 +19,7 @@ def gaussian_k(x0,y0,sigma, height, width):
     y = np.arange(0, height, 1, float)[:, np.newaxis] ## (height,1)
     return np.exp(-((x-x0)**2 + (y-y0)**2) / (2*sigma**2))
 
-def generate_hm(height, width ,landmarks, keypoint_names, s=13):
+def generate_hm(height, width ,landmarks, keypoint_names, s=15):
     ## https://fairyonice.github.io/Achieving-top-5-in-Kaggles-facial-keypoints-detection-using-FCN.html 
     """ Generate a full Heap Map for every landmarks in an array
     Args:
@@ -62,7 +62,46 @@ def vis_heatmap(image, keypoint_names, keypoints, horistack=True):
 
     return vis 
 
-def randomly_drop_visualiztions(project_id, dst_dir = '/tmp/keypoint_heatmap_vis', num = -1, horistack=True):
+def style_augment(directory, style_directory = os.path.expanduser("~/data/multitracker/styleimages")):
+    import subprocess
+    if not os.path.isdir(style_directory) or len(glob(os.path.join(style_directory,'*'))) == 0:
+        # download art images
+        urls = [
+            'https://cdn.kunstschaetzen.de/wp-content/uploads/2019/06/popart-kunst.jpg',
+            'https://i.pinimg.com/originals/fe/41/5f/fe415f65c3641c1a67b000aa7a4ddb36.jpg',
+            'https://news.artnet.com/app/news-upload/2019/12/5db820a075ba3.jpg',
+            'https://images.unsplash.com/photo-1543857778-c4a1a3e0b2eb?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&w=1000&q=80',
+            'https://lh6.ggpht.com/HlgucZ0ylJAfZgusynnUwxNIgIp5htNhShF559x3dRXiuy_UdP3UQVLYW6c=s1200',
+            'https://www.ourartworld.com/art/wp-content/uploads/2018/07/94e5c8f8a38382c6750f26a2467ad670--bright-art-lonely-heart.jpg',
+            'https://images.squarespace-cdn.com/content/v1/57762ed29f7456e1b6e8febd/1580403012581-RD72EGBP08TA7V50Z5WU/ke17ZwdGBToddI8pDm48kFJo1x-0SDSXZIbvHdtV7zB7gQa3H78H3Y0txjaiv_0fDoOvxcdMmMKkDsyUqMSsMWxHk725yiiHCCLfrh8O1z4YTzHvnKhyp6Da-NYroOW3ZGjoBKy3azqku80C789l0p5uBJOnOmCWBN4JfYsIDyTk732yQxGFdJ5_SwaFk5-9rqZMSEJs3dyKz5eVslWaTA/2013+12+JIMI+Hendrix%2C+190x190cm%2C+Acrylic+on+Canvas.jpg?format=500w',
+            'https://www.scheublein.com/wp-content/uploads/2020/05/Slider-Blick-auf-See.jpg',
+            'https://www.justcolor.net/de/wp-content/uploads/sites/5/nggallery/op-art/malbuch-fur-erwachsene-op-art-53995.jpg',
+            'https://www.diebewertung.de/wp-content/uploads/2019/04/Kunst_1556194083.jpg',
+            'https://cdn.mos.cms.futurecdn.net/jbCNvTM4gwr2qV8X8fW3ZB.png',
+            'https://static.boredpanda.com/blog/wp-content/uploads/2017/02/IMG_20170205_220039_508-58a0129a23ada__880.jpg',
+            'https://www.zdf.de/assets/teletext-dpa-image-street-art-werk-in-bristol-ein-banksy-100~2400x1350?cb=1581618822459',
+            'https://www.agora-gallery.com/images/news_headers/Abstract%20art%20-%20Rebecca%20Katz.jpg',
+            'https://www.staedelmuseum.de/sites/default/files/styles/col-12/public/title/startseiten_slider_podcast_dt.jpg?itok=f8xD8G5O',
+            'https://onlinegallery.art/images/albums/vincent-van-gogh-the-yellow-house-(-the-street-).jpg?quality=85&type=webp&resolution=1920x0',
+            'https://www.boesner.com/cache/upload/event/superClient/weber-050620-perlw0h0height.jpg',
+            'https://cdn11.bigcommerce.com/s-x49po/images/stencil/1280x1280/products/31965/44808/1527844490374_Tree_by_Luis_David-mixed_on_masonite-23.5___X_31.5__-1550_usd.-__81859.1528180230.jpg?c=2&imbypass=on'
+        ]
+        for i, url in enumerate(urls):
+            fn = os.path.join(style_directory,'%i.jpg' % i)
+            subprocess.call(['wget',url,'-O',fn])
+        print('[*] downloaded %i style images' % len(urls))
+    
+    style_images = glob(os.path.join(style_directory,'*'))
+    
+    files = glob(os.path.join(directory,'*.png'))
+    for i, f in enumerate(files):
+        for j, fs in enumerate(style_images):
+            fo = f.replace('.png','style%i_%i.png' % (i,j))
+            # python main.py -content_path 'content_example.jpg' -style_path 'style_example.jpg'
+            subprocess.call(['python3.7',os.path.expanduser('~/github/tensorflow-2-style-transfer/main.py'),'-content_path',"%s" % f, '-style_path',"%s" % fs,'-output_dir',"%s" % directory])
+        
+
+def randomly_drop_visualiztions(project_id, dst_dir = '/tmp/keypoint_heatmap_vis', num = -1, horistack=True ):
     # take random frames from the db and show their labeling as gaussian heatmaps
     if not os.path.isdir(dst_dir):
         os.makedirs(dst_dir)
@@ -89,7 +128,7 @@ def randomly_drop_visualiztions(project_id, dst_dir = '/tmp/keypoint_heatmap_vis
         q = "select keypoint_name, individual_id, keypoint_x, keypoint_y from keypoint_positions where video_id=%i and frame_idx='%s' order by individual_id, keypoint_name desc;" % (video_id,frame_idxs[i])
         db.execute(q)
         keypoints = [x for x in db.cur.fetchall()]
-        print('frame',frame_idxs[i],'isfile',os.path.isfile(filepath),filepath)
+        #print('frame',frame_idxs[i],'isfile',os.path.isfile(filepath),filepath)
         #for kp in keypoints:
         #    print(kp)
         if os.path.isfile(filepath):
