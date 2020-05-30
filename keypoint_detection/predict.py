@@ -56,50 +56,63 @@ def predict(config, checkpoint_path, project_id):
     if not os.path.isdir(output_dir):
         os.makedirs(output_dir)
  
+    t0 = time.time()
     path_model = os.path.join(checkpoint_path,'trained_model.h5')
     trained_model = tf.keras.models.load_model(h5py.File(path_model, 'r'))
-
+    t1 = time.time()
+    print('[*] loaded model from %s in %f seconds.' %(path_model,t1-t0))
     frames_dir = get_project_frame_test_dir(project_id)
-    config['input_image_shape'] = cv.imread(glob(os.path.join(frames_dir,'*.png'))[0]).shape[:2]
+    frame_files = sorted(glob(os.path.join(frames_dir,'*.png')))
+    config['input_image_shape'] = cv.imread(frame_files[0]).shape[:2]
 
     config['n_inferences'] = 5
     
     frames = get_project_frames(config, project_id)
     #frames = model.load_raw_dataset(config,mode='custom',image_directory = )
     cnt_output = 0 
+    t2 = time.time()
     for x in frames:
         xsmall = x 
         w = config['img_height']*x.shape[2]//x.shape[1]
         xsmall = tf.image.resize(x,(config['img_height'],w))
         xsmall = xsmall[:,:,(xsmall.shape[2]-xsmall.shape[1])//2:xsmall.shape[2]//2+xsmall.shape[1]//2,:] # center square crop
         
+        tsb = time.time()
         if config['n_inferences'] == 1:
             y = trained_model.predict(xsmall)
         else:
             y = trained_model(xsmall, training=True) / config['n_inferences']
             for ii in range(config['n_inferences']-1):
                 y += trained_model(xsmall, training=True) / config['n_inferences']
-            
+        tse = time.time() 
+
         #xn, yn = x.numpy(),y 
         #print(x.shape,y.shape,xsmall.shape, xn.min(),xn.max(),yn.min(),yn.max())
-
+        should_write = False 
         for b in range(x.shape[0]): # iterate through batch of frames
-            #vis_frame = np.zeros([x.shape[1],x.shape[2],3])
-            vis_frame = np.zeros([config['img_height'],config['img_width'],3])
-            for c in range(y.shape[3]): # iterate through each channel for this frame
-                feature_map = y[b,:,:,c]
-                feature_map = np.expand_dims(feature_map, axis=2)
-                feature_map = colors[c] * feature_map 
-                vis_frame += feature_map 
-            vis_frame = np.around(vis_frame)
-            vis_frame = np.uint8(vis_frame)
-            #print('1vis_frame',vis_frame.shape,vis_frame.dtype,vis_frame.min(),vis_frame.max())
-            overlay = np.uint8(xsmall[b,:,:,:]//2 + vis_frame//2)
-            vis_frame = np.hstack((overlay,vis_frame))
-            fp = os.path.join(output_dir,'predict-{:05d}.png'.format(cnt_output))
-            cv.imwrite(fp, vis_frame)
-            
+            if should_write:
+                #vis_frame = np.zeros([x.shape[1],x.shape[2],3])
+                vis_frame = np.zeros([config['img_height'],config['img_width'],3])
+                for c in range(y.shape[3]): # iterate through each channel for this frame
+                    feature_map = y[b,:,:,c]
+                    feature_map = np.expand_dims(feature_map, axis=2)
+                    feature_map = colors[c] * feature_map 
+                    vis_frame += feature_map 
+                vis_frame = np.around(vis_frame)
+                vis_frame = np.uint8(vis_frame)
+                #print('1vis_frame',vis_frame.shape,vis_frame.dtype,vis_frame.min(),vis_frame.max())
+                overlay = np.uint8(xsmall[b,:,:,:]//2 + vis_frame//2)
+                vis_frame = np.hstack((overlay,vis_frame))
+                fp = os.path.join(output_dir,'predict-{:05d}.png'.format(cnt_output))
+                cv.imwrite(fp, vis_frame)
+                
             cnt_output += 1 
+
+        # estimate duration until done with all frames
+        if cnt_output % ( 30*16) == 0:
+            dur_one = float(tse-t2) / cnt_output
+            dur_left_minute = float(len(frame_files)-cnt_output) * dur_one / 60.
+            print('[*] %i minutes left for predicting (%i/100 done)' % (dur_left_minute, int(cnt_output / len(frame_files) * 100)))
 
 def predictold(config, checkpoint_path, project_id):
     project_id = int(project_id)
