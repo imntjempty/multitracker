@@ -68,7 +68,8 @@ def predict(config, checkpoint_path, project_id):
     config['n_inferences'] = 5
     
     frames = get_project_frames(config, project_id)
-    #frames = model.load_raw_dataset(config,mode='custom',image_directory = )
+    print('[*] will predict %i frames'%len(frame_files))
+
     cnt_output = 0 
     t2 = time.time()
     for x in frames:
@@ -113,85 +114,6 @@ def predict(config, checkpoint_path, project_id):
             dur_one = float(tse-t2) / cnt_output
             dur_left_minute = float(len(frame_files)-cnt_output) * dur_one / 60.
             print('[*] %i minutes left for predicting (%i/100 done)' % (dur_left_minute, int(cnt_output / len(frame_files) * 100)))
-
-def predictold(config, checkpoint_path, project_id):
-    project_id = int(project_id)
-    output_dir = '/tmp/multitracker/predictions/%i/%s' % (project_id, checkpoint_path.split('/')[-1])
-    if not os.path.isdir(output_dir):
-        os.makedirs(output_dir)
-
-    #dataset_test = model.load_raw_dataset(config,'test')
-    
-    inputs = tf.keras.layers.Input(shape=[config['img_height'], config['img_width'], 3])
-    inputsprep = inputs# preprocess_input(inputs)
-    encoder = model.Encoder(config,inputsprep)
-    #print('[*] hidden representation',encoder.outputs[0].get_shape().as_list())
-    heatmaps = model.Decoder(config,encoder)
-
-    trained_model = tf.keras.models.Model(inputs = encoder.input, outputs = heatmaps) #dataset['train'][0],outputsdataset['train'][1])
-    #trained_model.summary() 
-
-    ckpt = tf.train.Checkpoint(trained_model = trained_model, optimizer = tf.keras.optimizers.Adam(1e-5))
-    
-    ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
-
-    # if a checkpoint exists, restore the latest checkpoint.
-    assert ckpt_manager.latest_checkpoint, ("ERROR! could not find checkpoint in "+checkpoint_path)
-    status = ckpt.restore(ckpt_manager.latest_checkpoint)#.expect_partial()
-    status.assert_consumed()
-    print('[*] checkpoint restored',ckpt_manager.latest_checkpoint)
-
-    # load frame datas
-    #frames = get_project_frames(config, project_id=project_id)
-    frames = model.load_raw_dataset(config,mode='test')
-    cnt_output = 0 
-    for x in frames:
-        xs = x.shape 
-        #w = config['img_height']*xs[2]//xs[1]
-        #print(xs,'w',w)
-        #xsmall = tf.image.resize(x,(config['img_height'],w))
-        #xsmall = xsmall[:,:,(xsmall.shape[2]-xsmall.shape[1])//2:-(xsmall.shape[2]-xsmall.shape[1])//2,:] # center crop
-        
-        
-        
-        xsmallori = crop 
-        xsmall = preprocess_input(xsmallori)
-        y = trained_model(xsmall, training=False)
-        #y = tf.nn.softmax(y)
-        
-        xn , yn = x.numpy(), y.numpy()
-        print(x.shape,y.shape,xsmall.shape, xn.min(),xn.max(),yn.min(),yn.max())
-        s = y.shape
-
-
-        for b in range(s[0]): # iterate through batch of frames
-            vis_frame = np.zeros([s[1],s[2],3])
-            for c in range(s[3]): # iterate through each channel for this frame
-                h = y[b,:,:,c]
-                #h = tf.cast(h,'uint8')
-                hh = np.zeros(h.shape,'uint8')
-                hh[h>0.5]=1
-                #h = hh 
-                
-                h = np.expand_dims(h, axis=2)
-                h = colors[c] * h 
-                
-                #print('h',b,c,h.shape)
-                #pad = np.zeros((h.shape[0],(y.shape[2]-y.shape[1])//2,3),'uint8')
-                #print('h',h.shape,'vis',vis_frame.shape,'pad',pad.shape)
-                #vis_frame += np.concatenate((pad,h,pad),axis=1)
-                vis_frame += h 
-            #vis_frame[vis_frame>255.] = 255. 
-            print('vis',vis_frame.shape, vis_frame.min(),vis_frame.max())
-            vis_frame = np.uint8(vis_frame)
-
-            # overlay with input image 
-            #vis_frame = np.uint8(vis_frame // 2 + xn[b,:,:,:] // 2)
-            vis_frame = np.hstack((xsmallori[b,:,:,:],vis_frame))
-            f = os.path.join(output_dir,'predict-{:05d}.png'.format(cnt_output))
-            cv.imwrite(f, vis_frame)
-            print(cnt_output, f)
-            cnt_output += 1 
 
 
 
