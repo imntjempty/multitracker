@@ -3,6 +3,11 @@ from sqlite3 import Error
 import os 
 from random import shuffle 
 
+try:
+    from flask import g
+except:
+    print('[*] not using global context for flask!')
+
 class DatabaseConnection(object):
     def __init__(self,file_db = os.path.expanduser("~/data/multitracker/data.db")):
         self.file_db = file_db
@@ -56,8 +61,12 @@ class DatabaseConnection(object):
         shuffle(video_ids)
         return video_ids[0][0]
 
-    def get_count_labeled_frames(self):
-        self.execute('select frame_idx from keypoint_positions;')
+    def get_count_labeled_frames(self, project_id):
+        self.execute('''select frame_idx 
+                            from keypoint_positions 
+                            inner join videos on videos.id = keypoint_positions.video_id
+                            where videos.project_id = %i;
+        ''' % int(project_id))
         num_db_frames = len(list(set([x for x in self.cur.fetchall()])))
         return num_db_frames
 
@@ -75,15 +84,33 @@ class DatabaseConnection(object):
                 self.insert(query, values)
         print('[*] saved labeling data to database.')
 
-def list_table(table):
+
+def get_from_store(_class):
+    attr = "_" + _class.__name__
+    db = getattr(g, attr, None)
+    if db is None:
+        db = _class()
+        setattr(g, attr, db)
+    return db
+
+
+def get_db() -> DatabaseConnection:
+    return get_from_store(DatabaseConnection)
+
+
+def list_table(table,where_k = None, where_v = None):
     
     c = DatabaseConnection()
-    q = "select * from %s;" % table
+    if where_k is None:
+        q = "select * from %s;" % table
+    else:
+        q = "select * from %s where %s = '%s';" % (table, where_k, where_v)
     c.execute(q)
     dat = [ row for row in c.cur.fetchall()]
     print('[*] list of %s: %i counts' % (table,len(dat)))
     for row in dat[:20]:
-        print(row)        
+        print('[*] labeled %i frames' % DatabaseConnection().get_count_labeled_frames(row[0]),row)
+        
 
 if __name__ == "__main__":
     import argparse 
@@ -91,12 +118,14 @@ if __name__ == "__main__":
     parser.add_argument('-list_projects', action='store_true')
     parser.add_argument('-list_videos', action='store_true')
     parser.add_argument('-list_keypoints', action='store_true')
+    
     args = parser.parse_args()
 
     if args.list_projects:
-        list_table('projects')
+        projects = list_table('projects')
+        
     if args.list_videos:
         list_table('videos')
     if args.list_keypoints:
         list_table('keypoint_positions')
-        print('[*] labeled %i frames' % DatabaseConnection().get_count_labeled_frames())
+        
