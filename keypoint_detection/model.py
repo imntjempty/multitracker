@@ -9,9 +9,13 @@ import time
 from datetime import datetime
 import cv2 as cv 
 
-from multitracker.keypoint_detection import heatmap_drawing
+from multitracker.be import dbconnection
 
-# <network architecture>
+db = dbconnection.DatabaseConnection()
+from multitracker.keypoint_detection import heatmap_drawing    
+from multitracker.be import video 
+
+
 from tensorflow.keras.applications.resnet_v2 import preprocess_input
 
 def Encoder(config,inputs):
@@ -44,7 +48,7 @@ def EncoderPretrained(config,inputs):
     for i,layer in enumerate(net.layers):
         # print('layer',layer.name,i,layer.output.shape)
         layer.trainable = False 
-    layer_name = ['conv3_block8_1_relu',"conv3_block8_preact_relu","max_pooling2d_1"][1]
+    layer_name = ['conv3_block8_1_relu',"conv3_block8_preact_relu","max_pooling2d_1"][0]
     feature_activation = net.get_layer(layer_name)
     model = tf.keras.models.Model(name="ImageNet Encoder",inputs=net.input,outputs=[feature_activation.output])
     return model 
@@ -149,42 +153,63 @@ def get_loss(predicted_heatmaps, y, config):
 
 # <data>
 
-def load_raw_dataset(config,mode='train'):
+def load_raw_dataset(config,mode='train', image_directory = None):
+    
+    if mode=='train' or mode == 'test':
+        image_directory = os.path.join(config['data_dir'],'%s' % mode)
+    else:
+        video_id = db.get_random_project_video(config['project_id'])
+        #image_directory = video.get_frames_dir(config['project_id'], video_id)
+        image_directory = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), video_id),'test')
+    [h,w,_] = cv.imread(glob(os.path.join(image_directory,'*.png'))[0]).shape
+
     def load_im(image_file):
         image = tf.io.read_file(image_file)
         image = tf.image.decode_png(image,channels=3)
         image = tf.cast(image,tf.float32)
         
-        # decompose hstack to dstack
-        w = config['input_image_shape'][1] // (2 + len(config['keypoint_names'])//3)
-        h = config['input_image_shape'][0]
+        if mode == 'train' or mode == 'test':
+            # decompose hstack to dstack
+            w = config['input_image_shape'][1] // (2 + len(config['keypoint_names'])//3)
+            h = config['input_image_shape'][0]
 
-        # now stack depthwise for easy random cropping and other augmentation
-        comp = tf.concat((image[:,:w,:], image[:,w:2*w,:], image[:,2*w:3*w,:], image[:,3*w:4*w,:] ),axis=2)
-        comp = comp[:,:,:(3+len(config['keypoint_names']))]
+            # now stack depthwise for easy random cropping and other augmentation
+            comp = tf.concat((image[:,:w,:], image[:,w:2*w,:], image[:,2*w:3*w,:], image[:,3*w:4*w,:] ),axis=2)
+            comp = comp[:,:,:(3+len(config['keypoint_names']))]
 
-        # add background of heatmap
-        background = 255 - tf.reduce_max(comp[:,:,3:],axis=2)
-        comp = tf.concat((comp,tf.expand_dims(background,axis=2)),axis=2)
-        
-        # apply augmentations
-        # resize
-        #H, W = config['input_image_shape'][:2]
-        if mode == 'train':
-            scalex = np.random.uniform(1.,1.2)
-            scaley = np.random.uniform(1.,1.2)
-            comp = tf.image.resize(comp, size = (int(scaley*h),int(scalex*w)))
-        
-        # crop
-        crop = tf.image.random_crop( comp, [h,h, 1+3+len(config['keypoint_names'])])
-        crop = tf.image.resize(comp,[config['img_height'],config['img_width']])
-        
-        # split stack into images and heatmaps
-        image = crop[:,:,:3]
-        heatmaps = crop[:,:,3:] / 255.
-        return image, heatmaps
+            # add background of heatmap
+            background = 255 - tf.reduce_max(comp[:,:,3:],axis=2)
+            comp = tf.concat((comp,tf.expand_dims(background,axis=2)),axis=2)
+            
+            # apply augmentations
+            # resize
+            #H, W = config['input_image_shape'][:2]
+            if 1:
+                scalex = np.random.uniform(1.,1.5)
+                scaley = np.random.uniform(1.,1.5)
+                comp = tf.image.resize(comp, size = (int(scaley*h),int(scalex*w)))
+            
+                # crop
+                crop = tf.image.random_crop( comp, [h,h, 1+3+len(config['keypoint_names'])])
+                crop = tf.image.resize(comp,[config['img_height'],config['img_width']])
+                
+            # split stack into images and heatmaps
+            image = crop[:,:,:3]
+            heatmaps = crop[:,:,3:] / 255.
+            return image, heatmaps
+        else:
+            ratio = max(config['img_height']/h,config['img_width']/w)
+            image = tf.image.resize(image,[int(ratio*xs[1]),int(ratio*xs[2])])
+            crop = image[h//2-config['img_height']//2:h//2+config['img_height']//2,w//2-config['img_width']//2:w//2+config['img_width']//2,:]
+            print('resized',xs,'to',xdown.shape,'and cropped to',crop.shape)
+            
+            #h,w,_ = image.shape
+            #crop = image[h//2-config['img_height']//2:h//2+config['img_height']//2,w//2-config['img_width']//2:w//2+config['img_width']//2,:]
+            #crop = tf.image.resize(crop,[config['img_height'],config['img_width']])
+            
+            return crop
 
-    file_list = tf.data.Dataset.list_files(os.path.join(config['data_dir'],'%s/*.png' % mode),shuffle=False)
+    file_list = tf.data.Dataset.list_files(os.path.join(image_directory,'*.png'), shuffle=False)
     data = file_list.map(load_im, num_parallel_calls = tf.data.experimental.AUTOTUNE).batch(config['batch_size']).prefetch(4*config['batch_size'])#.cache()
     if mode == 'train':
         data = data.shuffle(1024)
@@ -224,14 +249,19 @@ def cutmix(x,y):
     # https://arxiv.org/pdf/1906.01916.pdf
     # fixing the area of the rectangle to half that of the image, while varying the aspect ratio and position
     s = x.shape
-    # pixel area 
-    pa = s[1] * s[2]
-    M = tf.zeros((s[0],s[1],s[2]))
-    rw = tf.random.uniform((s[0],1),minval = s[2] // 3 , maxval = s[2] )
-    rh = pa / rw 
-    rx = tf.random.uniform((s[0]))
+    randw = int(s[2]*np.random.uniform(0.7,0.9))
+    randh = int(s[1]*s[2]//2 / randw )
+    px = int(np.random.uniform(0,s[2]-randw))
+    py = int(np.random.uniform(0,s[1]-randh))
+    
+    Mx = np.zeros(s)
+    My = np.zeros(y.shape)
+    Mx[:,py:py+randh,px:px+randw,:] = 1.0 
+    My[:,py:py+randh,px:px+randw,:] = 1.0 
 
-    return x, y 
+    xx = Mx*x + (1.-Mx)*x[::-1,:,:,:] 
+    yy = My*y + (1.-My)*y[::-1,:,:,:] 
+    return xx, yy
 # </data>
 
 
@@ -246,6 +276,7 @@ def train(config):
     print('[*] hidden representation',encoder.outputs[0].get_shape().as_list())
     heatmaps = Decoder(config,encoder)
 
+    # decaying learning rate 
     decay_steps, decay_rate = 2000, 0.95
     lr = tf.keras.optimizers.schedules.ExponentialDecay(config['lr'], decay_steps, decay_rate)
     optimizer = tf.keras.optimizers.Adam(lr)
@@ -364,6 +395,7 @@ def train(config):
             if n % 1000 == 0:
                 ckpt_save_path = ckpt_manager.save()
                 print('[*] saving model to %s'%ckpt_save_path)
+                model.save(os.path.join(checkpoint_path,'trained_model.h5'))
 
             n+=1
         end = time.time()
@@ -374,23 +406,21 @@ def train(config):
 
 # </train>
 def get_config():
-    config = {'batch_size': 8, 'img_height': 256,'img_width': 256}
+    config = {'batch_size': 16, 'img_height': 256,'img_width': 256}
     config['epochs'] = 1000000
     config['max_steps'] = 400000
-    config['lr'] = 2e-5
+    config['lr'] = 2e-5 * 4
     config['loss'] = ['l1','dice','recall','focal'][3]
     config['autoencoding'] = [False, True][0]
     config['pretrained_encoder'] = True
-    config['mixup'] = [False, True][1]
-    config['cutmix'] = [False, True][0]
+    config['mixup'] = [False, True][0]
+    config['cutmix'] = [False, True][1]
 
     # train on project 2 
     config['project_id'] = 2
 
     config['data_dir'] = os.path.join(os.path.expanduser('~/data/multitracker/projects/%i/data' % config['project_id']))
 
-    from multitracker.be import dbconnection
-    db = dbconnection.DatabaseConnection()
     config['keypoint_names'] = db.get_keypoint_names(config['project_id'])
     return config 
 
