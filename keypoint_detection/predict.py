@@ -50,6 +50,27 @@ def get_project_frames(config, project_id = None):
 def get_project_frame_test_dir(project_id):
     return os.path.expanduser('~/data/multitracker/projects/%i/%i/frames/test' % (project_id,project_id))
 
+def extract_frame_candidates(feature_map):
+    stop_threshold_hit = False 
+    frame_candidates = []
+    while not stop_threshold_hit:
+        # find new max pos
+        max_pos = np.argmax(feature_map)
+        py = max_pos // feature_map.shape[0]
+        px = max_pos % feature_map.shape[1]
+        val = np.max(feature_map)
+        frame_candidates.append([px,py,val])
+
+        # delete area around new max pos 
+        pp = 5
+        feature_map[py-pp:py+pp,px-pp:px+pp] = 0
+        
+        # stop extraction if max value has small probability 
+        if val < 0.5:
+            frame_candidates = frame_candidates[:-1]
+            stop_threshold_hit = True 
+    return frame_candidates
+
 def predict(config, checkpoint_path, project_id):
     project_id = int(project_id)
     output_dir = '/tmp/multitracker/predictions/%i/%s' % (project_id, checkpoint_path.split('/')[-1])
@@ -72,11 +93,12 @@ def predict(config, checkpoint_path, project_id):
 
     cnt_output = 0 
     t2 = time.time()
-    for x in frames:
+    for ibatch, x in enumerate(frames):
         # first center crop with complete height of image and then rescale to target size 
         xsmall = x[:,:, x.shape[2]//2 - x.shape[1]//2 : x.shape[2]//2 + x.shape[1]//2, : ]
         xsmall = tf.image.resize(xsmall,(config['img_height'],config['img_width']))
 
+        # run trained_model to get heatmap predictions
         tsb = time.time()
         if config['n_inferences'] == 1:
             y = trained_model.predict(xsmall)
@@ -86,14 +108,24 @@ def predict(config, checkpoint_path, project_id):
                 y += trained_model(xsmall, training=True) / config['n_inferences']
         tse = time.time() 
 
-        #xn, yn = x.numpy(),y 
-        #print(x.shape,y.shape,xsmall.shape, xn.min(),xn.max(),yn.min(),yn.max())
         should_write = 1 
         for b in range(x.shape[0]): # iterate through batch of frames
-            # extract maxima positions for each channel
-            maxidx = np.argmax(y[b,:,:,:], axis=2)
-            #print('maxprint('max',maxidx.shape,maxidx.min(),maxidx.max())
-            if should_write:
+            # extract observation maxima positions for each channel of network prediction
+            frame_candidates = [ [] for _ in range(y.shape[3]-1) ]
+            for c in range(y.shape[3]-1):
+                frame_idx = ibatch * x.shape[0] + b 
+                feature_map = y[b,:,:,c].numpy()
+                
+                frame_candidates[c] = extract_frame_candidates(feature_map)
+                
+                if len(frame_candidates[c]) > 0:      
+                    print('frame',frame_idx, config['keypoint_names'][c], ':', frame_candidates[c])
+
+
+
+
+        if should_write:
+            for b in range(x.shape[0]):
                 #vis_frame = np.zeros([x.shape[1],x.shape[2],3])
                 vis_frame = np.zeros([config['img_height'],config['img_width'],3])
                 for c in range(y.shape[3]-1): # iterate through each channel for this frame except background channel
@@ -109,7 +141,7 @@ def predict(config, checkpoint_path, project_id):
                 fp = os.path.join(output_dir,'predict-{:05d}.png'.format(cnt_output))
                 cv.imwrite(fp, vis_frame)
                 
-            cnt_output += 1 
+        cnt_output += 1 
 
         # estimate duration until done with all frames
         if cnt_output % ( 30*16) == 0:
