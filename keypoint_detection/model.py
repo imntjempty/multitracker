@@ -48,12 +48,12 @@ def EncoderPretrained(config,inputs):
     for i,layer in enumerate(net.layers):
         # print('layer',layer.name,i,layer.output.shape)
         layer.trainable = False 
-    layer_name = ['conv3_block8_1_relu',"conv3_block8_preact_relu","max_pooling2d_1"][0]
+    layer_name = ['conv3_block8_1_relu',"conv3_block8_preact_relu","max_pooling2d_1"][1]
     feature_activation = net.get_layer(layer_name)
     model = tf.keras.models.Model(name="ImageNet Encoder",inputs=net.input,outputs=[feature_activation.output])
     return model 
 
-def upsample(nfilters, kernel_size, strides=2, norm_type='batchnorm', act = tf.keras.layers.Activation('relu')):
+def upsample(nfilters, kernel_size, strides=2, dilation = (1,1), norm_type='batchnorm', act = tf.keras.layers.Activation('relu')):
     initializer = ['he_normal', tf.random_normal_initializer(0., 0.02)][1]
 
     if strides == 1 or strides < 0:
@@ -65,6 +65,7 @@ def upsample(nfilters, kernel_size, strides=2, norm_type='batchnorm', act = tf.k
     result = tf.keras.Sequential()
     result.add(
         func(nfilters, kernel_size, strides=strides,
+            dilation_rate=dilation,
             padding='same',
             kernel_regularizer=tf.keras.regularizers.l2(0.01),
             kernel_initializer=initializer))
@@ -84,10 +85,12 @@ def Decoder(config,encoder):
     # takes encoded tensor and produces image sized heatmaps for each keypoint type
     x = encoder.output
 
-    fs = x.shape[-1]
-    x = upsample(fs,7,1)(x)
-    
-    x = tf.keras.layers.Dropout(0.5)(x)
+    fs = max(256, x.shape[-1])
+    x = upsample(fs,3,1)(x)
+    xx = upsample(fs,7,1, dilation = 2)(x)
+    xx = tf.keras.layers.Dropout(0.5)(x)
+    xx = upsample(fs,7,1, dilation = 8)(xx)
+    x = x + xx 
 
     while x.shape[1] < config['img_height']:
         fs = max(32, fs // 2 )
@@ -103,8 +106,12 @@ def Decoder(config,encoder):
         no += 3
     
     act = tf.keras.layers.Activation('softmax')
-    x = upsample(no,1,1,norm_type=None,act=act)(x)    
-    return x 
+    x = upsample(no,3,1,norm_type=None,act=act)(x)    
+    model = tf.keras.models.Model(inputs = encoder.input, outputs = x) #dataset['train'][0],outputsdataset['train'][1])
+    model.summary()
+    
+    return model 
+
 
 
 def calc_ssim_loss(x, y):
@@ -168,11 +175,11 @@ def load_raw_dataset(config,mode='train', image_directory = None):
         image = tf.image.decode_png(image,channels=3)
         image = tf.cast(image,tf.float32)
         
-        if mode == 'train' or mode == 'test':
-            # decompose hstack to dstack
-            w = config['input_image_shape'][1] // (2 + len(config['keypoint_names'])//3)
-            h = config['input_image_shape'][0]
+        # decompose hstack to dstack
+        w = config['input_image_shape'][1] // (2 + len(config['keypoint_names'])//3)
+        h = config['input_image_shape'][0]
 
+        if mode == 'train' or mode == 'test':
             # now stack depthwise for easy random cropping and other augmentation
             comp = tf.concat((image[:,:w,:], image[:,w:2*w,:], image[:,2*w:3*w,:], image[:,3*w:4*w,:] ),axis=2)
             comp = comp[:,:,:(3+len(config['keypoint_names']))]
@@ -274,7 +281,7 @@ def train(config):
     inputs = tf.keras.layers.Input(shape=[config['img_height'], config['img_width'], 3])
     encoder = Encoder(config,inputs)
     print('[*] hidden representation',encoder.outputs[0].get_shape().as_list())
-    heatmaps = Decoder(config,encoder)
+    model = Decoder(config,encoder)
 
     # decaying learning rate 
     decay_steps, decay_rate = 2000, 0.95
@@ -282,8 +289,7 @@ def train(config):
     optimizer = tf.keras.optimizers.Adam(lr)
     optimizer_ae = tf.keras.optimizers.Adam(config['lr'])
 
-    model = tf.keras.models.Model(inputs = encoder.input, outputs = heatmaps) #dataset['train'][0],outputsdataset['train'][1])
-    model.summary() 
+     
 
     # checkpoints and tensorboard summary writer
     now = str(datetime.now()).replace(' ','_').replace(':','-').split('.')[0]
@@ -380,13 +386,16 @@ def train(config):
     
         for x,y in dataset_train:# </train>
             # mixup augmentation
-            if config['mixup']:
-                x, y = mixup(x,y) 
-
-            if config['cutmix']:
-                x, y = cutmix(x,y)
+            if np.random.random() < 0.9:
+                if config['mixup'] and np.random.random() > 0.5:
+                    x, y = mixup(x,y) 
+                else:
+                    if config['cutmix'] and np.random.random() > 0.5:
+                        x, y = cutmix(x,y)
+                
             #x = tf.keras.layers.experimental.preprocessing.RandomContrast(0.4)(x,training=True)
-
+            #if config['random_contrast'] and np.random.random() > 0.5:
+            #(x - mean) * contrast_factor + mean
 
             if n < config['max_steps']:
                 should_summarize=n%50==0
@@ -406,14 +415,14 @@ def train(config):
 
 # </train>
 def get_config():
-    config = {'batch_size': 16, 'img_height': 256,'img_width': 256}
+    config = {'batch_size': 8, 'img_height': 256,'img_width': 256}
     config['epochs'] = 1000000
     config['max_steps'] = 400000
-    config['lr'] = 2e-5 * 4
+    config['lr'] = 2e-5 #* 4
     config['loss'] = ['l1','dice','recall','focal'][3]
     config['autoencoding'] = [False, True][0]
-    config['pretrained_encoder'] = True
-    config['mixup'] = [False, True][0]
+    config['pretrained_encoder'] = [False,True][1]
+    config['mixup'] = [False, True][1]
     config['cutmix'] = [False, True][1]
 
     # train on project 2 

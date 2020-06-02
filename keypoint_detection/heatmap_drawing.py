@@ -48,8 +48,9 @@ def vis_heatmap(image, keypoint_names, keypoints, horistack=True):
     #print('hm',hm.shape,hm.min(),hm.max())
     if not horistack:
         # overlay
-        hm = np.uint8(255. * hm[:,:,:3])
-        vis = np.uint8( hm//2 + image//2 )     
+        #hm = np.uint8(255. * hm[:,:,:3])
+        #vis = np.uint8( hm//2 + image//2 )     
+        vis = np.uint8(np.dstack((image,np.uint8(255. * hm))))
     else:
         # make horizontal mosaic - image and stacks of 3
         n = 3 * (hm.shape[2]//3) + 3
