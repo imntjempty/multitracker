@@ -3,7 +3,7 @@
     load a trained model and predict and visualize each frame
 
     example call
-        python3.7 -m multitracker.keypoint_detection.predict -model /home/alex/checkpoints/keypoint_tracking/2020-05-28_07-51-11 -project 2
+        python3.7 -m multitracker.keypoint_detection.predict -model /home/alex/checkpoints/keypoint_tracking/2020-06-01_16-19-06 -project 2
 """
 
 import os
@@ -68,16 +68,15 @@ def predict(config, checkpoint_path, project_id):
     config['n_inferences'] = 5
     
     frames = get_project_frames(config, project_id)
-    print('[*] will predict %i frames'%len(frame_files))
+    print('[*] will predict %i frames (%f seconds of video)'%(len(frame_files),len(frame_files)/30.))
 
     cnt_output = 0 
     t2 = time.time()
     for x in frames:
-        xsmall = x 
-        w = config['img_height']*x.shape[2]//x.shape[1]
-        xsmall = tf.image.resize(x,(config['img_height'],w))
-        xsmall = xsmall[:,:,(xsmall.shape[2]-xsmall.shape[1])//2:xsmall.shape[2]//2+xsmall.shape[1]//2,:] # center square crop
-        
+        # first center crop with complete height of image and then rescale to target size 
+        xsmall = x[:,:, x.shape[2]//2 - x.shape[1]//2 : x.shape[2]//2 + x.shape[1]//2, : ]
+        xsmall = tf.image.resize(xsmall,(config['img_height'],config['img_width']))
+
         tsb = time.time()
         if config['n_inferences'] == 1:
             y = trained_model.predict(xsmall)
@@ -89,12 +88,15 @@ def predict(config, checkpoint_path, project_id):
 
         #xn, yn = x.numpy(),y 
         #print(x.shape,y.shape,xsmall.shape, xn.min(),xn.max(),yn.min(),yn.max())
-        should_write = False 
+        should_write = 1 
         for b in range(x.shape[0]): # iterate through batch of frames
+            # extract maxima positions for each channel
+            maxidx = np.argmax(y[b,:,:,:], axis=2)
+            #print('maxprint('max',maxidx.shape,maxidx.min(),maxidx.max())
             if should_write:
                 #vis_frame = np.zeros([x.shape[1],x.shape[2],3])
                 vis_frame = np.zeros([config['img_height'],config['img_width'],3])
-                for c in range(y.shape[3]): # iterate through each channel for this frame
+                for c in range(y.shape[3]-1): # iterate through each channel for this frame except background channel
                     feature_map = y[b,:,:,c]
                     feature_map = np.expand_dims(feature_map, axis=2)
                     feature_map = colors[c] * feature_map 
