@@ -98,8 +98,10 @@ def predict(config, checkpoint_path, project_id):
     t2 = time.time()
     for ibatch, x in enumerate(frames):
         # first center crop with complete height of image and then rescale to target size 
-        xsmall = x[:,:, x.shape[2]//2 - x.shape[1]//2 : x.shape[2]//2 + x.shape[1]//2, : ]
-        xsmall = tf.image.resize(xsmall,(config['img_height'],config['img_width']))
+        #xsmall = x[:,:, x.shape[2]//2 - x.shape[1]//2 : x.shape[2]//2 + x.shape[1]//2, : ]
+        #xsmall = tf.image.resize(xsmall,(config['img_height'],config['img_width']))
+        r = float(x.shape[1]) / x.shape[2]
+        xsmall = tf.image.resize(x, (config['img_height'],1+int(config['img_height']/r)))
 
         # run trained_model to get heatmap predictions
         tsb = time.time()
@@ -126,8 +128,8 @@ def predict(config, checkpoint_path, project_id):
         should_write = 1 
         if should_write:
             for b in range(x.shape[0]):
-                #vis_frame = np.zeros([x.shape[1],x.shape[2],3])
-                vis_frame = np.zeros([config['img_height'],config['img_width'],3])
+                vis_frame = np.zeros([y.shape[1],y.shape[2],3])
+                #vis_frame = np.zeros([config['img_height'],config['img_width'],3])
                 for c in range(y.shape[3]-1): # iterate through each channel for this frame except background channel
                     feature_map = y[b,:,:,c]
                     feature_map = np.expand_dims(feature_map, axis=2)
