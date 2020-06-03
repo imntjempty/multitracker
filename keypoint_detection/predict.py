@@ -51,9 +51,12 @@ def get_project_frame_test_dir(project_id):
     return os.path.expanduser('~/data/multitracker/projects/%i/%i/frames/test' % (project_id,project_id))
 
 def extract_frame_candidates(feature_map):
+    step = -1
+    max_step = 50
     stop_threshold_hit = False 
     frame_candidates = []
-    while not stop_threshold_hit:
+    while not stop_threshold_hit and step < max_step:
+        step += 1
         # find new max pos
         max_pos = np.argmax(feature_map)
         py = max_pos // feature_map.shape[0]
@@ -108,7 +111,6 @@ def predict(config, checkpoint_path, project_id):
                 y += trained_model(xsmall, training=True) / config['n_inferences']
         tse = time.time() 
 
-        should_write = 1 
         for b in range(x.shape[0]): # iterate through batch of frames
             # extract observation maxima positions for each channel of network prediction
             frame_candidates = [ [] for _ in range(y.shape[3]-1) ]
@@ -121,9 +123,7 @@ def predict(config, checkpoint_path, project_id):
                 if len(frame_candidates[c]) > 0:      
                     print('frame',frame_idx, config['keypoint_names'][c], ':', frame_candidates[c])
 
-
-
-
+        should_write = 1 
         if should_write:
             for b in range(x.shape[0]):
                 #vis_frame = np.zeros([x.shape[1],x.shape[2],3])
@@ -141,7 +141,7 @@ def predict(config, checkpoint_path, project_id):
                 fp = os.path.join(output_dir,'predict-{:05d}.png'.format(cnt_output))
                 cv.imwrite(fp, vis_frame)
                 
-        cnt_output += 1 
+                cnt_output += 1 
 
         # estimate duration until done with all frames
         if cnt_output % ( 30*16) == 0:
