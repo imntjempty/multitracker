@@ -3,6 +3,7 @@
 import os
 import numpy as np 
 import tensorflow as tf 
+import tensorflow_addons as tfa
 from glob import glob 
 from random import shuffle 
 import time 
@@ -145,7 +146,6 @@ def get_loss(predicted_heatmaps, y, config):
         loss += tf.reduce_mean(tf.abs(predicted_heatmaps - y)) / 10. # abit of l1 
 
     elif config['loss'] == 'focal':
-        import tensorflow_addons as tfa
         loss_func = tfa.losses.SigmoidFocalCrossEntropy(False)
         if config['autoencoding']:
             loss = loss_func(y[:,:,:,:-3],predicted_heatmaps[:,:,:,:-3])
@@ -184,22 +184,27 @@ def load_raw_dataset(config,mode='train', image_directory = None):
             comp = tf.concat((image[:,:w,:], image[:,w:2*w,:], image[:,2*w:3*w,:], image[:,3*w:4*w,:] ),axis=2)
             comp = comp[:,:,:(3+len(config['keypoint_names']))]
 
+            if mode == 'train':
+                # apply augmentations
+                # random rotation
+                random_angle = tf.random.uniform([1],-35.*np.pi/180., 35.*np.pi/180.)  
+                comp = tfa.image.rotate(comp, random_angle)
+                
+                # resize
+                #H, W = config['input_image_shape'][:2]
+                if 1:
+                    scalex = np.random.uniform(1.,1.5)
+                    scaley = np.random.uniform(1.,1.5)
+                    comp = tf.image.resize(comp, size = (int(scaley*h),int(scalex*w)))
+
             # add background of heatmap
             background = 255 - tf.reduce_max(comp[:,:,3:],axis=2)
             comp = tf.concat((comp,tf.expand_dims(background,axis=2)),axis=2)
+
+            # crop
+            crop = tf.image.random_crop( comp, [h,h, 1+3+len(config['keypoint_names'])])
+            crop = tf.image.resize(comp,[config['img_height'],config['img_width']])
             
-            # apply augmentations
-            # resize
-            #H, W = config['input_image_shape'][:2]
-            if 1:
-                scalex = np.random.uniform(1.,1.5)
-                scaley = np.random.uniform(1.,1.5)
-                comp = tf.image.resize(comp, size = (int(scaley*h),int(scalex*w)))
-            
-                # crop
-                crop = tf.image.random_crop( comp, [h,h, 1+3+len(config['keypoint_names'])])
-                crop = tf.image.resize(comp,[config['img_height'],config['img_width']])
-                
             # split stack into images and heatmaps
             image = crop[:,:,:3]
             heatmaps = crop[:,:,3:] / 255.
