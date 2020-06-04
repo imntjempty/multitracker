@@ -16,6 +16,7 @@ from datetime import datetime
 import cv2 as cv 
 import h5py
 
+from multitracker import util 
 from multitracker.keypoint_detection import heatmap_drawing, model 
 
 # <network architecture>
@@ -58,21 +59,23 @@ def extract_frame_candidates(feature_map):
     while not stop_threshold_hit and step < max_step:
         step += 1
         # find new max pos
-        max_pos = np.argmax(feature_map)
-        py = max_pos // feature_map.shape[0]
-        px = max_pos % feature_map.shape[1]
+        max_pos = np.unravel_index(np.argmax(feature_map),feature_map.shape)
+        py = max_pos[0] #max_pos // feature_map.shape[0]
+        px = max_pos[1] #max_pos % feature_map.shape[1]
         val = np.max(feature_map)
         frame_candidates.append([px,py,val])
 
         # delete area around new max pos 
         pp = 5
         feature_map[py-pp:py+pp,px-pp:px+pp] = 0
+        feature_map[py][px] = 0 
         
         # stop extraction if max value has small probability 
-        if val < 0.5:
+        if val < 0.3:
             frame_candidates = frame_candidates[:-1]
             stop_threshold_hit = True 
     return frame_candidates
+
 
 def predict(config, checkpoint_path, project_id):
     project_id = int(project_id)
@@ -96,14 +99,20 @@ def predict(config, checkpoint_path, project_id):
 
     cnt_output = 0 
     t2 = time.time()
+    
+    history_candidates = []
+
     for ibatch, x in enumerate(frames):
         # first center crop with complete height of image and then rescale to target size 
         #xsmall = x[:,:, x.shape[2]//2 - x.shape[1]//2 : x.shape[2]//2 + x.shape[1]//2, : ]
         #xsmall = tf.image.resize(xsmall,(config['img_height'],config['img_width']))
-        r = float(x.shape[1]) / x.shape[2]
-        xsmall = tf.image.resize(x, (config['img_height'],1+int(config['img_height']/r)))
 
-        # run trained_model to get heatmap predictions
+        # predict whole image, height like trained height and variable width 
+        # to keep aspect ratio and relative size        
+        w = 1+int(config['img_height']/(float(x.shape[1]) / x.shape[2]))
+        xsmall = tf.image.resize(x, (config['img_height'],w))
+
+        # 1) inference: run trained_model to get heatmap predictions
         tsb = time.time()
         if config['n_inferences'] == 1:
             y = trained_model.predict(xsmall)
@@ -113,6 +122,7 @@ def predict(config, checkpoint_path, project_id):
                 y += trained_model(xsmall, training=True) / config['n_inferences']
         tse = time.time() 
 
+        # 2) extract frame candidates
         for b in range(x.shape[0]): # iterate through batch of frames
             # extract observation maxima positions for each channel of network prediction
             frame_candidates = [ [] for _ in range(y.shape[3]-1) ]
@@ -124,20 +134,28 @@ def predict(config, checkpoint_path, project_id):
                 
                 if len(frame_candidates[c]) > 0:      
                     print('frame',frame_idx, config['keypoint_names'][c], ':', frame_candidates[c])
+            history_candidates.append( frame_candidates )
 
+        # draw visualization and write to disk
         should_write = 1 
         if should_write:
             for b in range(x.shape[0]):
                 vis_frame = np.zeros([y.shape[1],y.shape[2],3])
-                #vis_frame = np.zeros([config['img_height'],config['img_width'],3])
                 for c in range(y.shape[3]-1): # iterate through each channel for this frame except background channel
                     feature_map = y[b,:,:,c]
                     feature_map = np.expand_dims(feature_map, axis=2)
+                    # draw heatmap
                     feature_map = colors[c] * feature_map 
+                    feature_map = np.uint8(np.around(feature_map))
+
+                    # draw candidates circles
+                    for cand in history_candidates[cnt_output][c]:
+                        feature_map[cand[1]][cand[0]] = colors[c]
+                        c1,c2,c3 = colors[c]
+                        feature_map = cv.circle(feature_map,(cand[0],cand[1]),3,(int(c1),int(c2),int(c3)),-1)
                     vis_frame += feature_map 
                 vis_frame = np.around(vis_frame)
                 vis_frame = np.uint8(vis_frame)
-                #print('1vis_frame',vis_frame.shape,vis_frame.dtype,vis_frame.min(),vis_frame.max())
                 overlay = np.uint8(xsmall[b,:,:,:]//2 + vis_frame//2)
                 vis_frame = np.hstack((overlay,vis_frame))
                 fp = os.path.join(output_dir,'predict-{:05d}.png'.format(cnt_output))
@@ -151,7 +169,9 @@ def predict(config, checkpoint_path, project_id):
             dur_left_minute = float(len(frame_files)-cnt_output) * dur_one / 60.
             print('[*] %i minutes left for predicting (%i/100 done)' % (dur_left_minute, int(cnt_output / len(frame_files) * 100)))
 
-
+    # create video afterwards
+    video_file = os.path.join(output_dir,'video.mp4')
+    util.make_video(output_dir,video_file)
 
 def main(checkpoint_path, project_id):
     config = model.get_config()
