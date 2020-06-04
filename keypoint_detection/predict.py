@@ -76,6 +76,12 @@ def extract_frame_candidates(feature_map):
             stop_threshold_hit = True 
     return frame_candidates
 
+def point_distance(config, p1, p2):
+    dist = np.linalg.norm(np.array(p1)/config['img_height']-np.array(p2)/config['img_height'])
+    score = 1. / dist 
+    score = min(1, score) # max 1
+    return score 
+
 
 def predict(config, checkpoint_path, project_id):
     project_id = int(project_id)
@@ -169,9 +175,10 @@ def predict(config, checkpoint_path, project_id):
             dur_left_minute = float(len(frame_files)-cnt_output) * dur_one / 60.
             print('[*] %i minutes left for predicting (%i/100 done)' % (dur_left_minute, int(cnt_output / len(frame_files) * 100)))
 
-    # create video afterwards
-    video_file = os.path.join(output_dir,'video.mp4')
-    util.make_video(output_dir,video_file)
+    if should_write:
+        # create video afterwards
+        video_file = os.path.join(output_dir,'video.mp4')
+        util.make_video(output_dir,video_file)
 
 def main(checkpoint_path, project_id):
     config = model.get_config()

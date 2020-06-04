@@ -52,7 +52,11 @@ def add_video_to_project(base_dir, project_id, source_video_file):
         shutil.copy(source_video_file, video_file)
 
     # sample frames 
-    subprocess.call(['ffmpeg','-i',video_file, '-vf', 'fps=30','-vf', "scale=iw/2:ih/2", frames_dir+'/%05d.png'])
+    downsample = False 
+    if downsample:
+        subprocess.call(['ffmpeg','-i',video_file, '-vf', 'fps=30','-vf', "scale=iw/2:ih/2", frames_dir+'/%05d.png'])
+    else:
+        subprocess.call(['ffmpeg','-i',video_file, '-vf', 'fps=30', frames_dir+'/%05d.png'])
     
 
     # split frames into train/test half/half
