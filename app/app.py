@@ -28,15 +28,23 @@ db = dbconnection.DatabaseConnection()
 def render_labeling(project_id):
     video_id = db.get_random_project_video(project_id)
     
+    # load labeled frame idxs
+    labeled_frame_idxs = db.get_labeled_frames(project_id)
+
+    # load frame files from disk
     frames_dir = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, project_id), video_id),'train')
     frames = sorted(glob(os.path.join(frames_dir, '*.png')))
     if len(frames) == 0:
         print('[E] no frames found in directory %s.'%frames_dir)
     shuffle(frames)
-    frame_idx = frames[int(len(frames)*np.random.random())]
-    frame_idx = '.'.join(frame_idx.split('/')[-1].split('.')[:-1])
 
-    num_db_frames = db.get_count_labeled_frames()
+    # choose random frame that is not already labeled
+    unlabeled_frame_found = False 
+    while not unlabeled_frame_found:
+        frame_idx = frames[int(len(frames)*np.random.random())]
+        frame_idx = '.'.join(frame_idx.split('/')[-1].split('.')[:-1])
+        unlabeled_frame_found = not (frame_idx in labeled_frame_idxs)
+    num_db_frames = len(labeled_frame_idxs)
     
     keypoint_names = db.get_keypoint_names(project_id,split=False)
     return render_template('labeling.html',project_id = int(project_id), video_id = int(video_id), frame_idx = frame_idx, keypoint_names = keypoint_names, sep = db.list_sep, num_db_frames = num_db_frames)

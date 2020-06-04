@@ -61,14 +61,16 @@ class DatabaseConnection(object):
         shuffle(video_ids)
         return video_ids[0][0]
 
-    def get_count_labeled_frames(self, project_id):
+    def get_labeled_frames(self, project_id):
         self.execute('''select frame_idx 
                             from keypoint_positions 
                             inner join videos on videos.id = keypoint_positions.video_id
                             where videos.project_id = %i;
         ''' % int(project_id))
-        num_db_frames = len(list(set([x for x in self.cur.fetchall()])))
-        return num_db_frames
+        return list(set([x for x in self.cur.fetchall()]))
+
+    def get_count_labeled_frames(self, project_id):
+        return len(self.get_labeled_frames(project_id))
 
     def save_labeling(self, data):
         keypoint_names = self.get_keypoint_names(int(data['project_id']))
