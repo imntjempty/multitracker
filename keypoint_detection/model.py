@@ -16,8 +16,11 @@ db = dbconnection.DatabaseConnection()
 from multitracker.keypoint_detection import heatmap_drawing    
 from multitracker.be import video 
 
-
-from tensorflow.keras.applications.resnet_v2 import preprocess_input
+backbone = ["resnet","efficientnet"][0]
+if backbone == "resnet":
+    from tensorflow.keras.applications.resnet_v2 import preprocess_input
+elif backbone == "efficientnet":
+    from tensorflow.keras.applications.efficientnet import preprocess_input
 
 def Encoder(config,inputs):
     if config['pretrained_encoder']:
@@ -41,15 +44,27 @@ def EncoderScratch(config, inputs):
     return model 
 
 def EncoderPretrained(config,inputs):
+    if config['backbone'] == "resnet":
+        net = tf.keras.applications.ResNet152V2
+    elif config['backbone'] == 'efficientnet':
+        net = tf.keras.applications.EfficientNetB7
+    
     inputss = preprocess_input(inputs)
-    net = tf.keras.applications.ResNet152V2(input_tensor=inputss,
-                                            include_top=False,
-                                            weights='imagenet',
-                                            pooling='avg')
+    net = net(input_tensor=inputss,
+            include_top=False,
+            weights='imagenet',
+            pooling='avg')
+
     for i,layer in enumerate(net.layers):
-        # print('layer',layer.name,i,layer.output.shape)
+        #print('layer',layer.name,i,layer.output.shape)
         layer.trainable = False 
-    layer_name = ['conv3_block8_1_relu',"conv3_block8_preact_relu","max_pooling2d_1"][1]
+    
+    if backbone == "resnet":
+        layer_name = ['conv3_block8_1_relu',"conv3_block8_preact_relu","max_pooling2d_1"][1] # 32x32
+        layer_name = 'conv2_block3_1_relu' # 64x64x64
+    elif backbone == "efficientnet":
+        layer_name = ['conv3_block8_1_relu'][0]
+    
     feature_activation = net.get_layer(layer_name)
     model = tf.keras.models.Model(name="ImageNet Encoder",inputs=net.input,outputs=[feature_activation.output])
     return model 
@@ -83,6 +98,47 @@ def upsample(nfilters, kernel_size, strides=2, dilation = (1,1), norm_type='batc
     return result 
 
 def Decoder(config,encoder):
+    return DecoderErfnet(config, encoder)
+    #return DecoderDefault(config,encoder)
+
+def DecoderErfnet(config, encoder):
+    x = encoder.output
+
+    fs = x.shape[-1]
+    
+    for iblock in range(12):
+        d = [2,4,8,16][iblock%4]
+        xx = upsample(fs,(3,1),1,norm_type=None)(x)
+        xx = upsample(fs,(1,3),1,norm_type=None)(xx)
+        xx = tf.keras.layers.GaussianNoise(0.2)(xx)
+        xx = upsample(fs,(3,1),1,dilation=(d,1),norm_type=None)(x)
+        xx = upsample(fs,(1,3),1,dilation=(1,d),act=None,norm_type=None)(xx)
+        xx = tf.keras.layers.Dropout(0.5)(xx)
+        xx = tf.keras.layers.BatchNormalization()(xx)
+        x = tf.nn.relu6(x + xx)
+
+
+    while x.shape[1] < config['img_height']:
+        fs = max(32, fs // 2 )
+        x = upsample(fs,4)(x)
+        x = tf.keras.layers.GaussianNoise(0.2)(x)
+        r = upsample(fs,3,1)(x)
+        r = tf.keras.layers.Dropout(0.5)(r)
+        r = upsample(fs,3,1)(r)
+        x = x + r
+        
+    no = len(config['keypoint_names'])+1
+    if config['autoencoding']:
+        no += 3
+    
+    act = tf.keras.layers.Activation('softmax')
+    x = upsample(no,3,1,norm_type=None,act=act)(x)    
+    model = tf.keras.models.Model(inputs = encoder.input, outputs = x, name = "Decoder Erfnet") #dataset['train'][0],outputsdataset['train'][1])
+    model.summary()
+    
+    return model 
+
+def DecoderDefault(config, encoder):
     # takes encoded tensor and produces image sized heatmaps for each keypoint type
     x = encoder.output
 
@@ -108,7 +164,7 @@ def Decoder(config,encoder):
     
     act = tf.keras.layers.Activation('softmax')
     x = upsample(no,3,1,norm_type=None,act=act)(x)    
-    model = tf.keras.models.Model(inputs = encoder.input, outputs = x) #dataset['train'][0],outputsdataset['train'][1])
+    model = tf.keras.models.Model(inputs = encoder.input, outputs = x, name = "Decoder Vanilla") #dataset['train'][0],outputsdataset['train'][1])
     model.summary()
     
     return model 
@@ -436,6 +492,8 @@ def get_config():
     config['data_dir'] = os.path.join(os.path.expanduser('~/data/multitracker/projects/%i/data' % config['project_id']))
 
     config['keypoint_names'] = db.get_keypoint_names(config['project_id'])
+
+    config['backbone'] = backbone
     return config 
 
 def main():
