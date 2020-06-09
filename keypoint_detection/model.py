@@ -98,8 +98,10 @@ def upsample(nfilters, kernel_size, strides=2, dilation = (1,1), norm_type='batc
     return result 
 
 def Decoder(config,encoder):
-    return DecoderErfnet(config, encoder)
-    #return DecoderDefault(config,encoder)
+    if 1:
+        return DecoderErfnet(config, encoder)
+    else:
+        return DecoderDefault(config,encoder)
 
 def DecoderErfnet(config, encoder):
     x = encoder.output
@@ -126,7 +128,7 @@ def DecoderErfnet(config, encoder):
         r = tf.keras.layers.Dropout(0.5)(r)
         r = upsample(fs,3,1)(r)
         x = x + r
-        
+
     no = len(config['keypoint_names'])+1
     if config['autoencoding']:
         no += 3
@@ -233,7 +235,7 @@ def load_raw_dataset(config,mode='train', image_directory = None):
         
         # decompose hstack to dstack
         w = config['input_image_shape'][1] // (2 + len(config['keypoint_names'])//3)
-        h = config['input_image_shape'][0]
+        h = int(0.95 * config['input_image_shape'][0])
 
         if mode == 'train' or mode == 'test':
             # now stack depthwise for easy random cropping and other augmentation
@@ -295,7 +297,7 @@ def create_train_dataset(config):
         files = sorted(glob(os.path.join(config['data_dir'],'*.png')))
         for i, f in enumerate(files):
             # split train test frames
-            if i < int(1+0.9 * len(files)):
+            if i < int(1+0.8 * len(files)):
                 new_f = f.replace(config['data_dir'],config['data_dir']+'/train')
             else:
                 new_f = f.replace(config['data_dir'],config['data_dir']+'/test')
@@ -354,7 +356,7 @@ def train(config):
 
     # checkpoints and tensorboard summary writer
     now = str(datetime.now()).replace(' ','_').replace(':','-').split('.')[0]
-    checkpoint_path = os.path.expanduser("~/checkpoints/keypoint_tracking/%s" % now)
+    checkpoint_path = os.path.expanduser("~/checkpoints/keypoint_tracking/%s-%s" % (config['project_name'],now))
     vis_directory = os.path.join(checkpoint_path,'vis')
     logdir = os.path.join(checkpoint_path,'logs')
     for _directory in [checkpoint_path,logdir]:
@@ -475,7 +477,7 @@ def train(config):
     print('Saving checkpoint for epoch {} at {}'.format(config['epochs'], ckpt_save_path))
 
 # </train>
-def get_config():
+def get_config(project_id = 3):
     config = {'batch_size': 8, 'img_height': 256,'img_width': 256}
     config['epochs'] = 1000000
     config['max_steps'] = 400000
@@ -487,7 +489,8 @@ def get_config():
     config['cutmix'] = [False, True][1]
 
     # train on project 2 
-    config['project_id'] = 2
+    config['project_id'] = project_id
+    config['project_name'] = db.get_project_name(project_id)
 
     config['data_dir'] = os.path.join(os.path.expanduser('~/data/multitracker/projects/%i/data' % config['project_id']))
 

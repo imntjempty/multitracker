@@ -51,6 +51,12 @@ class DatabaseConnection(object):
             x = x.split(self.list_sep)
         return x 
 
+    def get_project_name(self,project_id):
+        q = """select name from projects where id = %i;""" % int(project_id)
+        self.execute(q)
+        name = [x for x in self.cur.fetchall()][0][0]
+        return name 
+
     def get_random_project_video(self, project_id):
         q = "select id from videos where project_id = %i;" % int(project_id)
         self.execute(q)
@@ -84,7 +90,7 @@ class DatabaseConnection(object):
 
                 values = (int(data['video_id']), str(data['frame_idx']), keypoint_name, id_ind, x, y)
                 self.insert(query, values)
-        print('[*] saved labeling data to database.')
+        print('[*] saved labeling data to database for video %i, frame %s.' %(int(data['video_id']),str(data['frame_idx'])))
 
 
 def get_from_store(_class):
