@@ -60,12 +60,15 @@
         [data-tip]:hover:after {
             display:block;
         }
+        .button {
+            width: 204px
+        }
     </style>
     <script src="/static/js/network.js"></script>
     <script src="/static/js/util.js"></script>
 </head>
 <body>
-<dialog id="gui" style="position:fixed;top:75px; left:75%; background-color:lightgrey;padding: 10px 10px 10px 10px; z-index:1000001;" open>
+<dialog id="gui" style="position:fixed;top:75px; left:75%; background-color:lightgrey;padding: 10px 10px 10px 10px; z-index:1000001; width: 240px;" open>
     <table>
     <tr><td><h2 id="gui_title">0</h2></td></tr>
     <tr><td><input type="button" id="bu_skip_keypoint" value="skip key point" class="ui button"></td></tr>

@@ -17,8 +17,10 @@ from random import shuffle
 
 import numpy as np 
 import cv2 as cv 
-import tensorflow as tf 
 import h5py 
+import logging
+import tensorflow as tf 
+tf.get_logger().setLevel(logging.ERROR)
 
 #from multitracker.be.db.dbconnection import get_connector
 from multitracker.be import video
