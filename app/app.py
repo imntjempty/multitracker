@@ -40,11 +40,22 @@ if __name__ == "__main__":
     parser.add_argument('--model')
     parser.add_argument('--project_id')
     args = parser.parse_args()
-    
+
+# load neural network from disk or init new one
 config = model.get_config(int(args.project_id))
-training_model = tf.keras.models.load_model(h5py.File(args.model, 'r'))
+if args.model is not None and os.path.isfile(args.model):
+    training_model = tf.keras.models.load_model(h5py.File(args.model, 'r'))
+    print('[*] loaded model %s from disk' % args.model)
+else:
+    if args.model is None:
+        args.model = '/tmp/active_model_%i.h5' % int(args.project_id)
+    inputs = tf.keras.layers.Input(shape=[config['img_height'], config['img_width'], 3])
+    encoder = Encoder(config,inputs)
+    training_model = Decoder(config,encoder)
+    print('[*] creating new model %s from scratch' % args.model)
+    
 optimizer = tf.keras.optimizers.Adam(config['lr'])
-print(config)
+count_active_steps = 0 
 
 @app.route('/get_next_labeling_frame/<project_id>')
 def render_labeling(project_id):
@@ -69,7 +80,7 @@ def render_labeling(project_id):
             frame_idx = frames[int(len(frames)*np.random.random())]
             frame_idx = '.'.join(frame_idx.split('/')[-1].split('.')[:-1])
             unlabeled_frame_found = not (frame_idx in labeled_frame_idxs)
-
+        print('[*] serving label job for frame %s.'%(frame_idx))
     else:
         '' # active learning: load some unlabeled frames, inference multiple time, take one with biggest std variation
         nn = 32
@@ -94,15 +105,13 @@ def render_labeling(project_id):
         stds = np.std(pred,axis=(0,2,3,4))
         maxidx = np.argmax(stds)
         frame_idx = '.'.join(unlabeled[maxidx].split('/')[-1].split('.')[:-1])
-    
-    keypoint_names = db.get_keypoint_names(project_id,split=False)
-    return render_template('labeling.html',project_id = int(project_id), video_id = int(video_id), frame_idx = frame_idx, keypoint_names = keypoint_names, sep = db.list_sep, num_db_frames = num_db_frames)
+        print('[*] serving label job for frame %s with std %f.'%(frame_idx,stds[maxidx]))
+
+    return render_template('labeling.html',project_id = int(project_id), video_id = int(video_id), frame_idx = frame_idx, keypoint_names = db.list_sep.join(config['keypoint_names']), sep = db.list_sep, num_db_frames = num_db_frames)
 
 @app.route('/get_frame/<project_id>/<video_id>/<frame_idx>')
 def get_frame(project_id,video_id,frame_idx):
     try:
-        #f = [dict(x) for x in get_connector()._execute("select s3_bucket,s3_png from scanfiles where id=%i;" % int(file_id))][0]
-        #local_path = download_scanfile(s3c,download_dir,f)
         local_path = os.path.expanduser("~/data/multitracker/projects/%s/%s/frames/train/%s.png" % (project_id, video_id, frame_idx))
         return send_file(local_path, mimetype='image/%s' % local_path.split('.')[-1])
     except Exception as e:
@@ -137,14 +146,18 @@ def receive_labeling():
         with tf.GradientTape(persistent=True) as tape:
             predicted_heatmaps = training_model(batch, training=True)
             y = y[:,:,:,:predicted_heatmaps.shape[3]]
-            #predicted_heatmaps = predicted_heatmaps[:,:,:y.shape[2],:]
             predicted_heatmaps = tf.image.resize(predicted_heatmaps,(y.shape[1],y.shape[2]))
             loss = model.get_loss(predicted_heatmaps, y, config)
     
         # update network parameters
         gradients = tape.gradient(loss,training_model.trainable_variables)
         optimizer.apply_gradients(zip(gradients,training_model.trainable_variables))
-        
+
+    global count_active_steps
+    count_active_steps += 1
+    # sometimes save model to disk
+    if count_active_steps % 10 == 0:
+        training_model.save(args.model)
 
     return json.dumps({'success':True}), 200, {'ContentType':'application/json'} 
 
