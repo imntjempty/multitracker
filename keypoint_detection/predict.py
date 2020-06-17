@@ -3,7 +3,7 @@
     load a trained model and predict and visualize each frame
 
     example call
-        python3.7 -m multitracker.keypoint_detection.predict -model /home/alex/checkpoints/keypoint_tracking/2020-06-01_16-19-06 -project 2
+        python3.7 -m multitracker.keypoint_detection.predict --model /home/alex/checkpoints/keypoint_tracking/2020-06-01_16-19-06 --project_id 4 --video_id 5
 """
 
 import os
@@ -33,9 +33,11 @@ def get_random_colors(n):
     return colors 
 colors = get_random_colors(100)
 
-def get_project_frames(config, project_id = None):
+def get_project_frames(config, project_id = None, video_id = None):
     if project_id is None:
         project_id = config['project_id']
+    if video_id is None:
+        video_id = config['video_id']
     
     def load_im(image_file):
         print(image_file)
@@ -44,14 +46,14 @@ def get_project_frames(config, project_id = None):
         image = tf.cast(image,tf.float32)
         return image 
     
-    frames_dir = get_project_frame_test_dir(project_id)
+    frames_dir = get_project_frame_test_dir(project_id, video_id)
     frames = tf.data.Dataset.list_files(os.path.join(frames_dir,'*.png'),shuffle=False).map(load_im, num_parallel_calls = tf.data.experimental.AUTOTUNE).batch(config['batch_size'])#.prefetch(4*config['batch_size'])#.cache()
     return frames 
 
-def get_project_frame_test_dir(project_id):
-    return os.path.expanduser('~/data/multitracker/projects/%i/%i/frames/test' % (project_id,project_id))
+def get_project_frame_test_dir(project_id, video_id):
+    return os.path.expanduser('~/data/multitracker/projects/%i/%i/frames/test' % (project_id,video_id))
 
-def extract_frame_candidates(feature_map):
+def extract_frame_candidates(feature_map, thresh = 0.3):
     step = -1
     max_step = 50
     stop_threshold_hit = False 
@@ -71,7 +73,7 @@ def extract_frame_candidates(feature_map):
         feature_map[py][px] = 0 
         
         # stop extraction if max value has small probability 
-        if val < 0.3:
+        if val < thresh:
             frame_candidates = frame_candidates[:-1]
             stop_threshold_hit = True 
     return frame_candidates
@@ -83,7 +85,7 @@ def point_distance(config, p1, p2):
     return score 
 
 
-def predict(config, checkpoint_path, project_id):
+def predict(config, checkpoint_path, project_id, video_id):
     project_id = int(project_id)
     output_dir = '/tmp/multitracker/predictions/%i/%s' % (project_id, checkpoint_path.split('/')[-1])
     if not os.path.isdir(output_dir):
@@ -94,13 +96,15 @@ def predict(config, checkpoint_path, project_id):
     trained_model = tf.keras.models.load_model(h5py.File(path_model, 'r'))
     t1 = time.time()
     print('[*] loaded model from %s in %f seconds.' %(path_model,t1-t0))
-    frames_dir = get_project_frame_test_dir(project_id)
+    frames_dir = get_project_frame_test_dir(project_id, video_id)
     frame_files = sorted(glob(os.path.join(frames_dir,'*.png')))
+    if len(frame_files) == 0:
+        raise Exception("ERROR: no frames found in " + str(frames_dir))
     config['input_image_shape'] = cv.imread(frame_files[0]).shape[:2]
 
     config['n_inferences'] = 5
     
-    frames = get_project_frames(config, project_id)
+    frames = get_project_frames(config, project_id, video_id)
     print('[*] will predict %i frames (%f seconds of video)'%(len(frame_files),len(frame_files)/30.))
 
     cnt_output = 0 
@@ -115,8 +119,8 @@ def predict(config, checkpoint_path, project_id):
 
         # predict whole image, height like trained height and variable width 
         # to keep aspect ratio and relative size        
-        w = 1+int(config['img_height']/(float(x.shape[1]) / x.shape[2]))
-        xsmall = tf.image.resize(x, (config['img_height'],w))
+        w = 1+int(2*config['img_height']/(float(x.shape[1]) / x.shape[2]))
+        xsmall = tf.image.resize(x, (2*config['img_height'],w))
 
         # 1) inference: run trained_model to get heatmap predictions
         tsb = time.time()
@@ -162,6 +166,7 @@ def predict(config, checkpoint_path, project_id):
                     vis_frame += feature_map 
                 vis_frame = np.around(vis_frame)
                 vis_frame = np.uint8(vis_frame)
+                vis_frame = cv.resize(vis_frame,tuple(xsmall.shape[1:-1][::-1]))
                 overlay = np.uint8(xsmall[b,:,:,:]//2 + vis_frame//2)
                 vis_frame = np.hstack((overlay,vis_frame))
                 fp = os.path.join(output_dir,'predict-{:05d}.png'.format(cnt_output))
@@ -180,15 +185,20 @@ def predict(config, checkpoint_path, project_id):
         video_file = os.path.join(output_dir,'video.mp4')
         util.make_video(output_dir,video_file)
 
-def main(checkpoint_path, project_id):
-    config = model.get_config()
-    predict(config, checkpoint_path, project_id)
+def main(checkpoint_path, project_id, video_id):
+    project_id = int(project_id)
+    video_id = int(video_id)
+
+    config = model.get_config(project_id=project_id)
+    config['batch_size'] = 16
+    predict(config, checkpoint_path, project_id, int(video_id))
 
 
 if __name__ == '__main__':
     import argparse 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-model')
-    parser.add_argument('-project')
+    parser.add_argument('--model')
+    parser.add_argument('--project_id')
+    parser.add_argument('--video_id')
     args = parser.parse_args()
-    main(args.model, args.project)
+    main(args.model, args.project_id, args.video_id)

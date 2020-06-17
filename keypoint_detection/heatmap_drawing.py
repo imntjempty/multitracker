@@ -110,15 +110,17 @@ def randomly_drop_visualiztions(project_id, dst_dir = '/tmp/keypoint_heatmap_vis
     db = dbconnection.DatabaseConnection()
     
     keypoint_names = db.get_keypoint_names(project_id)
-    video_id = db.get_random_project_video(project_id)
-    if video_id is None:
-        raise Exception("[ERROR] no video found for project!")
+    frame_idxs = []
+    while len(frame_idxs) == 0:
+        video_id = db.get_random_project_video(project_id)
+        if video_id is None:
+            raise Exception("[ERROR] no video found for project!")
 
-    # first get all frames 
-    q = "select frame_idx from keypoint_positions where video_id=%i;" % video_id
-    db.execute(q)
-    frame_idxs = [x[0] for x in db.cur.fetchall()]
-    frame_idxs = list(set(frame_idxs))
+        # first get all frames 
+        q = "select frame_idx from keypoint_positions where video_id=%i;" % video_id
+        db.execute(q)
+        frame_idxs = [x[0] for x in db.cur.fetchall()]
+        frame_idxs = list(set(frame_idxs))
     shuffle(frame_idxs)
 
     if num > 0:
