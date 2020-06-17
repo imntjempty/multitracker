@@ -52,8 +52,7 @@ def add_video_to_project(base_dir, project_id, source_video_file):
         shutil.copy(source_video_file, video_file)
 
     # sample frames 
-    downsample = False 
-    if downsample:
+    if args.half_resolution:
         subprocess.call(['ffmpeg','-i',video_file, '-vf', 'fps=30','-vf', "scale=iw/2:ih/2", frames_dir+'/%05d.png'])
     else:
         subprocess.call(['ffmpeg','-i',video_file, '-vf', 'fps=30', frames_dir+'/%05d.png'])
@@ -62,10 +61,12 @@ def add_video_to_project(base_dir, project_id, source_video_file):
     # split frames into train/test half/half
     frames = sorted(glob(os.path.join(frames_dir, '*.png')))
     num_frames = len(frames)
-    split_frame_idx = num_frames // 2
+    # split_frame_idx = num_frames // 2 # 50/50
+    split_frame_idx = len(frames) - 100
     for i in range(split_frame_idx):
         os.rename(frames[i], os.path.join(frames_dir,'train',frames[i].split('/')[-1]))
-        os.rename(frames[i+split_frame_idx], os.path.join(frames_dir,'test',frames[i+split_frame_idx].split('/')[-1]))
+    for i in range(split_frame_idx,len(frames),1):
+        os.rename(frames[i], os.path.join(frames_dir,'test',frames[i].split('/')[-1]))
 
     print('[*] added video %s to project %i with new video id %i.' % (source_video_file, project_id, video_id))
 
@@ -77,6 +78,7 @@ if __name__ == "__main__":
     parser.add_argument('-add_project',type=int,required=True)
     parser.add_argument('-add_video',type=str,required=True)
     parser.add_argument('-base_dir',required=False,default = base_dir_default)
+    parser.add_argument('--half_resolution', default = False, dest='half_resolution', action='store_true')
     args = parser.parse_args()
 
     add_video_to_project(args.base_dir, args.add_project, args.add_video)
