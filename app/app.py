@@ -14,7 +14,7 @@ import os
 import json
 from glob import glob 
 from random import shuffle 
-
+import subprocess
 import numpy as np 
 import cv2 as cv 
 import h5py 
@@ -24,7 +24,7 @@ tf.get_logger().setLevel(logging.ERROR)
 
 #from multitracker.be.db.dbconnection import get_connector
 from multitracker.be import video
-from multitracker.keypoint_detection import model 
+from multitracker.keypoint_detection import model, predict
 from multitracker.keypoint_detection import heatmap_drawing
 
 
@@ -39,6 +39,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser() 
     parser.add_argument('--model')
     parser.add_argument('--project_id')
+    parser.add_argument('--open_gallery', dest='open_gallery', action='store_true')
     args = parser.parse_args()
 
 # load neural network from disk or init new one
@@ -49,9 +50,10 @@ if args.model is not None and os.path.isfile(args.model):
 else:
     if args.model is None:
         args.model = '/tmp/active_model_%i.h5' % int(args.project_id)
+    from multitracker.keypoint_detection import nets
     inputs = tf.keras.layers.Input(shape=[config['img_height'], config['img_width'], 3])
-    encoder = Encoder(config,inputs)
-    training_model = Decoder(config,encoder)
+    encoder = nets.Encoder(config,inputs)
+    training_model = nets.Decoder(config,encoder)
     print('[*] creating new model %s from scratch' % args.model)
     
 optimizer = tf.keras.optimizers.Adam(config['lr'])
@@ -59,27 +61,33 @@ count_active_steps = 0
 
 @app.route('/get_next_labeling_frame/<project_id>')
 def render_labeling(project_id):
-    video_id = db.get_random_project_video(project_id)
+    
     
     # load labeled frame idxs
     labeled_frame_idxs = db.get_labeled_frames(project_id)
     num_db_frames = len(labeled_frame_idxs)
     
     # load frame files from disk
-    frames_dir = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, project_id), video_id),'train')
-    frames = sorted(glob(os.path.join(frames_dir, '*.png')))
-    if len(frames) == 0:
-        print('[E] no frames found in directory %s.'%frames_dir)
+    frames = []
+    while len(frames) == 0:
+        video_id = db.get_random_project_video(project_id)
+        frames_dir = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, project_id), video_id),'train')
+        frames = sorted(glob(os.path.join(frames_dir, '*.png')))
+    #print('[E] no frames found in directory %s.'%frames_dir)
     shuffle(frames)
 
-    if num_db_frames < 20:
+    if num_db_frames < 100:
         '' # randomly sample frame 
         # choose random frame that is not already labeled
         unlabeled_frame_found = False 
         while not unlabeled_frame_found:
-            frame_idx = frames[int(len(frames)*np.random.random())]
-            frame_idx = '.'.join(frame_idx.split('/')[-1].split('.')[:-1])
-            unlabeled_frame_found = not (frame_idx in labeled_frame_idxs)
+            ridx = int( len(frames) * num_db_frames / 100. ) + int(np.random.uniform(-50,50))
+            if ridx > 0 and ridx < len(frames):
+                frame_idx = frames[ridx]
+                #frame_idx = frames[int(len(frames)*np.random.random())] # random sampling
+                frame_idx = '.'.join(frame_idx.split('/')[-1].split('.')[:-1])
+                unlabeled_frame_found = not (frame_idx in labeled_frame_idxs)
+
         print('[*] serving label job for frame %s.'%(frame_idx))
     else:
         '' # active learning: load some unlabeled frames, inference multiple time, take one with biggest std variation
@@ -107,7 +115,24 @@ def render_labeling(project_id):
         frame_idx = '.'.join(unlabeled[maxidx].split('/')[-1].split('.')[:-1])
         print('[*] serving label job for frame %s with std %f.'%(frame_idx,stds[maxidx]))
 
-    return render_template('labeling.html',project_id = int(project_id), video_id = int(video_id), frame_idx = frame_idx, keypoint_names = db.list_sep.join(config['keypoint_names']), sep = db.list_sep, num_db_frames = num_db_frames)
+    frame_candidates = []
+    if 0:
+        # inference to send frame candidates to client
+        im = batch[maxidx]
+        frame_candidates = [ ]
+        imp = np.mean(pred[:,maxidx,:,:,:],axis=0)
+        #print('im',im.shape,'imp',imp.shape,imp.min(),imp.max())
+        for c in range(len(config['keypoint_names'])):
+            frame_candidates.append(predict.extract_frame_candidates(imp[:,:,c],0.1))
+        print('frame_candidates',frame_candidates)
+    
+            
+    
+    if args.open_gallery:
+        p = subprocess.Popen(['eog',unlabeled[maxidx]])
+    return render_template('labeling.html',project_id = int(project_id), video_id = int(video_id), frame_idx = frame_idx, keypoint_names = db.list_sep.join(config['keypoint_names']), sep = db.list_sep, num_db_frames = num_db_frames, frame_candidates = frame_candidates)
+
+    
 
 @app.route('/get_frame/<project_id>/<video_id>/<frame_idx>')
 def get_frame(project_id,video_id,frame_idx):

@@ -97,6 +97,11 @@
     let num_db_frames = {{num_db_frames}};
     let keypoint_names = "{{keypoint_names}}".split("{{sep}}");
     
+    let frame_candidates = [];
+    {% for channel_candidates in frame_candidates %}
+        console.log("channel","{{channel_candidates}}");
+    {% endfor %}
+
     init_fe();
     init_gui();
     //gui.showModal();
