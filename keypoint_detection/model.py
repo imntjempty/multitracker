@@ -75,7 +75,7 @@ def load_raw_dataset(config,mode='train', image_directory = None):
         video_id = db.get_random_project_video(config['project_id'])
         #image_directory = video.get_frames_dir(config['project_id'], video_id)
         image_directory = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), video_id),'test')
-    [h,w,_] = cv.imread(glob(os.path.join(image_directory,'*.png'))[0]).shape
+    [H,W,_] = cv.imread(glob(os.path.join(image_directory,'*.png'))[0]).shape
 
     def load_im(image_file):
         image = tf.io.read_file(image_file)
@@ -85,7 +85,8 @@ def load_raw_dataset(config,mode='train', image_directory = None):
         # decompose hstack to dstack
         w = config['input_image_shape'][1] // (2 + len(config['keypoint_names'])//3)
         #h = int(0.95 * config['input_image_shape'][0])
-        h = config['input_image_shape'][0] // 2
+        #h = config['input_image_shape'][0] // 2
+        h = H // 2
         h += int(tf.random.uniform([],-h/7,h/7))
 
         if mode == 'train' or mode == 'test':
@@ -96,14 +97,14 @@ def load_raw_dataset(config,mode='train', image_directory = None):
             if mode == 'train':
                 # apply augmentations
                 # random rotation
-                if np.random.random() > 0.5:
+                if tf.random.uniform([]) > 0.5:
                     random_angle = tf.random.uniform([1],-35.*np.pi/180., 35.*np.pi/180.)  
                     comp = tfa.image.rotate(comp, random_angle)
                     
                 # resize
                 #H, W = config['input_image_shape'][:2]
                 if 0:#np.random.random() > 0.5:
-                    scalex = np.random.uniform(0.75,1.25)
+                    scalex = tf.random.uniform([],0.75,1.25)
                     scaley = scaley +np.random.uniform(-0.1,0.1)
                     comp = tf.image.resize(comp, size = (int(scaley*h),int(scalex*w)))
 
@@ -114,7 +115,7 @@ def load_raw_dataset(config,mode='train', image_directory = None):
             # crop
             print('cropping',h,h,'from',comp.shape)
             crop = tf.image.random_crop( comp, [h,h, 1+3+len(config['keypoint_names'])])
-            crop = tf.image.resize(comp,[config['img_height'],config['img_width']])
+            crop = tf.image.resize(crop,[config['img_height'],config['img_width']])
             
             # split stack into images and heatmaps
             image = crop[:,:,:3]
@@ -361,10 +362,10 @@ def train(config):
 
 # </train>
 def get_config(project_id = 3):
-    config = {'batch_size': 1, 'img_height': 256,'img_width': 256}
+    config = {'batch_size': 4, 'img_height': 256,'img_width': 256}
     config['epochs'] = 1000000
-    config['max_steps'] = 100000
-    config['max_hours'] = 3.
+    config['max_steps'] = 200000
+    config['max_hours'] = 30.
     config['lr'] = 2e-5 *2. #* 100.#* 4
     config['loss'] = ['l1','dice','recall','focal'][3]
     config['autoencoding'] = [False, True][0]
