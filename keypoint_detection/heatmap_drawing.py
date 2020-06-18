@@ -34,7 +34,7 @@ def generate_hm(height, width ,landmarks, keypoint_names, s=15):
         x = gaussian_k(landmarks[i][0],
                                 landmarks[i][1],
                                 s,height, width)
-        hm[:,:,idx] = x
+        hm[:,:,idx] += x
         #hm[:,:,idx][x>0.1] = x 
     #hm[hm<0.3] = 128.
     return hm
