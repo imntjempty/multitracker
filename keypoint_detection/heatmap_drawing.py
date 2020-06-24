@@ -19,7 +19,7 @@ def gaussian_k(x0,y0,sigma, height, width):
     y = np.arange(0, height, 1, float)[:, np.newaxis] ## (height,1)
     return np.exp(-((x-x0)**2 + (y-y0)**2) / (2*sigma**2))
 
-def generate_hm(height, width ,landmarks, keypoint_names, s=15):
+def generate_hm(height, width ,landmarks, keypoint_names, s=None):
     ## https://fairyonice.github.io/Achieving-top-5-in-Kaggles-facial-keypoints-detection-using-FCN.html 
     """ Generate a full Heap Map for every landmarks in an array
     Args:
@@ -28,6 +28,8 @@ def generate_hm(height, width ,landmarks, keypoint_names, s=15):
         joints    : [(x1,y1),(x2,y2)...] containing landmarks
         maxlenght : Lenght of the Bounding Box
     """
+    if s is None:
+        s = height / 100.
     hm = 0.* np.ones((height, width, len(keypoint_names)), dtype = np.float32)
     for i in range(len(landmarks)):
         idx = keypoint_names.index(landmarks[i][2])
@@ -37,6 +39,7 @@ def generate_hm(height, width ,landmarks, keypoint_names, s=15):
         hm[:,:,idx] += x
         #hm[:,:,idx][x>0.1] = x 
     #hm[hm<0.3] = 128.
+    hm[hm>1.0] = 1.0
     return hm
 
 
