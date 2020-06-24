@@ -2,7 +2,7 @@ import tensorflow as tf
 import tensorflow_addons as tfa 
 
 def upsample(nfilters, kernel_size, strides=2, dilation = (1,1), norm_type='instancenorm', act = tf.keras.layers.Activation('relu')):
-    initializer = ['he_normal', tf.random_normal_initializer(0., 0.02)][1]
+    initializer = ['he_normal', tf.random_normal_initializer(0., 0.02)][0]
 
     if strides == 1 or strides < 0:
         strides = abs(strides)
@@ -35,22 +35,39 @@ def Encoder(config,inputs):
     else:
         return EncoderScratch(config, inputs)
 
-def EncoderScratch(config, inputs):
-    x = (inputs-128.)/128. 
+def EncoderScratch(config, inputs, norm_input = True, name = "Scratch Encoder"):
+    x = inputs
+    if norm_input:
+        x = (x-128.)/128. 
     #x = inputs / 255.
 
     fs = 32
     x = upsample(fs,3,-2)(x)
     
-    while x.shape[1] > 16:
+    #while x.shape[1] > 64:
+    for _ in range(2):
         fs = min(512, fs * 2)
-        x = upsample(fs,3,1)(x)
-        x = upsample(fs,4,-2)(x)
-    x = upsample(fs,1,1)(x)
-    model = tf.keras.models.Model(name="Scratch Encoder", inputs=inputs,outputs=[x])
+        d = 1
+        x = upsample(fs,1,1)(x)
+        xx = upsample(fs,(3,1),1,norm_type=None)(x)
+        xx = upsample(fs,(1,3),1,norm_type=None)(xx)
+        xx = tf.keras.layers.GaussianNoise(0.35)(xx)
+        xx = upsample(fs,(3,1),1,dilation=(d,1),norm_type=None)(xx)
+        xx = upsample(fs,(1,3),1,dilation=(1,d),act=None,norm_type=None)(xx)
+        xx = tf.keras.layers.Dropout(0.5)(xx)
+        #xx = tf.keras.layers.BatchNormalization()(xx)
+        xx = tfa.layers.InstanceNormalization(axis=3, center=True, scale=True, beta_initializer="random_uniform", gamma_initializer="random_uniform")(xx)
+        x = x + tf.nn.relu6(xx)
+        x = upsample(fs,3,-2)(x)
+        
+    x = upsample(64,1,1)(x)
+    model = tf.keras.models.Model(name=name, inputs=inputs,outputs=[x])
     return model 
 
 def EncoderPretrained(config,inputs):
+    if not 'backbone' in config:
+        config['backbone'] = 'resnet'
+        
     if config['backbone'] == "resnet":
         from tensorflow.keras.applications.resnet_v2 import preprocess_input
     elif config['backbone'] == "efficientnet":
@@ -86,7 +103,7 @@ def Decoder(config,encoder):
     decoder = [DecoderErfnet, DecoderErfnetSmall, DecoderDefault][0] # graphics_decoder.GraphicsDecoder
     return decoder(config,encoder)
         
-def DecoderErfnet(config, encoder):
+def DecoderErfnet(config, encoder, norm_type = "batchnorm"):
     # Total params: 458,217 Trainable params: 284,649 Non-trainable params: 173,568
     x = encoder.output
     fs = x.shape[-1]
@@ -99,11 +116,13 @@ def DecoderErfnet(config, encoder):
         xx = upsample(fs,(3,1),1,norm_type=None)(x)
         xx = upsample(fs,(1,3),1,norm_type=None)(xx)
         xx = tf.keras.layers.GaussianNoise(0.35)(xx)
-        xx = upsample(fs,(3,1),1,dilation=(d,1),norm_type=None)(x)
+        xx = upsample(fs,(3,1),1,dilation=(d,1),norm_type=None)(xx)
         xx = upsample(fs,(1,3),1,dilation=(1,d),act=None,norm_type=None)(xx)
         xx = tf.keras.layers.Dropout(0.5)(xx)
-        #xx = tf.keras.layers.BatchNormalization()(xx)
-        xx = tfa.layers.InstanceNormalization(axis=3, center=True, scale=True, beta_initializer="random_uniform", gamma_initializer="random_uniform")(xx)
+        if norm_type == "batchnorm":
+            xx = tf.keras.layers.BatchNormalization()(xx)
+        elif norm_type == "instancenorm":
+            xx = tfa.layers.InstanceNormalization(axis=3, center=True, scale=True, beta_initializer="random_uniform", gamma_initializer="random_uniform")(xx)
         x = x + tf.nn.relu6(xx)
 
     # upsample
@@ -116,18 +135,21 @@ def DecoderErfnet(config, encoder):
         #x = upsample(fs,3,1,norm_type=None)(x)
         r = tf.keras.layers.Dropout(0.5)(x)
         r = upsample(fs,3,1,act=None,norm_type=None)(r)
-        r = tfa.layers.InstanceNormalization(axis=3, center=True, scale=True, beta_initializer="random_uniform", gamma_initializer="random_uniform")(r)
+        if norm_type == "batchnorm":
+            r = tf.keras.layers.BatchNormalization()(r)
+        elif norm_type == "instancenorm":
+            r = tfa.layers.InstanceNormalization(axis=3, center=True, scale=True, beta_initializer="random_uniform", gamma_initializer="random_uniform")(r)
         x = x + tf.nn.relu6(r)
 
     no = len(config['keypoint_names'])+1
     if config['autoencoding']:
         no += 3
     
-    act = upsample(32,3,1,norm_type=None)
+    x = upsample(32,3,1,norm_type=None)(x)
     act = tf.keras.layers.Activation('softmax')
     x = upsample(no,3,1,norm_type=None,act=act)(x)    
     model = tf.keras.models.Model(inputs = encoder.input, outputs = x, name = "Decoder Erfnet") #dataset['train'][0],outputsdataset['train'][1])
-    model.summary()
+    #model.summary()
     
     return model 
 

@@ -46,14 +46,16 @@ def get_project_frames(config, project_id = None, video_id = None):
         image = tf.cast(image,tf.float32)
         return image 
     
-    frames_dir = get_project_frame_test_dir(project_id, video_id)
+    frames_dir = get_project_frame_train_dir(project_id, video_id)
     frames = tf.data.Dataset.list_files(os.path.join(frames_dir,'*.png'),shuffle=False).map(load_im, num_parallel_calls = tf.data.experimental.AUTOTUNE).batch(config['batch_size'])#.prefetch(4*config['batch_size'])#.cache()
     return frames 
 
 def get_project_frame_test_dir(project_id, video_id):
     return os.path.expanduser('~/data/multitracker/projects/%i/%i/frames/test' % (project_id,video_id))
+def get_project_frame_train_dir(project_id, video_id):
+    return os.path.expanduser('~/data/multitracker/projects/%i/%i/frames/train' % (project_id,video_id))
 
-def extract_frame_candidates(feature_map, thresh = 0.3):
+def extract_frame_candidates(feature_map, thresh = 0.5):
     step = -1
     max_step = 50
     stop_threshold_hit = False 
@@ -64,7 +66,7 @@ def extract_frame_candidates(feature_map, thresh = 0.3):
         max_pos = np.unravel_index(np.argmax(feature_map),feature_map.shape)
         py = max_pos[0] #max_pos // feature_map.shape[0]
         px = max_pos[1] #max_pos % feature_map.shape[1]
-        val = np.max(feature_map)
+        val = feature_map[py][px] #np.max(feature_map)
         frame_candidates.append([px,py,val])
 
         # delete area around new max pos 
@@ -96,7 +98,7 @@ def predict(config, checkpoint_path, project_id, video_id):
     trained_model = tf.keras.models.load_model(h5py.File(path_model, 'r'))
     t1 = time.time()
     print('[*] loaded model from %s in %f seconds.' %(path_model,t1-t0))
-    frames_dir = get_project_frame_test_dir(project_id, video_id)
+    frames_dir = get_project_frame_train_dir(project_id, video_id)
     frame_files = sorted(glob(os.path.join(frames_dir,'*.png')))
     if len(frame_files) == 0:
         raise Exception("ERROR: no frames found in " + str(frames_dir))
@@ -125,11 +127,11 @@ def predict(config, checkpoint_path, project_id, video_id):
         # 1) inference: run trained_model to get heatmap predictions
         tsb = time.time()
         if config['n_inferences'] == 1:
-            y = trained_model.predict(xsmall)
+            y = trained_model.predict(xsmall)[-1]
         else:
-            y = trained_model(xsmall, training=True) / config['n_inferences']
+            y = trained_model(xsmall, training=True)[-1] / config['n_inferences']
             for ii in range(config['n_inferences']-1):
-                y += trained_model(xsmall, training=True) / config['n_inferences']
+                y += trained_model(xsmall, training=True)[-1] / config['n_inferences']
         tse = time.time() 
 
         # 2) extract frame candidates
@@ -184,6 +186,9 @@ def predict(config, checkpoint_path, project_id, video_id):
         # create video afterwards
         video_file = os.path.join(output_dir,'video.mp4')
         util.make_video(output_dir,video_file)
+        # remove frames 
+        for fn in glob(os.path.join(output_dir,'*.png')):
+            os.remove(fn)
 
 def main(checkpoint_path, project_id, video_id):
     project_id = int(project_id)
