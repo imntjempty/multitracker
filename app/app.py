@@ -37,31 +37,35 @@ db = dbconnection.DatabaseConnection()
 if __name__ == "__main__":
     import argparse 
     parser = argparse.ArgumentParser() 
-    parser.add_argument('--model')
-    parser.add_argument('--project_id')
+    parser.add_argument('--model',default=None)
+    parser.add_argument('--project_id',type=int,default=None)
+    parser.add_argument('--num_labeling_base',type=int,default=50)
     parser.add_argument('--open_gallery', dest='open_gallery', action='store_true')
     args = parser.parse_args()
 
-# load neural network from disk or init new one
-config = model.get_config(int(args.project_id))
+# load neural network from disk (or init new one)
 if args.model is not None and os.path.isfile(args.model):
+    assert args.project_id is not None
     training_model = tf.keras.models.load_model(h5py.File(args.model, 'r'))
     print('[*] loaded model %s from disk' % args.model)
+    optimizer = tf.keras.optimizers.Adam(config['lr'])
+    config = model.get_config(int(args.project_id))
 else:
-    if args.model is None:
+    training_model = None 
+    '''if args.model is None:
         args.model = '/tmp/active_model_%i.h5' % int(args.project_id)
     from multitracker.keypoint_detection import nets
     inputs = tf.keras.layers.Input(shape=[config['img_height'], config['img_width'], 3])
     encoder = nets.Encoder(config,inputs)
     training_model = nets.Decoder(config,encoder)
-    print('[*] creating new model %s from scratch' % args.model)
+    print('[*] creating new model %s from scratch' % args.model)'''
     
-optimizer = tf.keras.optimizers.Adam(config['lr'])
+
 count_active_steps = 0 
 
 @app.route('/get_next_labeling_frame/<project_id>')
 def render_labeling(project_id):
-    
+    config = model.get_config(int(project_id))
     
     # load labeled frame idxs
     labeled_frame_idxs = db.get_labeled_frames(project_id)
@@ -74,14 +78,14 @@ def render_labeling(project_id):
         frames_dir = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, project_id), video_id),'train')
         frames = sorted(glob(os.path.join(frames_dir, '*.png')))
     #print('[E] no frames found in directory %s.'%frames_dir)
-    shuffle(frames)
+    
 
-    if num_db_frames < 100:
+    if num_db_frames < args.num_labeling_base:
         '' # randomly sample frame 
         # choose random frame that is not already labeled
         unlabeled_frame_found = False 
         while not unlabeled_frame_found:
-            ridx = int( len(frames) * num_db_frames / 100. ) + int(np.random.uniform(-50,50))
+            ridx = int( len(frames) * num_db_frames / float(args.num_labeling_base) ) + int(np.random.uniform(-50,50))
             if ridx > 0 and ridx < len(frames):
                 frame_idx = frames[ridx]
                 #frame_idx = frames[int(len(frames)*np.random.random())] # random sampling
@@ -90,30 +94,32 @@ def render_labeling(project_id):
 
         print('[*] serving label job for frame %s.'%(frame_idx))
     else:
-        '' # active learning: load some unlabeled frames, inference multiple time, take one with biggest std variation
-        nn = 32
+        shuffle(frames)
+        nn = 1#32
         unlabeled = []
         while len(unlabeled) < nn:
             frame_f = frames[int(len(frames)*np.random.random())]
             frame_idx = '.'.join(frame_f.split('/')[-1].split('.')[:-1])
             if frame_f not in unlabeled and frame_idx not in labeled_frame_idxs:
                 unlabeled.append(frame_f)
-        
-        # predict whole image, height like trained height and variable width 
-        # to keep aspect ratio and relative size        
-        w = 1+int(config['img_height']/(float(cv.imread(unlabeled[0]).shape[0]) / cv.imread(unlabeled[0]).shape[1]))
-        batch = np.array( [cv.resize(cv.imread(f), (w,config['img_height'])) for f in unlabeled] ).astype(np.float32)
-        
-        # inference multiple times
-        ni = 5
-        pred = np.array([ training_model(batch,training=True).numpy() for _ in range(ni)])
-        pred = pred[:,:,:,:,:-1] # cut background channel
-        
-        # calculate max std item
-        stds = np.std(pred,axis=(0,2,3,4))
-        maxidx = np.argmax(stds)
-        frame_idx = '.'.join(unlabeled[maxidx].split('/')[-1].split('.')[:-1])
-        print('[*] serving label job for frame %s with std %f.'%(frame_idx,stds[maxidx]))
+        if training_model is not None:
+            '' # active learning: load some unlabeled frames, inference multiple time, take one with biggest std variation
+            
+            # predict whole image, height like trained height and variable width 
+            # to keep aspect ratio and relative size        
+            w = 1+int(config['img_height']/(float(cv.imread(unlabeled[0]).shape[0]) / cv.imread(unlabeled[0]).shape[1]))
+            batch = np.array( [cv.resize(cv.imread(f), (w,config['img_height'])) for f in unlabeled] ).astype(np.float32)
+            
+            # inference multiple times
+            ni = 5
+            pred = np.array([ training_model(batch,training=True).numpy() for _ in range(ni)])
+            pred = pred[:,:,:,:,:-1] # cut background channel
+            
+            # calculate max std item
+            stds = np.std(pred,axis=(0,2,3,4))
+            maxidx = np.argmax(stds)
+            frame_idx = '.'.join(unlabeled[maxidx].split('/')[-1].split('.')[:-1])
+            print('[*] serving label job for frame %s with std %f.'%(frame_idx,stds[maxidx]))
 
     frame_candidates = []
     if 0:
@@ -125,7 +131,7 @@ def render_labeling(project_id):
         for c in range(len(config['keypoint_names'])):
             frame_candidates.append(predict.extract_frame_candidates(imp[:,:,c],0.1))
         print('frame_candidates',frame_candidates)
-    
+        
             
     
     if args.open_gallery:
@@ -153,36 +159,37 @@ def receive_labeling():
     # save labeling to database
     db.save_labeling(data)
 
-    # draw sent data
-    filepath = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, data['project_id']), data['video_id']),'train','%s.png'%data['frame_idx'])
-    keypoints = [[d['keypoint_name'],d['id_ind'],d['x'],d['y']] for d in data['keypoints']]
-    y = heatmap_drawing.vis_heatmap(cv.imread(filepath), config['keypoint_names'], keypoints, horistack = False)
-    w = 1+int(config['img_height']/(float(y.shape[0]) / y.shape[1]))
-    y = cv.resize(y,(w,config['img_height']))
-    y = np.float32(y / 255.)
-    
-    y = np.tile(np.expand_dims(y,axis=0),[config['batch_size'],1,1,1])
-    batch = np.tile(np.expand_dims(cv.resize(cv.imread(filepath), (w,config['img_height'])),axis=0),[config['batch_size'],1,1,1])
-    batch = batch.astype(np.float32)
-    
-    # train model with new data multiple steps
-    ni = 3
-    for i in range(ni):
-        with tf.GradientTape(persistent=True) as tape:
-            predicted_heatmaps = training_model(batch, training=True)
-            y = y[:,:,:,:predicted_heatmaps.shape[3]]
-            predicted_heatmaps = tf.image.resize(predicted_heatmaps,(y.shape[1],y.shape[2]))
-            loss = model.get_loss(predicted_heatmaps, y, config)
-    
-        # update network parameters
-        gradients = tape.gradient(loss,training_model.trainable_variables)
-        optimizer.apply_gradients(zip(gradients,training_model.trainable_variables))
+    if training_model is not None:
+        # draw sent data
+        filepath = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, data['project_id']), data['video_id']),'train','%s.png'%data['frame_idx'])
+        keypoints = [[d['keypoint_name'],d['id_ind'],d['x'],d['y']] for d in data['keypoints']]
+        y = heatmap_drawing.vis_heatmap(cv.imread(filepath), config['keypoint_names'], keypoints, horistack = False)
+        w = 1+int(config['img_height']/(float(y.shape[0]) / y.shape[1]))
+        y = cv.resize(y,(w,config['img_height']))
+        y = np.float32(y / 255.)
+        
+        y = np.tile(np.expand_dims(y,axis=0),[config['batch_size'],1,1,1])
+        batch = np.tile(np.expand_dims(cv.resize(cv.imread(filepath), (w,config['img_height'])),axis=0),[config['batch_size'],1,1,1])
+        batch = batch.astype(np.float32)
+        
+        # train model with new data multiple steps
+        ni = 3
+        for i in range(ni):
+            with tf.GradientTape(persistent=True) as tape:
+                predicted_heatmaps = training_model(batch, training=True)
+                y = y[:,:,:,:predicted_heatmaps.shape[3]]
+                predicted_heatmaps = tf.image.resize(predicted_heatmaps,(y.shape[1],y.shape[2]))
+                loss = model.get_loss(predicted_heatmaps, y, config)
+        
+            # update network parameters
+            gradients = tape.gradient(loss,training_model.trainable_variables)
+            optimizer.apply_gradients(zip(gradients,training_model.trainable_variables))
 
-    global count_active_steps
-    count_active_steps += 1
-    # sometimes save model to disk
-    if count_active_steps % 10 == 0:
-        training_model.save(args.model)
+        global count_active_steps
+        count_active_steps += 1
+        # sometimes save model to disk
+        if count_active_steps % 10 == 0:
+            training_model.save(args.model)
 
     return json.dumps({'success':True}), 200, {'ContentType':'application/json'} 
 
