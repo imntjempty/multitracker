@@ -48,6 +48,7 @@ if args.model is not None and os.path.isfile(args.model):
     assert args.project_id is not None
     training_model = tf.keras.models.load_model(h5py.File(args.model, 'r'))
     print('[*] loaded model %s from disk' % args.model)
+    config = model.get_config(project_id=args.project_id)
     optimizer = tf.keras.optimizers.Adam(config['lr'])
     config = model.get_config(int(args.project_id))
 else:
@@ -107,12 +108,12 @@ def render_labeling(project_id):
             
             # predict whole image, height like trained height and variable width 
             # to keep aspect ratio and relative size        
-            w = 1+int(config['img_height']/(float(cv.imread(unlabeled[0]).shape[0]) / cv.imread(unlabeled[0]).shape[1]))
-            batch = np.array( [cv.resize(cv.imread(f), (w,config['img_height'])) for f in unlabeled] ).astype(np.float32)
+            w = 1+int(2*config['img_height']/(float(cv.imread(unlabeled[0]).shape[0]) / cv.imread(unlabeled[0]).shape[1]))
+            batch = np.array( [cv.resize(cv.imread(f), (w,2*config['img_height'])) for f in unlabeled] ).astype(np.float32)
             
             # inference multiple times
             ni = 5
-            pred = np.array([ training_model(batch,training=True).numpy() for _ in range(ni)])
+            pred = np.array([ training_model(batch,training=True)[-1].numpy() for _ in range(ni)])
             pred = pred[:,:,:,:,:-1] # cut background channel
             
             # calculate max std item
@@ -164,23 +165,27 @@ def receive_labeling():
         filepath = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, data['project_id']), data['video_id']),'train','%s.png'%data['frame_idx'])
         keypoints = [[d['keypoint_name'],d['id_ind'],d['x'],d['y']] for d in data['keypoints']]
         y = heatmap_drawing.vis_heatmap(cv.imread(filepath), config['keypoint_names'], keypoints, horistack = False)
-        w = 1+int(config['img_height']/(float(y.shape[0]) / y.shape[1]))
-        y = cv.resize(y,(w,config['img_height']))
+        w = 1+int(2*config['img_height']/(float(y.shape[0]) / y.shape[1]))
+        y = cv.resize(y,(w,2*config['img_height']))
         y = np.float32(y / 255.)
-        
-        y = np.tile(np.expand_dims(y,axis=0),[config['batch_size'],1,1,1])
-        batch = np.tile(np.expand_dims(cv.resize(cv.imread(filepath), (w,config['img_height'])),axis=0),[config['batch_size'],1,1,1])
+        bs = 1 # config['batch_size']
+        y = np.expand_dims(y,axis=0)
+        if bs > 1:
+            y = np.tile(y,[bs,1,1,1])
+        batch = np.tile(np.expand_dims(cv.resize(cv.imread(filepath), (w,config['img_height'])),axis=0),[bs,1,1,1])
         batch = batch.astype(np.float32)
         
         # train model with new data multiple steps
         ni = 3
         for i in range(ni):
             with tf.GradientTape(persistent=True) as tape:
-                predicted_heatmaps = training_model(batch, training=True)
+                predicted_heatmaps = training_model(batch, training=True)[-1]
                 y = y[:,:,:,:predicted_heatmaps.shape[3]]
                 predicted_heatmaps = tf.image.resize(predicted_heatmaps,(y.shape[1],y.shape[2]))
-                loss = model.get_loss(predicted_heatmaps, y, config)
-        
+                loss = 0.
+                for ph in predicted_heatmaps: 
+                    loss += model.get_loss(ph, y, config)
+                print('loss',i,loss)
             # update network parameters
             gradients = tape.gradient(loss,training_model.trainable_variables)
             optimizer.apply_gradients(zip(gradients,training_model.trainable_variables))
