@@ -55,7 +55,7 @@ def get_project_frame_test_dir(project_id, video_id):
 def get_project_frame_train_dir(project_id, video_id):
     return os.path.expanduser('~/data/multitracker/projects/%i/%i/frames/train' % (project_id,video_id))
 
-def extract_frame_candidates(feature_map, thresh = 0.5):
+def extract_frame_candidates(feature_map, thresh = 0.5, pp = 5):
     step = -1
     max_step = 50
     stop_threshold_hit = False 
@@ -70,7 +70,6 @@ def extract_frame_candidates(feature_map, thresh = 0.5):
         frame_candidates.append([px,py,val])
 
         # delete area around new max pos 
-        pp = 5
         feature_map[py-pp:py+pp,px-pp:px+pp] = 0
         feature_map[py][px] = 0 
         
@@ -98,6 +97,7 @@ def predict(config, checkpoint_path, project_id, video_id):
     trained_model = tf.keras.models.load_model(h5py.File(path_model, 'r'))
     t1 = time.time()
     print('[*] loaded model from %s in %f seconds.' %(path_model,t1-t0))
+    
     frames_dir = get_project_frame_train_dir(project_id, video_id)
     frame_files = sorted(glob(os.path.join(frames_dir,'*.png')))
     if len(frame_files) == 0:

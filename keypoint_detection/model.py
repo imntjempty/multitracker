@@ -306,6 +306,8 @@ def train(config):
                     tf.summary.image(name,data,step=global_step)
                 with writer_train.as_default():
                     tf.summary.scalar("loss %s" % config['loss'],loss,step=global_step)
+                    tf.summary.scalar('min',tf.reduce_min(all_predicted_heatmaps[-1]),step=global_step)
+                    tf.summary.scalar('max',tf.reduce_max(all_predicted_heatmaps[-1]),step=global_step)
                     im_summary('image',inp/255.)
                     for kk in range(1+(y.shape[3]-1)//3):
                         im_summary('heatmaps-%i'%kk,tf.concat((y[:,:,:,kk*3:kk*3+3], predicted_heatmaps[:,:,:,kk*3:kk*3+3]),axis=2))

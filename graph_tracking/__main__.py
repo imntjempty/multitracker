@@ -15,9 +15,294 @@
 
 """
 
-def main(args):
-    # load model
+
+import os
+import numpy as np 
+import tensorflow as tf 
+from glob import glob 
+from random import shuffle 
+import time 
+from datetime import datetime
+import cv2 as cv 
+import h5py
+
+from multitracker import util 
+from multitracker.keypoint_detection import heatmap_drawing, model 
+from multitracker.keypoint_detection import predict
+from multitracker.graph_tracking import group_indiv
+
+def load_model(path_model):
+    t0 = time.time()
+    trained_model = tf.keras.models.load_model(h5py.File(path_model, 'r'))
+    t1 = time.time()
+    print('[*] loaded model from %s in %f seconds.' %(path_model,t1-t0))
+    return trained_model 
+
+def load_data(project_id,video_id):
+    frames_dir = predict.get_project_frame_train_dir(project_id, video_id)
+    frame_files = sorted(glob(os.path.join(frames_dir,'*.png')))
+    
+    #frame_files = frame_files[int(np.random.uniform(2000)):]
+    frame_files = frame_files[:1000]
+
+    if len(frame_files) == 0:
+        raise Exception("ERROR: no frames found in " + str(frames_dir))
+    
+    return frame_files
+
+def get_heatmaps_keypoints(heatmaps):
+    keypoints = [] 
+    for c in range(heatmaps.shape[2]-1): # dont extract from background channel
+        channel_candidates = predict.extract_frame_candidates(heatmaps[:,:,c], thresh = 0.5, pp = int(0.01 * np.min(heatmaps.shape[:2])))
+        for [px,py,val] in channel_candidates:
+            keypoints.append([px,py,c])
+    return keypoints 
+
+def inference_heatmap(config, trained_model, frame):
+    # predict whole image, height like trained height and variable width 
+    # to keep aspect ratio and relative size        
+    config['n_inferences'] = 3
+    w = 1+int(2*config['img_height']/(float(frame.shape[0]) / frame.shape[1]))
+    xsmall = cv.resize(frame, (w,2*config['img_height']))
+    xsmall = tf.expand_dims(tf.convert_to_tensor(xsmall),axis=0)
+    bs = 2
+    if bs > 1: 
+        xsmall = tf.tile(xsmall,[bs,1,1,1])
+
+    # 1) inference: run trained_model to get heatmap predictions
+    tsb = time.time()
+    if config['n_inferences'] == 1:
+        y = trained_model.predict(xsmall)[-1]
+    else:
+        y = trained_model(xsmall, training=True)[-1] / config['n_inferences']
+        for ii in range(config['n_inferences']-1):
+            y += trained_model(xsmall, training=True)[-1] / config['n_inferences']
+    if bs > 1:
+        y = tf.reduce_mean(y,axis=[0]) # complete batch is of same image, so second dim average
+    else:
+        y = y[0,:,:,:]
+    
+    if config['n_inferences'] > 1:
+        y = y.numpy()
+    
+    y = cv.resize(y,tuple(frame.shape[:2][::-1]))
+    tse = time.time() 
+    return y
+
+colors = [
+        (255,0,0),
+        (0,255,0),
+        (0,0,255),
+        (255,0,128),
+        (255,0,255),
+        (0,255,255),
+        (128,128,0),
+        (255,255,0),
+        (128,0,128),
+        (0,128,128),
+        (128,128,255),
+        (255,128,128),
+        (128,255,128),
+        (255,255,128),
+        (255,128,255),
+        (128,255,255),
+        (64,196,255),
+        (255,64,196),
+        (64,255,196),
+        (196,64,255),
+        (255,64,196),
+        (196,255,64),
+    ]
+
+def get_keypoints_vis(frame, keypoints, keypoint_names):
+    vis_keypoints = np.zeros(frame.shape,'uint8')
+    
+    # draw circles
+    for [x,y,class_id,indv ] in keypoints:
+        radius = np.min(vis_keypoints.shape[:2]) // 200
+        px,py = np.int32(np.around([x,y]))
+        # color by indv
+        color = colors[int(indv)%len(colors)]
+        c1,c2,c3 = color
+        vis_keypoints = cv.circle(vis_keypoints,(px,py),radius,(int(c1),int(c2),int(c3)),-1)
+    
+    # draw labels
+    for [x,y,class_id,indv ] in keypoints:
+        px,py = np.int32(np.around([x,y]))
+        color = colors[int(indv%len(colors))]
+        name = "%i %s"%(int(indv),keypoint_names[int(class_id)])
+        #cv.putText( vis_keypoints, name, (px+3,py-8), cv.FONT_HERSHEY_COMPLEX, 1, color, 3 )
+    
+    vis_keypoints = np.uint8(vis_keypoints//2 + frame//2)
+    return vis_keypoints 
+
+class Track(object):
+    """
+        each keypoint gets tracked via a Track object
+        each track object
+            unique id
+            stores history of positions
+        gets deleted if missed after init_frames=10 steps
+        gets deleted if miss_frames=10 steps without detection
+    """
+    def __init__(self):
+        self.history = {}
+
+cnt_total_tracks = 0
+def update_tracks(tracks, keypoints):
+    global cnt_total_tracks
+    '''
+        update tracks
+        while not all tracks matched:
+            find minimum distance between unmatched track and unmatched keypoint
+            add keypoint to history of track
+    '''
+
+    #keypoints = [kp for kp in keypoints]
+    matched_keypoints = []
+    delete_tracks = []
+    max_dist = 50
+    if len(tracks) > 0:
+        tracks_matched = np.zeros((len(tracks)))
+        for i in range(len(tracks)):
+            min_dist, min_idx = 1e6, (-1,-1)
+            for j in range(len(tracks)):
+                ts = tracks[j]['position']
+                # if track not matched 
+                if tracks_matched[j] == 0:
+                    for k in range(len(keypoints)):
+                        # if classes match 
+                        if tracks[j]['history_class'][-1] == keypoints[k][2]:
+                            # if keypoint not already matched
+                            if k not in matched_keypoints:
+                                D = np.sqrt( (ts[0]-keypoints[k][0])**2 + (ts[1]-keypoints[k][1])**2 )
+                                if D < min_dist and D < max_dist:
+                                    min_dist = D   
+                                    min_idx = (j,k)
+            # match min distance keypoint to track 
+            if min_idx[0] >= 0:
+                alpha = 0.35
+                tracks[min_idx[0]]['history'].append(tracks[min_idx[0]]['position'])
+                tracks[min_idx[0]]['history_class'].append(keypoints[min_idx[1]][2])
+                estimated_pos = np.array(tracks[min_idx[0]]['position'])#
+                #if len(tracks[min_idx[0]]['history'])>2:
+                #    estimated_pos = estimated_pos + ( tracks[min_idx[0]]['history'][-3] -tracks[min_idx[0]]['history'][-1]  )/2.
+                if i>0:
+                    print(i, tracks[min_idx[0]]['position'], '<->',keypoints[min_idx[1]][:2],':::',tracks[min_idx[0]]['history_class'][-2],keypoints[min_idx[1]][2], 'D',np.sqrt( (tracks[min_idx[0]]['position'][0]-keypoints[min_idx[1]][0])**2 + (tracks[min_idx[0]]['position'][1]-keypoints[min_idx[1]][1])**2 ))
+                
+                tracks[min_idx[0]]['position'] = alpha * estimated_pos + (1-alpha) * np.array(keypoints[min_idx[1]][:2])
+                tracks[min_idx[0]]['position'] = np.array(keypoints[min_idx[1]][:2])
+                tracks_matched[min_idx[0]] = 1 
+                matched_keypoints.append(min_idx[1])
+
+                        
+        
+        # for each unmatched track: increase num_misses 
+        for i,track in enumerate(tracks):
+            if tracks_matched[i] == 0:
+                tracks[i]['num_misses'] += 1 
+                if tracks[i]['num_misses'] > 60: # lost track over so many consecutive frames
+                    # delete later
+                    if i not in delete_tracks:
+                        delete_tracks.append(i)
+                if tracks[i]['age'] < 2: # miss already at young age are false positives
+                    if i not in delete_tracks:
+                        delete_tracks.append(i)
+            else:
+                tracks[i]['num_misses'] = 0
+
+    # for each unmatched keypoint: create new track
+    for k in range(len(keypoints)):
+        if not k in matched_keypoints:
+            new_track = {
+                'id': cnt_total_tracks,
+                'history': [keypoints[k][:2]],
+                'position': keypoints[k][:2],
+                'history_class': [keypoints[k][2]],
+                'num_misses': 0,
+                'age': 0
+            }
+            tracks.append(new_track)
+            cnt_total_tracks += 1
+
+    # update age of all tracks 
+    for track in tracks:
+        track['age'] += 1
+
+    # delete tracks
+    for i in delete_tracks[::-1]:
+        del tracks[i]
+    return tracks 
+
+def draw_tracks(frame, tracks):
+    vis = np.array(frame,copy=True)
+    for k,track in enumerate(tracks):
+        # draw history as line for each history point connected to prev point
+        for i in range(len(track['history'])):
+            if i > 0:
+                radius = 30
+                c1,c2,c3 = colors[track['id']%len(colors)]
+
+                #print('x',tuple(track['history'][i-1]))
+                p1 = tuple(np.int32(np.around(track['history'][i])))
+                p2 = tuple(np.int32(np.around(track['history'][i-1])))
+                vis = cv.line(vis,p1,p2,(int(c1),int(c2),int(c3)),2)
+                #vis = cv.circle(vis,(px,py),radius,(int(c1),int(c2),int(c3)),-1)
+        # draw actual position
+        # draw text label 
+    return vis 
+
+def track(config, model_path, project_id, video_id):
+    project_id = int(project_id)
+    video_id = int(video_id)
+    output_dir = os.path.expanduser('~/data/multitracker/tracks/%i/%i/%s' % (project_id, video_id, model_path.split('/')[-1].split('.')[0]))
+    if not os.path.isdir(output_dir):
+        os.makedirs(output_dir)
+
+    # load pretrained model
+    trained_model = load_model(model_path)
+
+    # load frame files
+    frame_files = load_data(project_id,video_id)
+    config['input_image_shape'] = cv.imread(frame_files[0]).shape[:2]
+
     tracks = [] 
+
+    for i, frame_file in enumerate(frame_files):
+        tframestart = time.time()
+        fnameo = os.path.join(output_dir,frame_file.split('/')[-1])
+        # inference frame
+        frame = cv.imread(frame_file)
+        heatmaps = inference_heatmap(config, trained_model, frame)
+        # detect keypoints
+        keypoints = get_heatmaps_keypoints(heatmaps)
+        # update tracks
+        tracks = update_tracks(tracks, keypoints)
+        vis_tracks = draw_tracks(frame, tracks)
+        cv.imwrite(fnameo,vis_tracks)
+        #cv.imshow('track result',vis_tracks)
+        #cv.waitKey(30)
+
+        if 0:#i==0: #if len(tracks) == 0 and len(keypoints) >0:
+            # init keypoints into individuals
+            #keypoints = group_indiv.group_keypoints_into_individuals(keypoints)
+            vis_keypoints = get_keypoints_vis(frame, keypoints, config['keypoint_names'])
+            cv.imwrite(fnameo,vis_keypoints)
+            print('[*] wrote',fnameo)
+        
+
+        tframeend = time.time()
+        eta_min = (len(frame_files)-i) * (tframeend - tframestart) / 60.
+        print('[* %i/%i]'%(i,len(frame_files)), fnameo ,'heatmaps',heatmaps.shape,'min/max %f/%f'%(heatmaps.min(),heatmaps.max()),'found %i keypoints'%len(keypoints),'in %f seconds. estimated %f minutes remaining'%(tframeend - tframestart,eta_min))
+    return tracks 
+ 
+
+def main(args):
+    config = model.get_config(project_id = args.project_id)
+
+    tracks = track(config, args.model, args.project_id, args.video_id)
+
+    
 
 if __name__ == '__main__':
     import argparse
