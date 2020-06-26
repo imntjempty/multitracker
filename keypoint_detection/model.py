@@ -20,8 +20,6 @@ from multitracker.keypoint_detection import heatmap_drawing, stacked_hourglass
 from multitracker.keypoint_detection.nets import Encoder, Decoder
 from multitracker.be import video 
 
-
-
 def calc_ssim_loss(x, y):
   """Computes a differentiable structured image similarity measure."""
   c1 = 0.01**2
@@ -113,19 +111,27 @@ def load_raw_dataset(config,mode='train', image_directory = None):
             for ii in range(Wcomp//W):#0, 1+len(config['keypoint_names'])//3):
                 cc = image[:,ii*W:(ii+1)*W,:]
                 parts.append(cc)
+            if mode == "train":
+                if tf.random.uniform([]) > 0.5:
+                    # random brightness shift
+                    parts[0] = parts[0] + 40 * (tf.random.uniform([])-0.5) * tf.ones_like(parts[0])
+
             comp = tf.concat(parts,axis=2)
             #comp = tf.concat((image[:,:w,:], image[:,w:2*w,:], image[:,2*w:3*w,:], image[:,3*w:4*w,:] ),axis=2)
             comp = comp[:,:,:(3+len(config['keypoint_names']))]
 
             if mode == 'train':
                 # random scale augmentation
-                h += int(np.random.uniform(-h/7,h/7)) #h += int(tf.random.uniform([],-h/7,h/7))
+                if tf.random.uniform([]) > 0.3:
+                    h += int(np.random.uniform(-h/7,h/7)) #h += int(tf.random.uniform([],-h/7,h/7))
 
                 # apply augmentations
                 # random rotation
                 if tf.random.uniform([]) > 0.5:
                     random_angle = tf.random.uniform([1],-25.*np.pi/180., 25.*np.pi/180.)  
                     comp = tfa.image.rotate(comp, random_angle)
+
+                
                 
             # add background of heatmap
             background = 255 - tf.reduce_sum(comp[:,:,3:],axis=2)
@@ -167,24 +173,13 @@ def create_train_dataset(config):
     # make sure that the heatmaps are 
     if not os.path.isdir(config['data_dir']) or len(glob(os.path.join(config['data_dir'],'train/*.png')))==0:
         heatmap_drawing.randomly_drop_visualiztions(config['project_id'], dst_dir=config['data_dir'])
-        for mode in ['train','test']:
-            mode_dir = os.path.join(config['data_dir'],mode)
-            if not os.path.isdir(mode_dir):
-                os.makedirs(mode_dir)
-
-        files = sorted(glob(os.path.join(config['data_dir'],'*.png')))
-        for i, f in enumerate(files):
-            # split train test frames
-            if i < int(1+0.8 * len(files)):
-                new_f = f.replace(config['data_dir'],config['data_dir']+'/train')
-            else:
-                new_f = f.replace(config['data_dir'],config['data_dir']+'/test')
-            os.rename(f,new_f)
+        
 
         if 0:
             from multitracker.keypoint_detection import feature_augment
             feature_augment.augment_dataset(config['project_id'])
-
+        
+    
     config['input_image_shape'] = cv.imread(glob(os.path.join(config['data_dir'],'train/*.png'))[0]).shape[:2]
     return config 
 

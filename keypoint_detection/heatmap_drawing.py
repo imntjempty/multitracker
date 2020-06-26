@@ -43,23 +43,37 @@ def generate_hm(height, width ,landmarks, keypoint_names, s=None):
     return hm
 
 
-def vis_heatmap(image, keypoint_names, keypoints, horistack=True):
-    #hsv_color = np.ones((5,5,3))*np.array([int(255.*np.random.random()),128,128])#.reshape((1,1,3))
-    #hsv_color = hsv_color.astype(np.uint8)
-    #rgb_color = cv.cvtColor(hsv_color,cv.COLOR_HSV2RGB)[0,0,:]
+def vis_heatmap(image, keypoint_names, keypoints, horistack=True, apply_contrast_stretching=False, apply_histogram_equalization=False, apply_adaptive_equalization=False ):
     hm = generate_hm(image.shape[0], image.shape[1] , [ [int(kp[2]),int(kp[3]),kp[0]] for kp in keypoints ], keypoint_names)
-    #print('hm',hm.shape,hm.min(),hm.max())
+    
+    im = image 
+    from skimage import exposure
+    if apply_contrast_stretching:
+        # Contrast stretching
+        p2, p98 = np.percentile(im, (2, 98))
+        im = exposure.rescale_intensity(im, in_range=(p2, p98))
+
+    if apply_histogram_equalization: 
+        # Histogram Equalization
+        im = exposure.equalize_hist(im)
+        im = np.uint8(np.around(255 * im))
+
+    if apply_adaptive_equalization:
+        # Adaptive Equalization
+        im = exposure.equalize_adapthist(im, clip_limit=0.03)
+        im = np.uint8(np.around(255 * im))
+
     if not horistack:
         # overlay
         #hm = np.uint8(255. * hm[:,:,:3])
         #vis = np.uint8( hm//2 + image//2 )     
-        vis = np.uint8(np.dstack((image,np.uint8(255. * hm))))
+        vis = np.uint8(np.dstack((im,np.uint8(255. * hm))))
     else:
         # make horizontal mosaic - image and stacks of 3
         n = 3 * (hm.shape[2]//3) + 3
         while hm.shape[2] < n:
-            hm = np.dstack((hm,np.zeros(image.shape[:2])))
-        vis = image 
+            hm = np.dstack((hm,np.zeros(im.shape[:2])))
+        vis = im 
         hm = np.uint8(255. * hm)
         for i in range(0,n,3):
             vis = np.hstack((vis, np.dstack((hm[:,:,i],hm[:,:,i+1],hm[:,:,i+2] ) )))
@@ -129,6 +143,11 @@ def randomly_drop_visualiztions(project_id, dst_dir = '/tmp/keypoint_heatmap_vis
     if num > 0:
         frame_idxs = frame_idxs[:min(num,len(frame_idxs))]
 
+    for mode in ['train','test']:
+            mode_dir = os.path.join(dst_dir,mode)
+            if not os.path.isdir(mode_dir):
+                os.makedirs(mode_dir)
+
     for i in range(len(frame_idxs)):
         filepath = os.path.expanduser("~/data/multitracker/projects/%i/%i/frames/train/%s.png" % (int(project_id), int(video_id), frame_idxs[i]))
         q = "select keypoint_name, individual_id, keypoint_x, keypoint_y from keypoint_positions where video_id=%i and frame_idx='%s' order by individual_id, keypoint_name desc;" % (video_id,frame_idxs[i])
@@ -137,10 +156,26 @@ def randomly_drop_visualiztions(project_id, dst_dir = '/tmp/keypoint_heatmap_vis
         #print('frame',frame_idxs[i],'isfile',os.path.isfile(filepath),filepath)
         #for kp in keypoints:
         #    print(kp)
+        mode = 'train' if np.random.uniform() > 0.2 else 'test'
         if os.path.isfile(filepath):
-            vis = vis_heatmap(cv.imread(filepath), keypoint_names, keypoints, horistack = horistack)
-            vis_path = os.path.join(dst_dir,'%s.png' % frame_idxs[i] )
+            im = cv.imread(filepath)
+            vis = vis_heatmap(im, keypoint_names, keypoints, horistack = horistack)
+            vis_path = os.path.join(dst_dir,mode,'%s.png' % frame_idxs[i] )
             cv.imwrite(vis_path, vis)
+
+            if mode == 'train': # only train
+                vis = vis_heatmap(im, keypoint_names, keypoints, horistack = horistack, apply_contrast_stretching=True)
+                vis_path = os.path.join(dst_dir,mode,'%sc0.png' % frame_idxs[i] )
+                cv.imwrite(vis_path, vis)
+
+                vis = vis_heatmap(im, keypoint_names, keypoints, horistack = horistack, apply_histogram_equalization=True)
+                vis_path = os.path.join(dst_dir,mode,'%sc1.png' % frame_idxs[i] )
+                cv.imwrite(vis_path, vis)
+                
+                vis = vis_heatmap(im, keypoint_names, keypoints, horistack = horistack, apply_adaptive_equalization=True)
+                vis_path = os.path.join(dst_dir,mode,'%sc2.png' % frame_idxs[i] )
+                cv.imwrite(vis_path, vis)
+        
 
 if __name__ == '__main__':
     project_id = 1
