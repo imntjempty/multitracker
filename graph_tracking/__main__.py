@@ -43,29 +43,35 @@ def load_data(project_id,video_id):
     frame_files = sorted(glob(os.path.join(frames_dir,'*.png')))
     
     #frame_files = frame_files[int(np.random.uniform(2000)):]
-    frame_files = frame_files[:1000]
+    max_minutes = 2
+    if max_minutes >0:
+        frame_files = frame_files[: 60*max_minutes*30 ]
 
     if len(frame_files) == 0:
         raise Exception("ERROR: no frames found in " + str(frames_dir))
-    
+    print('[*] found %i frames' % len(frame_files))
     return frame_files
 
 def get_heatmaps_keypoints(heatmaps):
     keypoints = [] 
     for c in range(heatmaps.shape[2]-1): # dont extract from background channel
-        channel_candidates = predict.extract_frame_candidates(heatmaps[:,:,c], thresh = 0.5, pp = int(0.01 * np.min(heatmaps.shape[:2])))
+        channel_candidates = predict.extract_frame_candidates(heatmaps[:,:,c], thresh = 0.5, pp = int(0.02 * np.min(heatmaps.shape[:2])))
         for [px,py,val] in channel_candidates:
             keypoints.append([px,py,c])
+
+    # [debug] filter for nose 
+    #keypoints = [kp for kp in keypoints if kp[2]==1]
     return keypoints 
 
 def inference_heatmap(config, trained_model, frame):
     # predict whole image, height like trained height and variable width 
     # to keep aspect ratio and relative size        
-    config['n_inferences'] = 3
+    bs, config['n_inferences'] = 1, 1
+    #bs, config['n_inferences'] = 2, 3
     w = 1+int(2*config['img_height']/(float(frame.shape[0]) / frame.shape[1]))
     xsmall = cv.resize(frame, (w,2*config['img_height']))
     xsmall = tf.expand_dims(tf.convert_to_tensor(xsmall),axis=0)
-    bs = 2
+    
     if bs > 1: 
         xsmall = tf.tile(xsmall,[bs,1,1,1])
 
@@ -136,20 +142,8 @@ def get_keypoints_vis(frame, keypoints, keypoint_names):
     vis_keypoints = np.uint8(vis_keypoints//2 + frame//2)
     return vis_keypoints 
 
-class Track(object):
-    """
-        each keypoint gets tracked via a Track object
-        each track object
-            unique id
-            stores history of positions
-        gets deleted if missed after init_frames=10 steps
-        gets deleted if miss_frames=10 steps without detection
-    """
-    def __init__(self):
-        self.history = {}
-
 cnt_total_tracks = 0
-def update_tracks(tracks, keypoints):
+def update_tracks(tracks, keypoints, max_dist = 100):
     global cnt_total_tracks
     '''
         update tracks
@@ -161,7 +155,7 @@ def update_tracks(tracks, keypoints):
     #keypoints = [kp for kp in keypoints]
     matched_keypoints = []
     delete_tracks = []
-    max_dist = 50
+    
     if len(tracks) > 0:
         tracks_matched = np.zeros((len(tracks)))
         for i in range(len(tracks)):
@@ -181,16 +175,16 @@ def update_tracks(tracks, keypoints):
                                     min_idx = (j,k)
             # match min distance keypoint to track 
             if min_idx[0] >= 0:
-                alpha = 0.35
-                tracks[min_idx[0]]['history'].append(tracks[min_idx[0]]['position'])
+                alpha = 0.9
+                tracks[min_idx[0]]['history'].append(keypoints[min_idx[1]][:2])#tracks[min_idx[0]]['position'])
                 tracks[min_idx[0]]['history_class'].append(keypoints[min_idx[1]][2])
                 estimated_pos = np.array(tracks[min_idx[0]]['position'])#
                 #if len(tracks[min_idx[0]]['history'])>2:
-                #    estimated_pos = estimated_pos + ( tracks[min_idx[0]]['history'][-3] -tracks[min_idx[0]]['history'][-1]  )/2.
+                #    estimated_pos = estimated_pos + ( np.array(tracks[min_idx[0]]['history'][-2]) -np.array(keypoints[min_idx[1]][:2])  )
                 if i>0:
                     print(i, tracks[min_idx[0]]['position'], '<->',keypoints[min_idx[1]][:2],':::',tracks[min_idx[0]]['history_class'][-2],keypoints[min_idx[1]][2], 'D',np.sqrt( (tracks[min_idx[0]]['position'][0]-keypoints[min_idx[1]][0])**2 + (tracks[min_idx[0]]['position'][1]-keypoints[min_idx[1]][1])**2 ))
                 
-                tracks[min_idx[0]]['position'] = alpha * estimated_pos + (1-alpha) * np.array(keypoints[min_idx[1]][:2])
+                tracks[min_idx[0]]['position'] =  alpha * estimated_pos + (1-alpha) * np.array(keypoints[min_idx[1]][:2])
                 tracks[min_idx[0]]['position'] = np.array(keypoints[min_idx[1]][:2])
                 tracks_matched[min_idx[0]] = 1 
                 matched_keypoints.append(min_idx[1])
@@ -201,11 +195,11 @@ def update_tracks(tracks, keypoints):
         for i,track in enumerate(tracks):
             if tracks_matched[i] == 0:
                 tracks[i]['num_misses'] += 1 
-                if tracks[i]['num_misses'] > 60: # lost track over so many consecutive frames
+                if tracks[i]['num_misses'] > 100: # lost track over so many consecutive frames
                     # delete later
                     if i not in delete_tracks:
                         delete_tracks.append(i)
-                if tracks[i]['age'] < 2: # miss already at young age are false positives
+                if tracks[i]['age'] < 4: # miss already at young age are false positives
                     if i not in delete_tracks:
                         delete_tracks.append(i)
             else:
@@ -220,7 +214,8 @@ def update_tracks(tracks, keypoints):
                 'position': keypoints[k][:2],
                 'history_class': [keypoints[k][2]],
                 'num_misses': 0,
-                'age': 0
+                'age': 0,
+                'idv': -1
             }
             tracks.append(new_track)
             cnt_total_tracks += 1
@@ -235,21 +230,42 @@ def update_tracks(tracks, keypoints):
     return tracks 
 
 def draw_tracks(frame, tracks):
+    """
+        paint history path for each indiv mass center
+        paint 'sceleton' for each indiv keypoints -> each idv unique color
+        paint keypoints in class keypoint colors
+        only draw keypoints assigned to idv
+    """
     vis = np.array(frame,copy=True)
+    def draw_legend():
+        # draw legend on right side showing colors and names of keypoint types
+        pass
+    draw_legend()
+
     for k,track in enumerate(tracks):
+        radius = 30
+        #c1,c2,c3 = colors[track['id']%len(colors)]
+        
+        
         # draw history as line for each history point connected to prev point
         for i in range(len(track['history'])):
             if i > 0:
-                radius = 30
-                c1,c2,c3 = colors[track['id']%len(colors)]
-
-                #print('x',tuple(track['history'][i-1]))
+                c1,c2,c3 = colors[track['history_class'][i]%len(colors)]
                 p1 = tuple(np.int32(np.around(track['history'][i])))
                 p2 = tuple(np.int32(np.around(track['history'][i-1])))
                 vis = cv.line(vis,p1,p2,(int(c1),int(c2),int(c3)),2)
                 #vis = cv.circle(vis,(px,py),radius,(int(c1),int(c2),int(c3)),-1)
+        if len(track['history'])>0:
+            # draw last segment
+            c1,c2,c3 = colors[track['history_class'][-1]%len(colors)]
+            plast = tuple(np.int32(np.around(track['history'][-1])))
+            ppos = tuple(np.int32(np.around(track['position'])))
+            vis = cv.line(vis,plast,ppos,(int(c1),int(c2),int(c3)),2)
+            
         # draw actual position
         # draw text label 
+
+    
     return vis 
 
 def track(config, model_path, project_id, video_id):
@@ -294,6 +310,10 @@ def track(config, model_path, project_id, video_id):
         tframeend = time.time()
         eta_min = (len(frame_files)-i) * (tframeend - tframestart) / 60.
         print('[* %i/%i]'%(i,len(frame_files)), fnameo ,'heatmaps',heatmaps.shape,'min/max %f/%f'%(heatmaps.min(),heatmaps.max()),'found %i keypoints'%len(keypoints),'in %f seconds. estimated %f minutes remaining'%(tframeend - tframestart,eta_min))
+    
+    if 1:
+        util.make_video(output_dir, output_dir+'.mp4',"%05d.png")
+    
     return tracks 
  
 
