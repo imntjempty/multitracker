@@ -337,37 +337,40 @@ def train(config):
         epoch_loss = 0.0
 
         if 1:#try:
-            for x,y in dataset_train:# </train>
-                # mixup augmentation
-                if np.random.random() < 0.9:
-                    if config['mixup'] and np.random.random() > 0.5:
-                        x, y = mixup(x,y) 
+            for xx,yy in dataset_train:# </train>
+                x = xx 
+                y = yy
+                for _ in range(4):
+                    # mixup augmentation
+                    if np.random.random() < 0.9:
+                        if config['mixup'] and np.random.random() > 0.5:
+                            x, y = mixup(x,y) 
+                        else:
+                            if config['cutmix'] and np.random.random() > 0.5:
+                                x, y = cutmix(x,y)
+                        
+                    #x = tf.keras.layers.experimental.preprocessing.RandomContrast(0.4)(x,training=True)
+                    #if config['random_contrast'] and np.random.random() > 0.5:
+                    #(x - mean) * contrast_factor + mean
+
+                    if n < config['max_steps']:
+                        should_summarize=n%50==0
+                        try:
+                            epoch_loss += train_step(x, y, writer_train, writer_test, n, should_summarize=should_summarize)
+                        except Exception as e:
+                            print(e)
                     else:
-                        if config['cutmix'] and np.random.random() > 0.5:
-                            x, y = cutmix(x,y)
-                    
-                #x = tf.keras.layers.experimental.preprocessing.RandomContrast(0.4)(x,training=True)
-                #if config['random_contrast'] and np.random.random() > 0.5:
-                #(x - mean) * contrast_factor + mean
+                        return 
 
-                if n < config['max_steps']:
-                    should_summarize=n%50==0
-                    try:
-                        epoch_loss += train_step(x, y, writer_train, writer_test, n, should_summarize=should_summarize)
-                    except Exception as e:
-                        print(e)
-                else:
-                    return 
+                    if n % 1000 == 0:
+                        ckpt_save_path = ckpt_manager.save()
+                        print('[*] saving model to %s'%ckpt_save_path)
+                        model.save(os.path.join(checkpoint_path,'trained_model.h5'))
+                        if n % 5000 == 0:
+                            model.save(os.path.join(checkpoint_path,'trained_model-%ik.h5'%(n//1000)))
 
-                if n % 1000 == 0:
-                    ckpt_save_path = ckpt_manager.save()
-                    print('[*] saving model to %s'%ckpt_save_path)
-                    model.save(os.path.join(checkpoint_path,'trained_model.h5'))
-                    if n % 5000 == 0:
-                        model.save(os.path.join(checkpoint_path,'trained_model-%ik.h5'%(n//1000)))
-
-                n+=1
-                epoch_steps += 1
+                    n+=1
+                    epoch_steps += 1
         #except Exception as e:
         #    print(e)
         epoch_loss = epoch_loss / epoch_steps

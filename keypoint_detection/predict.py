@@ -55,7 +55,7 @@ def get_project_frame_test_dir(project_id, video_id):
 def get_project_frame_train_dir(project_id, video_id):
     return os.path.expanduser('~/data/multitracker/projects/%i/%i/frames/train' % (project_id,video_id))
 
-def extract_frame_candidates(feature_map, thresh = 0.5, pp = 5):
+def extract_frame_candidates(feature_map, thresh = 0.75, pp = 5):
     step = -1
     max_step = 50
     stop_threshold_hit = False 
