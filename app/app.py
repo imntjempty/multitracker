@@ -27,6 +27,7 @@ from multitracker.be import video
 from multitracker.keypoint_detection import model, predict
 from multitracker.keypoint_detection import heatmap_drawing
 
+from multitracker.graph_tracking.__main__ import load_data
 
 app = Flask(__name__)
 
@@ -150,6 +151,27 @@ def get_frame(project_id,video_id,frame_idx):
         print('[E] /get_frame',project_id,video_id,frame_idx)
         print(e)
         return json.dumps({'success':False}), 200, {'ContentType':'application/json'} 
+
+def gen_frame(project_id, video_id):
+    data = load_data(project_id, video_id)
+    for i, file_name in enumerate(data):
+        frame = cv.imread(file_name)
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+
+@app.route('/get_video/<project_id>/<video_id>')
+def get_video(project_id, video_id):
+    local_path = '/home/dolokov/Downloads/Basler_127.mp4'
+    #return send_file(local_path, mimetype='video/mp4')
+    #return Response(open(local_path, "rb"), mimetype="video/mp4")
+    return Response(gen_frame(project_id, video_id)),
+                    mimetype='multipart/x-mixed-replace; boundary=frame')
+
+
+@app.route('/refine_video/<project_id>/<video_id>')
+def refine_video(project_id, video_id):
+    return render_template('video_player.html', project_id=project_id, video_id=video_id)
+
 
 
 @app.route('/labeling',methods=["POST"])
