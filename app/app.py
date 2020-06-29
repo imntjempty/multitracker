@@ -157,22 +157,32 @@ def gen_frame(project_id, video_id):
     for i, file_name in enumerate(data):
         frame = cv.imread(file_name)
         yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+               b'Content-Type: image/jpeg\r\n\r\n' + frame.tostring() + b'\r\n')
 
 @app.route('/get_video/<project_id>/<video_id>')
 def get_video(project_id, video_id):
     local_path = '/home/dolokov/Downloads/Basler_127.mp4'
+    project_id, video_id = int(project_id), int(video_id)
     #return send_file(local_path, mimetype='video/mp4')
     #return Response(open(local_path, "rb"), mimetype="video/mp4")
-    return Response(gen_frame(project_id, video_id)),
-                    mimetype='multipart/x-mixed-replace; boundary=frame')
+    return Response(gen_frame(project_id, video_id),mimetype='multipart/x-mixed-replace; boundary=frame')
 
 
 @app.route('/refine_video/<project_id>/<video_id>')
 def refine_video(project_id, video_id):
-    return render_template('video_player.html', project_id=project_id, video_id=video_id)
+    project_name = db.get_project_name(int(project_id))
+    video_name = db.get_video_name(int(video_id))
+    return render_template('video_player.html', project_id=project_id, video_id=video_id, project_name = project_name, video_name= video_name)
 
-
+@app.route('/label_later/<project_id>/<video_id>', methods = ["POST"])
+def label_later(project_id, video_id):
+    data = request.get_json(silent=True,force=True)
+    timestamp = data['time']
+    frame_name = '%05d.png' % int(timestamp * 30.)
+    q = "insert into frame_jobs (project_id, video_id, time, frame_name) values (%i, %i, %f, '%s');" % (int(project_id),int(video_id),timestamp,frame_name)
+    db.execute(q)
+    print('[*] label later:', project_id, video_id, timestamp, 'frame', frame_name)
+    return json.dumps({'success':True}), 200, {'ContentType':'application/json'} 
 
 @app.route('/labeling',methods=["POST"])
 def receive_labeling():
