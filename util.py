@@ -2,7 +2,8 @@ import os
 
 def make_video(frames_dir, video_file, query = "predict-%05d.png"):
     import subprocess 
-    
+    if os.path.isfile(video_file):
+        os.remove(video_file)
     # great ressource https://stackoverflow.com/a/37478183
     #ffmpeg -framerate 1 -pattern_type glob -i '*.png' -c:v libx264 -r 30 -pix_fmt yuv420p out.mp4#
     cmd = ['ffmpeg','-framerate','30']

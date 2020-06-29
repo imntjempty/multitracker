@@ -43,7 +43,7 @@ def load_data(project_id,video_id):
     frame_files = sorted(glob(os.path.join(frames_dir,'*.png')))
     
     #frame_files = frame_files[int(np.random.uniform(2000)):]
-    max_minutes = 2
+    max_minutes = [0,2][0]
     if max_minutes >0:
         frame_files = frame_files[: 60*max_minutes*30 ]
 
@@ -143,8 +143,10 @@ def get_keypoints_vis(frame, keypoints, keypoint_names):
     return vis_keypoints 
 
 cnt_total_tracks = 0
-def update_tracks(tracks, keypoints, max_dist = 100):
+cnt_total_individuals = 0
+def update_tracks(individuals, tracks, keypoints, max_dist = 100):
     global cnt_total_tracks
+    global cnt_total_individuals
     '''
         update tracks
         while not all tracks matched:
@@ -206,8 +208,34 @@ def update_tracks(tracks, keypoints, max_dist = 100):
                 tracks[i]['num_misses'] = 0
 
     # for each unmatched keypoint: create new track
+    max_intra_indiv_dist = 250
+
     for k in range(len(keypoints)):
         if not k in matched_keypoints:
+            # create new track and find idv to assign
+            idv = - 1
+            min_dist, min_idx = 1e6, -1 
+            for j, track in enumerate(tracks):
+                #
+                D = np.sqrt( (track['position'][0]-keypoints[k][0])**2 + (track['position'][1]-keypoints[k][1])**2 )
+                if D < min_dist: # new min distance found
+                    if D < max_intra_indiv_dist: # not too far away
+                        # only add if min dist indiv not already has keypoint with same class as k 
+                        has_already_same_class_item = False 
+                        for other_track in tracks:
+                            if other_track['idv'] == track['idv']:
+                                has_already_same_class_item = has_already_same_class_item or other_track['history_class'][-1] == keypoints[k][2]
+                        if not has_already_same_class_item:
+                            min_dist = D 
+                            min_idx = j 
+            if min_idx >= 0:
+                # found existing track to assign itself to
+                idv = tracks[min_idx]['idv']
+            else:
+                # no sutiable indiv found, have to setup a new one
+                cnt_total_individuals += 1
+                idv = cnt_total_individuals
+
             new_track = {
                 'id': cnt_total_tracks,
                 'history': [keypoints[k][:2]],
@@ -215,7 +243,7 @@ def update_tracks(tracks, keypoints, max_dist = 100):
                 'history_class': [keypoints[k][2]],
                 'num_misses': 0,
                 'age': 0,
-                'idv': -1
+                'idv': idv
             }
             tracks.append(new_track)
             cnt_total_tracks += 1
@@ -227,9 +255,9 @@ def update_tracks(tracks, keypoints, max_dist = 100):
     # delete tracks
     for i in delete_tracks[::-1]:
         del tracks[i]
-    return tracks 
+    return individuals, tracks 
 
-def draw_tracks(frame, tracks):
+def draw_tracks(frame, individuals, tracks):
     """
         paint history path for each indiv mass center
         paint 'sceleton' for each indiv keypoints -> each idv unique color
@@ -246,7 +274,8 @@ def draw_tracks(frame, tracks):
         radius = 30
         #c1,c2,c3 = colors[track['id']%len(colors)]
         
-        
+        # calc history of past center points 
+
         # draw history as line for each history point connected to prev point
         for i in range(len(track['history'])):
             if i > 0:
@@ -261,9 +290,12 @@ def draw_tracks(frame, tracks):
             plast = tuple(np.int32(np.around(track['history'][-1])))
             ppos = tuple(np.int32(np.around(track['position'])))
             vis = cv.line(vis,plast,ppos,(int(c1),int(c2),int(c3)),2)
-            
-        # draw actual position
-        # draw text label 
+                
+            # draw actual position
+            # draw text label 
+            #name = chr(65+track['idv'])
+            name = str(track['idv'])
+            cv.putText( vis, name, (ppos[0]+3,ppos[1]-8), cv.FONT_HERSHEY_COMPLEX, 0.75, (int(c1),int(c2),int(c3)), 2 )
 
     
     return vis 
@@ -283,6 +315,7 @@ def track(config, model_path, project_id, video_id):
     config['input_image_shape'] = cv.imread(frame_files[0]).shape[:2]
 
     tracks = [] 
+    individuals = []
 
     for i, frame_file in enumerate(frame_files):
         tframestart = time.time()
@@ -293,8 +326,8 @@ def track(config, model_path, project_id, video_id):
         # detect keypoints
         keypoints = get_heatmaps_keypoints(heatmaps)
         # update tracks
-        tracks = update_tracks(tracks, keypoints)
-        vis_tracks = draw_tracks(frame, tracks)
+        individuals, tracks = update_tracks(individuals, tracks, keypoints)
+        vis_tracks = draw_tracks(frame, individuals, tracks)
         cv.imwrite(fnameo,vis_tracks)
         #cv.imshow('track result',vis_tracks)
         #cv.waitKey(30)
