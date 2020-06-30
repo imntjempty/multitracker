@@ -81,47 +81,58 @@ def render_labeling(project_id):
         frames = sorted(glob(os.path.join(frames_dir, '*.png')))
     #print('[E] no frames found in directory %s.'%frames_dir)
     
+    # look for unfinished labeling jobs 
+    db.execute('select id, frame_name from frame_jobs where project_id=%i and video_id=%i;' % (int(project_id),int(video_id)))
+    labeling_jobs = [ {'id':x[0],'frame_name':x[1]} for x in db.cur.fetchall()]
+    if len(labeling_jobs) > 0:
+        frame_idx = '.'.join(labeling_jobs[0]['frame_name'].split('.')[:-1])
+        print('[*] found %i labeling jobs, giving %i' % (len(labeling_jobs),labeling_jobs[0]['id']))
 
-    if num_db_frames < args.num_labeling_base:
-        '' # randomly sample frame 
-        # choose random frame that is not already labeled
-        unlabeled_frame_found = False 
-        while not unlabeled_frame_found:
-            ridx = int( len(frames) * num_db_frames / float(args.num_labeling_base) ) + int(np.random.uniform(-50,50))
-            if ridx > 0 and ridx < len(frames):
-                frame_idx = frames[ridx]
-                #frame_idx = frames[int(len(frames)*np.random.random())] # random sampling
-                frame_idx = '.'.join(frame_idx.split('/')[-1].split('.')[:-1])
-                unlabeled_frame_found = not (frame_idx in labeled_frame_idxs)
-
-        print('[*] serving label job for frame %s.'%(frame_idx))
+        # delete job
+        db.execute('delete from frame_jobs where id=%i;' % labeling_jobs[0]['id'])
+        db.commit()
+        
     else:
-        shuffle(frames)
-        nn = 1#32
-        unlabeled = []
-        while len(unlabeled) < nn:
-            frame_f = frames[int(len(frames)*np.random.random())]
-            frame_idx = '.'.join(frame_f.split('/')[-1].split('.')[:-1])
-            if frame_f not in unlabeled and frame_idx not in labeled_frame_idxs:
-                unlabeled.append(frame_f)
-        if training_model is not None:
-            '' # active learning: load some unlabeled frames, inference multiple time, take one with biggest std variation
-            
-            # predict whole image, height like trained height and variable width 
-            # to keep aspect ratio and relative size        
-            w = 1+int(2*config['img_height']/(float(cv.imread(unlabeled[0]).shape[0]) / cv.imread(unlabeled[0]).shape[1]))
-            batch = np.array( [cv.resize(cv.imread(f), (w,2*config['img_height'])) for f in unlabeled] ).astype(np.float32)
-            
-            # inference multiple times
-            ni = 5
-            pred = np.array([ training_model(batch,training=True)[-1].numpy() for _ in range(ni)])
-            pred = pred[:,:,:,:,:-1] # cut background channel
-            
-            # calculate max std item
-            stds = np.std(pred,axis=(0,2,3,4))
-            maxidx = np.argmax(stds)
-            frame_idx = '.'.join(unlabeled[maxidx].split('/')[-1].split('.')[:-1])
-            print('[*] serving label job for frame %s with std %f.'%(frame_idx,stds[maxidx]))
+        if num_db_frames < args.num_labeling_base:
+            '' # randomly sample frame 
+            # choose random frame that is not already labeled
+            unlabeled_frame_found = False 
+            while not unlabeled_frame_found:
+                ridx = int( len(frames) * num_db_frames / float(args.num_labeling_base) ) + int(np.random.uniform(-50,50))
+                if ridx > 0 and ridx < len(frames):
+                    frame_idx = frames[ridx]
+                    #frame_idx = frames[int(len(frames)*np.random.random())] # random sampling
+                    frame_idx = '.'.join(frame_idx.split('/')[-1].split('.')[:-1])
+                    unlabeled_frame_found = not (frame_idx in labeled_frame_idxs)
+
+            print('[*] serving label job for frame %s.'%(frame_idx))
+        else:
+            shuffle(frames)
+            nn = 1#32
+            unlabeled = []
+            while len(unlabeled) < nn:
+                frame_f = frames[int(len(frames)*np.random.random())]
+                frame_idx = '.'.join(frame_f.split('/')[-1].split('.')[:-1])
+                if frame_f not in unlabeled and frame_idx not in labeled_frame_idxs:
+                    unlabeled.append(frame_f)
+            if training_model is not None:
+                '' # active learning: load some unlabeled frames, inference multiple time, take one with biggest std variation
+                
+                # predict whole image, height like trained height and variable width 
+                # to keep aspect ratio and relative size        
+                w = 1+int(2*config['img_height']/(float(cv.imread(unlabeled[0]).shape[0]) / cv.imread(unlabeled[0]).shape[1]))
+                batch = np.array( [cv.resize(cv.imread(f), (w,2*config['img_height'])) for f in unlabeled] ).astype(np.float32)
+                
+                # inference multiple times
+                ni = 5
+                pred = np.array([ training_model(batch,training=True)[-1].numpy() for _ in range(ni)])
+                pred = pred[:,:,:,:,:-1] # cut background channel
+                
+                # calculate max std item
+                stds = np.std(pred,axis=(0,2,3,4))
+                maxidx = np.argmax(stds)
+                frame_idx = '.'.join(unlabeled[maxidx].split('/')[-1].split('.')[:-1])
+                print('[*] serving label job for frame %s with std %f.'%(frame_idx,stds[maxidx]))
 
     frame_candidates = []
     if 0:
@@ -134,7 +145,7 @@ def render_labeling(project_id):
             frame_candidates.append(predict.extract_frame_candidates(imp[:,:,c],0.1))
         print('frame_candidates',frame_candidates)
         
-            
+    print('[*] serving label job for frame %s.'%(frame_idx))       
     
     if args.open_gallery:
         p = subprocess.Popen(['eog',unlabeled[maxidx]])
@@ -181,6 +192,7 @@ def label_later(project_id, video_id):
     frame_name = '%05d.png' % int(timestamp * 30.)
     q = "insert into frame_jobs (project_id, video_id, time, frame_name) values (%i, %i, %f, '%s');" % (int(project_id),int(video_id),timestamp,frame_name)
     db.execute(q)
+    db.commit()
     print('[*] label later:', project_id, video_id, timestamp, 'frame', frame_name)
     return json.dumps({'success':True}), 200, {'ContentType':'application/json'} 
 

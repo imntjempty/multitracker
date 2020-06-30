@@ -62,8 +62,9 @@ class DatabaseConnection(object):
         q = """select name from videos where id = %i;""" % int(video_id)
         self.execute(q)
         name = [x for x in self.cur.fetchall()][0][0]
+        name = name.split('/')[-1]
         return name 
-        
+
     def get_random_project_video(self, project_id):
         q = "select id from videos where project_id = %i;" % int(project_id)
         self.execute(q)
