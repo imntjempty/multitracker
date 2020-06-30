@@ -236,7 +236,7 @@ def vflip(swaps, x, y):
     vx = x[:,::-1,:,:]
     vy = y[:,::-1,:,:]
     vy = swap_leftright_channels(swaps, vy)
-    return hx, hy
+    return vx, vy
 # <train>
 #@tf.function 
 def train(config):
