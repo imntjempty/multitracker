@@ -14,16 +14,20 @@
 </head>
 
 <body>
-  <h1>Video Refinement</h1>
-  <h2>Project {{project_name}} - Video {{video_name}}</h2>
+  <h3>Video Refinement</h3>
+  <h4>Project {{project_name}} - Video {{video_name}}</h4>
   <video width="1440" controls id='player'>
     <source src="/static/trained_model.mp4" type="video/mp4">
-  </video>
-  <button id="bu_frame_marker" class="ui button" onclick="onclick_frame_marker();">Label later</button>
+  </video><br>
+  <button id="bu_frame_marker" class="ui positive button" onclick="onclick_frame_marker();">Label later</button>
+  <button id="bu_goto_labeling" class="ui button" onclick='onclick_goto_labeling();'>Goto Labeling</button>
 
   <script type="text/javascript">
     let project_id = {{project_id}};
     let video_id = {{video_id}};
+    function onclick_goto_labeling(){
+      window.location.href = "/get_next_labeling_frame/"+project_id.toString();
+    }
     function onclick_frame_marker(){
       let player = document.getElementById('player');
       console.log(player.currentTime);
