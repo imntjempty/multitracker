@@ -211,8 +211,32 @@ def cutmix(x,y):
     return xx, yy
 # </data>
 
+def swap_leftright_channels(swaps, y):
+    # swap corresponding left/right channels
+    for i,j in swaps:
+        channels = tf.unstack (y, axis=-1)
+        restacked = [] 
+        for k in range(len(channels)):
+            if k==i:
+                restacked.append(channels[j])
+            elif k==j:
+                restacked.append(channels[i])
+            else:
+                restacked.append(channels[k])
+        y = tf.stack(restacked, axis=-1)
+    return y 
 
+def hflip(swaps, x, y):
+    hx = x[:,:,::-1,:]
+    hy = y[:,:,::-1,:]
+    hy = swap_leftright_channels(swaps, hy)
+    return hx, hy
 
+def vflip(swaps, x, y):
+    vx = x[:,::-1,:,:]
+    vy = y[:,::-1,:,:]
+    vy = swap_leftright_channels(swaps, vy)
+    return hx, hy
 # <train>
 #@tf.function 
 def train(config):
@@ -324,6 +348,13 @@ def train(config):
                         writer_test.flush()
         return loss
 
+    # determine left right swaps for vertical and hori channel swaps
+    swaps = []
+    for i, keypoint_classnameA in enumerate(config['keypoint_names']):
+        for j, keypoint_classnameB in enumerate(config['keypoint_names']):
+            if 'left' in keypoint_classnameA and keypoint_classnameA.replace('left','right') == keypoint_classnameB:
+                swaps.append((i,j))
+    
     n = 0
     
     ddata = {}
@@ -341,6 +372,11 @@ def train(config):
                 x = xx 
                 y = yy
                 for _ in range(4):
+                    if np.random.random() < 0.5:
+                        x,y = hflip(swaps,x,y)
+                    if np.random.random() < 0.5:
+                        x,y = vflip(swaps,x,y)
+                        
                     # mixup augmentation
                     if np.random.random() < 0.9:
                         if config['mixup'] and np.random.random() > 0.5:
