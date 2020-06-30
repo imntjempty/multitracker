@@ -91,7 +91,7 @@ def render_labeling(project_id):
         # delete job
         db.execute('delete from frame_jobs where id=%i;' % labeling_jobs[0]['id'])
         db.commit()
-        
+
     else:
         if num_db_frames < args.num_labeling_base:
             '' # randomly sample frame 
@@ -193,7 +193,10 @@ def label_later(project_id, video_id):
     q = "insert into frame_jobs (project_id, video_id, time, frame_name) values (%i, %i, %f, '%s');" % (int(project_id),int(video_id),timestamp,frame_name)
     db.execute(q)
     db.commit()
-    print('[*] label later:', project_id, video_id, timestamp, 'frame', frame_name)
+    db.execute('select id, frame_name from frame_jobs where project_id=%i and video_id=%i;' % (int(project_id),int(video_id)))
+    labeling_jobs = [ {'id':x[0],'frame_name':x[1]} for x in db.cur.fetchall()]
+    
+    print('[*] label later: %i jobs'%len(labeling_jobs), project_id, video_id, timestamp, 'frame', frame_name)
     return json.dumps({'success':True}), 200, {'ContentType':'application/json'} 
 
 @app.route('/labeling',methods=["POST"])
