@@ -1,4 +1,5 @@
 import os 
+import numpy as np 
 
 def make_video(frames_dir, video_file, query = "predict-%05d.png"):
     import subprocess 
@@ -12,6 +13,17 @@ def make_video(frames_dir, video_file, query = "predict-%05d.png"):
 
     cmd = ['ffmpeg','-framerate','30','-i', os.path.join(frames_dir,query),'-vf','format=yuv420p',video_file]
     subprocess.call(cmd)
+
+
+def get_colors():
+    from matplotlib import colors as mcolors
+    color_dicts = dict(mcolors.BASE_COLORS, **mcolors.CSS4_COLORS)    
+    colors = [] 
+    for ccc in color_dicts.keys():
+        #colors[ccc] = [tuple(np.int32(256*c).tolist()) for c in mcolors.to_rgba(colors[ccc])[:3]]
+        color_dicts[ccc] = tuple(np.int32(256*np.array(mcolors.to_rgba(color_dicts[ccc])[:3])))
+        colors.append(color_dicts[ccc])
+    return colors 
 
 if __name__ == '__main__':
     import argparse
