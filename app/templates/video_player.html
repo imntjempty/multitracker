@@ -7,6 +7,10 @@
 </head>
 
 <body>
+  <script>
+    let project_id = {{project_id}};
+    let video_id = {{video_id}};
+  </script>
   <video
     id="my-video"
     class="video-js"
@@ -16,7 +20,7 @@
     height="580"
     data-setup="{}"
   >
-    <source src="/static/videos/Basler_127.mp4" type="video/mp4" />
+    <source src="/get_video/{{project_id}}/{{video_id}}" type="video/mp4" />
     <p class="vjs-no-js">
       To view this video please enable JavaScript, and consider upgrading to a
       web browser that

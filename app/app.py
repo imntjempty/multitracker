@@ -153,6 +153,7 @@ def get_frame(project_id,video_id,frame_idx):
         return json.dumps({'success':False}), 200, {'ContentType':'application/json'} 
 
 def gen_frame(project_id, video_id):
+    project_id, video_id = int(project_id), int(video_id)
     data = load_data(project_id, video_id)
     for i, file_name in enumerate(data):
         frame = cv.imread(file_name)
@@ -164,9 +165,7 @@ def get_video(project_id, video_id):
     local_path = '/home/dolokov/Downloads/Basler_127.mp4'
     #return send_file(local_path, mimetype='video/mp4')
     #return Response(open(local_path, "rb"), mimetype="video/mp4")
-    return Response(gen_frame(project_id, video_id)),
-                    mimetype='multipart/x-mixed-replace; boundary=frame')
-
+    return Response(gen_frame(project_id, video_id), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 @app.route('/refine_video/<project_id>/<video_id>')
 def refine_video(project_id, video_id):
