@@ -96,6 +96,20 @@ def load_raw_dataset(config,mode='train', image_directory = None):
     [H,W,_] = cv.imread(glob(os.path.join(os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'test'),'*.png'))[0]).shape
     [Hcomp,Wcomp,_] = cv.imread(glob(os.path.join(image_directory,'*.png'))[0]).shape
     
+    def calc_mean_rgb():
+        rgb = np.zeros((3,))
+        calcframes = glob(os.path.join(os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'train'),'*.png'))
+        shuffle(calcframes)
+        num = 100
+        calcframes = calcframes[:num]
+        for i in range(num):
+            _im = cv.imread(calcframes[i])
+            _im = np.reshape(_im,(_im.shape[0]*_im.shape[1],3))
+            rgb += np.mean(_im)
+        rgb /= num 
+        return rgb 
+    mean_rgb = calc_mean_rgb()
+
     def load_im(image_file):
         image = tf.io.read_file(image_file)
         image = tf.image.decode_png(image,channels=3)
@@ -103,7 +117,7 @@ def load_raw_dataset(config,mode='train', image_directory = None):
         
         # decompose hstack to dstack
         w = W#config['input_image_shape'][1] // (2 + len(config['keypoint_names'])//3)
-        h = H // 2
+        h = int(H * config['fov'])
         
         if mode == 'train' or mode == 'test':
             # now stack depthwise for easy random cropping and other augmentation
@@ -131,7 +145,9 @@ def load_raw_dataset(config,mode='train', image_directory = None):
                     random_angle = tf.random.uniform([1],-25.*np.pi/180., 25.*np.pi/180.)  
                     comp = tfa.image.rotate(comp, random_angle)
 
-                
+            # add black padding
+            p = 150
+            comp = tf.pad(comp,[[p,p],[p,p],[0,0]])
                 
             # add background of heatmap
             background = 255 - tf.reduce_sum(comp[:,:,3:],axis=2)
@@ -143,6 +159,7 @@ def load_raw_dataset(config,mode='train', image_directory = None):
             
             # split stack into images and heatmaps
             image = crop[:,:,:3]
+            image = image - mean_rgb
             heatmaps = crop[:,:,3:] / 255.
             return image, heatmaps
         else:
@@ -325,8 +342,8 @@ def train(config):
                     tf.summary.image(name,data,step=global_step)
                 with writer_train.as_default():
                     tf.summary.scalar("loss %s" % config['loss'],loss,step=global_step)
-                    tf.summary.scalar('min',tf.reduce_min(all_predicted_heatmaps[-1]),step=global_step)
-                    tf.summary.scalar('max',tf.reduce_max(all_predicted_heatmaps[-1]),step=global_step)
+                    tf.summary.scalar('min',tf.reduce_min(all_predicted_heatmaps[-1][:,:,:,:-1]),step=global_step)
+                    tf.summary.scalar('max',tf.reduce_max(all_predicted_heatmaps[-1][:,:,:,:-1]),step=global_step)
                     im_summary('image',inp/255.)
                     for kk in range(1+(y.shape[3]-1)//3):
                         im_summary('heatmaps-%i'%kk,tf.concat((y[:,:,:,kk*3:kk*3+3], predicted_heatmaps[:,:,:,kk*3:kk*3+3]),axis=2))
@@ -423,16 +440,17 @@ def get_config(project_id = 3):
     config['epochs'] = 1000000
     config['max_steps'] = 150000
     config['max_hours'] = 30.
-    config['lr'] = 2e-5 * 5
+    config['lr'] = 2e-5 * 5   *5
     config['lr_scratch'] = 1e-4
     config['loss'] = ['l1','dice','focal','normed_l1','l2'][2]
     if config['loss'] == 'l2':
         config['lr'] = 2e-4
     config['autoencoding'] = [False, True][0]
     config['pretrained_encoder'] = [False,True][1]
-    config['mixup'] = [False, True][1]
-    config['cutmix'] = [False, True][1]
+    config['mixup'] = [False, True][0]
+    config['cutmix'] = [False, True][0]
     config['num_hourglass'] = 8
+    config['fov'] = 0.75 # default 0.5
 
     config['project_id'] = project_id
     config['project_name'] = db.get_project_name(project_id)

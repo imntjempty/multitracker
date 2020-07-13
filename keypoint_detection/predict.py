@@ -121,8 +121,8 @@ def predict(config, checkpoint_path, project_id, video_id):
 
         # predict whole image, height like trained height and variable width 
         # to keep aspect ratio and relative size        
-        w = 1+int(2*config['img_height']/(float(x.shape[1]) / x.shape[2]))
-        xsmall = tf.image.resize(x, (2*config['img_height'],w))
+        w = 1+int((1./config['fov'])*config['img_height']/(float(x.shape[1]) / x.shape[2]))
+        xsmall = tf.image.resize(x, ((1./config['fov'])*config['img_height'],w))
 
         # 1) inference: run trained_model to get heatmap predictions
         tsb = time.time()
@@ -177,7 +177,7 @@ def predict(config, checkpoint_path, project_id, video_id):
                 cnt_output += 1 
 
         # estimate duration until done with all frames
-        if cnt_output % ( 30*16) == 0:
+        if cnt_output % ( 30*16) == 0 or cnt_output == 100:
             dur_one = float(tse-t2) / cnt_output
             dur_left_minute = float(len(frame_files)-cnt_output) * dur_one / 60.
             print('[*] %i minutes left for predicting (%i/100 done)' % (dur_left_minute, int(cnt_output / len(frame_files) * 100)))
