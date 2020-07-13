@@ -20,6 +20,7 @@ class DatabaseConnection(object):
                 create table if not exists projects (id integer primary key autoincrement, name text, manager text, keypoint_names text, created_at text);
                 create table if not exists videos (id integer primary key autoincrement, name text, project_id integer);
                 create table if not exists keypoint_positions (id integer primary key autoincrement, video_id integer, frame_idx text, keypoint_name text, individual_id integer, keypoint_x real, keypoint_y real);
+                create table if not exists frame_jobs (id integer primary key autoincrement, project_id integer, video_id integer, time real, frame_name text);
             """
             self.cur.executescript(query)
     
@@ -55,6 +56,13 @@ class DatabaseConnection(object):
         q = """select name from projects where id = %i;""" % int(project_id)
         self.execute(q)
         name = [x for x in self.cur.fetchall()][0][0]
+        return name 
+
+    def get_video_name(self, video_id):
+        q = """select name from videos where id = %i;""" % int(video_id)
+        self.execute(q)
+        name = [x for x in self.cur.fetchall()][0][0]
+        name = name.split('/')[-1]
         return name 
 
     def get_random_project_video(self, project_id):
