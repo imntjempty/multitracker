@@ -15,3 +15,16 @@ function post(url,package,callback_after_post){
     }
     http.send(JSON.stringify(package));
 }
+
+function get(theUrl, callback = null){
+    var xmlHttp = new XMLHttpRequest();
+    xmlHttp.onreadystatechange = function() { 
+        if (xmlHttp.readyState == 4 && xmlHttp.status == 200)
+            if (callback === null) 
+                console.log('[*] got request', xmlHttp.responseText);
+            else
+                callback(xmlHttp.responseText);
+    }
+    xmlHttp.open("GET", theUrl, true); // true for asynchronous 
+    xmlHttp.send(null);
+}

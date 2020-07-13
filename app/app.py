@@ -26,7 +26,7 @@ tf.get_logger().setLevel(logging.ERROR)
 from multitracker.be import video
 from multitracker.keypoint_detection import model, predict
 from multitracker.keypoint_detection import heatmap_drawing
-
+from multitracker import util
 from multitracker.graph_tracking.__main__ import load_data
 
 app = Flask(__name__)
@@ -85,7 +85,10 @@ def render_labeling(project_id):
     db.execute('select id, frame_name from frame_jobs where project_id=%i and video_id=%i;' % (int(project_id),int(video_id)))
     labeling_jobs = [ {'id':x[0],'frame_name':x[1]} for x in db.cur.fetchall()]
     if len(labeling_jobs) > 0:
+        if not labeling_jobs[0]['frame_name'][:-4] == '.png':
+            labeling_jobs[0]['frame_name'] += '.png'
         frame_idx = '.'.join(labeling_jobs[0]['frame_name'].split('.')[:-1])
+        #print('A',labeling_jobs[0]['frame_name'],'->',frame_idx)
         print('[*] found %i labeling jobs, giving %i' % (len(labeling_jobs),labeling_jobs[0]['id']))
 
         # delete job
@@ -198,6 +201,126 @@ def label_later(project_id, video_id):
     
     print('[*] label later: %i jobs'%len(labeling_jobs), project_id, video_id, timestamp, 'frame', frame_name)
     return json.dumps({'success':True}), 200, {'ContentType':'application/json'} 
+
+@app.route('/delete_labeling/<project_id>/<video_id>/<frame_idx>')
+def delete_labeling(project_id, video_id, frame_idx):
+    project_id = int(project_id)
+    video_id = int(video_id)
+    
+    db.execute("delete from keypoint_positions where video_id=%i and frame_idx='%s'" % (video_id, frame_idx))
+    db.commit()
+    q = "insert into frame_jobs (project_id, video_id, frame_name) values (%i, %i, '%s');" % (int(project_id),int(video_id),frame_idx)
+    db.execute(q)
+    db.commit()
+    
+    return json.dumps({'success':True}), 200, {'ContentType':'application/json'} 
+
+idx_checked = {} 
+@app.route('/check_labeling/<project_id>/<video_id>')
+def check_labeling_handler(project_id, video_id):
+    """
+        serve a little page to see the drawn labeling and two buttons for good and bad. bads should be deleted and added as a labeling job
+    """
+    project_id, video_id = int(project_id), int(video_id)
+    config = model.get_config(project_id=project_id)
+    
+    if video_id not in idx_checked:
+        idx_checked[video_id] = 0
+    
+    # first get all frames 
+    q = "select frame_idx from keypoint_positions where video_id=%i order by id;" % video_id
+    db.execute(q)
+    frame_idxs = [x[0] for x in db.cur.fetchall()]
+    frame_idxs = list(set(frame_idxs))
+    frame_idx = frame_idxs[idx_checked[video_id]]
+
+    q = "select keypoint_name, individual_id, keypoint_x, keypoint_y from keypoint_positions where video_id=%i and frame_idx='%s' order by individual_id, keypoint_name desc;" % (video_id,frame_idx)
+    db.execute(q)
+    keypoints = [x for x in db.cur.fetchall()]
+    
+    filepath = os.path.expanduser("~/data/multitracker/projects/%i/%i/frames/train/%s.png" % (int(project_id), int(video_id), frame_idx))
+    im = cv.imread(filepath)
+    
+    hm = heatmap_drawing.generate_hm(im.shape[0], im.shape[1] , [ [int(kp[2]),int(kp[3]),kp[0]] for kp in keypoints ], config['keypoint_names'])
+    colors = util.get_colors()
+    vis = np.float32(im)
+    hm_color = np.zeros_like(vis)
+    for i in range(hm.shape[2]):
+        hm8 = hm[:,:,i]
+        hm8[hm8<0.5]=0
+        c = np.array(colors[i]).reshape((1,1,3))
+        c = np.tile(c,[hm.shape[0],hm.shape[1],1])
+    
+        hm8 = np.expand_dims(hm8,axis=2)
+        hmc = c * np.tile(hm8,[1,1,3])
+        hm_color += hmc 
+    vis = np.uint8(vis/2. + hm_color/2.)
+    vis_path = '/tmp/check_%i-%s.png' % (video_id, str(frame_idx)) 
+    cv.imwrite(vis_path, vis)
+    #print('[*] wrote',vis_path,vis.shape,vis.dtype,vis.min(),vis.max())
+    idx_checked[video_id] += 1
+    print('idx_checked',idx_checked[video_id])
+
+
+    dom = """
+        <html>
+        <head>
+            <link rel="stylesheet" type="text/css" href="https://semantic-ui.com/dist/semantic.min.css">
+            <script
+                src="https://code.jquery.com/jquery-3.1.1.min.js"
+                integrity="sha256-hVVnYaiADRTO2PzUGmuLJr8BLUSjGIZsDYGmIJLv2b8="
+                crossorigin="anonymous"></script>
+            <script src="https://semantic-ui.com/dist/semantic.min.js"></script>
+            <script src="/static/js/network.js"></script>
+            <style>
+                    * {
+                        margin: 0;
+                        padding: 0;
+                    }
+                    .imgbox {
+                        height: 100%
+                    }
+                    
+                </style>
+        </head>
+        <body>
+            <div class="imgbox">
+                <img height="80%" class="center-fit" src="/get_labeled_frame/[project_id]/[video_id]/[frame_idx]">
+                
+                <script type="text/javascript">
+                    function onclick_ok(){ window.location.reload() }
+                    function onclick_bad(){ 
+                        get("/delete_labeling/[project_id]/[video_id]/[frame_idx]"); 
+                        window.location.reload(); 
+                    }
+                </script>
+                <button id="bu_ok" class="ui positive button" onclick="onclick_ok();">OK</button>
+                <button id="bu_bad" class="ui negative button" onclick='onclick_bad();'>BAD</button>
+            </div>
+            
+        </body>
+        </html>
+    """
+    for _ in range(3):
+        dom = dom.replace('[project_id]',str(project_id)).replace('[video_id]',str(video_id)).replace('[frame_idx]',str(frame_idx))
+    return dom 
+    # .imgbox {window.location.reload() margin: auto;                    }
+
+@app.route('/get_labeled_frame/<project_id>/<video_id>/<frame_idx>')
+def get_labeled_frame(project_id,video_id,frame_idx):
+    try:
+        #local_path = os.path.expanduser("~/data/multitracker/projects/%s/%s/frames/train/%s.png" % (project_id, video_id, frame_idx))
+        # get labeling and draw it on image
+        drawing_path = '/tmp/check_%i-%s.png' % (int(video_id), frame_idx) 
+        print('[*] trying to read',drawing_path)
+        #if os.path.isfile(drawing_path):
+        #    os.remove(drawing_path)
+        return send_file(drawing_path, mimetype='image/%s' % drawing_path.split('.')[-1])
+    except Exception as e:
+        print('[E] /get_frame',project_id,video_id,frame_idx)
+        print(e)
+        return json.dumps({'success':False}), 200, {'ContentType':'application/json'} 
+
 
 @app.route('/labeling',methods=["POST"])
 def receive_labeling():
