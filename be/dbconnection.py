@@ -82,10 +82,23 @@ class DatabaseConnection(object):
                             inner join videos on videos.id = keypoint_positions.video_id
                             where videos.project_id = %i;
         ''' % int(project_id))
-        return list(set([x for x in self.cur.fetchall()]))
+        return list(set([x[0] for x in self.cur.fetchall()]))
 
     def get_count_labeled_frames(self, project_id):
         return len(self.get_labeled_frames(project_id))
+
+    def get_labeled_bbox_frames(self, project_id):
+        self.execute('''select frame_idx 
+                            from bboxes
+                            inner join videos on videos.id = bboxes.video_id
+                            where videos.project_id = %i;
+        ''' % int(project_id))
+        return list(set([x[0] for x in self.cur.fetchall()]))
+
+    def get_count_labeled_bbox_frames(self, project_id):
+        return len(self.get_labeled_bbox_frames(project_id))
+
+
 
     def save_labeling(self, data):
         keypoint_names = self.get_keypoint_names(int(data['project_id']))
@@ -99,7 +112,14 @@ class DatabaseConnection(object):
 
                 values = (int(data['video_id']), str(data['frame_idx']), keypoint_name, id_ind, x, y)
                 self.insert(query, values)
-        print('[*] saved labeling data to database for video %i, frame %s.' %(int(data['video_id']),str(data['frame_idx'])))
+        print('[*] saved keypoint labeling data to database for video %i, frame %s.' %(int(data['video_id']),str(data['frame_idx'])))
+
+    def save_bbox_labeling(self, data):
+        for i, bbox in enumerate(data['bboxes']):
+            query = """ insert into bboxes (video_id, frame_idx, x1, y1, x2, y2) values (?,?,?,?,?,?); """
+            values = (int(data['video_id']), str(data['frame_idx']), bbox['x1'], bbox['y1'], bbox['x2'], bbox['y2'])
+            self.insert(query, values)
+        print('[*] saved bbox labeling data to database for video %i, frame %s.' %(int(data['video_id']),str(data['frame_idx'])))
 
 
 def get_from_store(_class):

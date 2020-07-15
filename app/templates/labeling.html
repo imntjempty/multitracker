@@ -68,24 +68,29 @@
     <script src="/static/js/util.js"></script>
 </head>
 <body>
-<dialog id="gui" style="position:fixed;top:75px; left:75%; background-color:lightgrey;padding: 10px 10px 10px 10px; z-index:1000001; width: 240px;" open>
-    <table>
-    <tr><td><h2 id="gui_title">0</h2></td></tr>
-    <tr><td><input type="button" id="bu_skip_keypoint" value="skip key point" class="ui button"></td></tr>
-    
-    <tr><td><input type="button" id="bu_send" value="next frame" class="positive ui button"></td></tr>
-    <tr><td><input type="button" id="bu_skip" value="skip frame" class="negative ui button"></td></tr>
-    <table class="ui celled table">
-        <thead><tr><th>keypoint names</th></tr></thead>
-        <tbody>
-            {% for keypoint_name in keypoint_names.split(sep) %}
-                <tr><td data-label="keypoint name" name="kpname">{{keypoint_name}}</td></tr>
-            {% endfor %}
-        </tbody>
-    <tr><td><div id="container_gui"></div></td></tr>
-    </table>
-</dialog>
-
+{% if labeling_mode == 'keypoint' %}
+    <dialog id="gui" style="position:fixed;top:75px; left:75%; background-color:lightgrey;padding: 10px 10px 10px 10px; z-index:1000001; width: 240px;" open>
+        <table>
+        <tr><td><h2 id="gui_title">0</h2></td></tr>
+        <tr><td><input type="button" id="bu_skip_keypoint" value="skip key point" class="ui button"></td></tr>
+        
+        <tr><td><input type="button" id="bu_send" value="next frame" class="positive ui button"></td></tr>
+        <tr><td><input type="button" id="bu_skip" value="skip frame" class="negative ui button"></td></tr>
+            <table class="ui celled table">
+                <thead><tr><th>keypoint names</th></tr></thead>
+                <tbody>
+                    {% for keypoint_name in keypoint_names.split(sep) %}
+                        <tr><td data-label="keypoint name" name="kpname">{{keypoint_name}}</td></tr>
+                    {% endfor %}
+                </tbody>
+            <tr><td><div id="container_gui"></div></td></tr>
+        </table>
+    </dialog>
+{% endif %}
+{% if labeling_mode == 'bbox' %}
+    <input type="button" id="bu_undobbox" value="delete last bounding box" class="negative ui button">    
+    <input type="button" id="bu_send" value="next frame" class="positive ui button">
+{% endif %}
 <div id="container" style="height: 100%;"></div>
 
 <script src="/static/js/labeling.js"></script>
@@ -96,14 +101,32 @@
     let frame_idx = "{{frame_idx}}";
     let num_db_frames = {{num_db_frames}};
     let keypoint_names = "{{keypoint_names}}".split("{{sep}}");
+    let labeling_mode = "{{labeling_mode}}";
     
-    let frame_candidates = [];
-    {% for channel_candidates in frame_candidates %}
-        console.log("channel","{{channel_candidates}}");
-    {% endfor %}
 
     init_fe();
-    init_gui();
+    
+    document.getElementById("bu_send").onclick = function(){
+        let url = "/labeling";
+        let package = get_labeling_data();
+        if(package !== null){
+            post(url,package,redirect_next_task);
+        }
+    };
+    
+    if(labeling_mode=='keypoint'){ 
+        init_gui();
+    }else{
+        document.getElementById("bu_undobbox").onclick = function(){
+            stage.findOne("#layer").findOne('#bbox_'+(num_indiv-1).toString()).destroy();
+            stage.draw();
+            num_indiv--;
+        };
+
+        document.getElementById('bu_send').value += " "+num_db_frames.toString();
+
+        init_pointer_cross();
+    }
     //gui.showModal();
 </script>
 </body></html>

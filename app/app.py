@@ -108,7 +108,7 @@ def render_labeling(project_id):
                     frame_idx = '.'.join(frame_idx.split('/')[-1].split('.')[:-1])
                     unlabeled_frame_found = not (frame_idx in labeled_frame_idxs)
 
-            print('[*] serving label job for frame %s.'%(frame_idx))
+            print('[*] serving keypoint label job for frame %s.'%(frame_idx))
         else:
             shuffle(frames)
             nn = 1#32
@@ -135,7 +135,7 @@ def render_labeling(project_id):
                 stds = np.std(pred,axis=(0,2,3,4))
                 maxidx = np.argmax(stds)
                 frame_idx = '.'.join(unlabeled[maxidx].split('/')[-1].split('.')[:-1])
-                print('[*] serving label job for frame %s with std %f.'%(frame_idx,stds[maxidx]))
+                print('[*] serving keypoint label job for frame %s with std %f.'%(frame_idx,stds[maxidx]))
 
     frame_candidates = []
     if 0:
@@ -148,13 +148,47 @@ def render_labeling(project_id):
             frame_candidates.append(predict.extract_frame_candidates(imp[:,:,c],0.1))
         print('frame_candidates',frame_candidates)
         
-    print('[*] serving label job for frame %s.'%(frame_idx))       
+    print('[*] serving keypoint label job for frame %s.'%(frame_idx))       
     
     if args.open_gallery:
         p = subprocess.Popen(['eog',unlabeled[maxidx]])
-    return render_template('labeling.html',project_id = int(project_id), video_id = int(video_id), frame_idx = frame_idx, keypoint_names = db.list_sep.join(config['keypoint_names']), sep = db.list_sep, num_db_frames = num_db_frames, frame_candidates = frame_candidates)
+    return render_template('labeling.html',project_id = int(project_id), video_id = int(video_id), frame_idx = frame_idx, keypoint_names = db.list_sep.join(config['keypoint_names']), sep = db.list_sep, num_db_frames = num_db_frames, frame_candidates = frame_candidates, labeling_mode = 'keypoint')
 
+
+@app.route('/get_next_bbox_frame/<project_id>')
+def get_next_bbox_frame(project_id):
+    project_id = int(project_id)
+    config = model.get_config(project_id)
     
+    
+    # load labeled frame idxs
+    labeled_frames_keypoints = db.get_labeled_frames(project_id)
+    labeled_frame_idxs = db.get_labeled_bbox_frames(project_id)
+    num_db_frames = len(labeled_frame_idxs)
+    
+    # load frame files from disk
+    #frames = []
+    #while len(frames) == 0:
+    #    video_id = db.get_random_project_video(project_id)
+    #    frames_dir = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, project_id), video_id),'train')
+    #    frames = sorted(glob(os.path.join(frames_dir, '*.png')))
+    video_id = db.get_random_project_video(project_id)
+    frames_dir = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, project_id), video_id),'train')
+    frames = [os.path.join(frames_dir, '%s.png' % ff) for ff in labeled_frames_keypoints]
+    shuffle(frames)
+    
+    unlabeled_frame_found = False 
+    while not unlabeled_frame_found:
+        ridx = int(np.random.uniform(len(frames)))
+        if ridx > 0 and ridx < len(frames):
+            frame_idx = frames[ridx]
+            #frame_idx = frames[int(len(frames)*np.random.random())] # random sampling
+            frame_idx = '.'.join(frame_idx.split('/')[-1].split('.')[:-1])
+            unlabeled_frame_found = not (frame_idx in labeled_frame_idxs)
+
+    print('[*] serving bbox label job for frame %s.'%(frame_idx))
+
+    return render_template('labeling.html',project_id = int(project_id), video_id = int(video_id), frame_idx = frame_idx, num_db_frames = num_db_frames, keypoint_names = db.list_sep.join(config['keypoint_names']), sep = db.list_sep, labeling_mode = 'bbox')
 
 @app.route('/get_frame/<project_id>/<video_id>/<frame_idx>')
 def get_frame(project_id,video_id,frame_idx):
@@ -319,7 +353,7 @@ def get_labeled_frame(project_id,video_id,frame_idx):
         return send_file(drawing_path, mimetype='image/%s' % drawing_path.split('.')[-1])
     except Exception as e:
         print('[E] /get_frame',project_id,video_id,frame_idx)
-        print(e)
+        print(e)p = 
         return json.dumps({'success':False}), 200, {'ContentType':'application/json'} 
 
 
@@ -328,44 +362,48 @@ def receive_labeling():
     data = request.get_json(silent=True,force=True)
     print('[*] received labeling for frame %i.'%(int(data['frame_idx']) ))
     
-    # save labeling to database
-    db.save_labeling(data)
+    if data['labeling_mode'] == 'keypoint':
+        # save labeling to database
+        db.save_labeling(data)
 
-    if training_model is not None:
-        # draw sent data
-        filepath = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, data['project_id']), data['video_id']),'train','%s.png'%data['frame_idx'])
-        keypoints = [[d['keypoint_name'],d['id_ind'],d['x'],d['y']] for d in data['keypoints']]
-        y = heatmap_drawing.vis_heatmap(cv.imread(filepath), config['keypoint_names'], keypoints, horistack = False)
-        w = 1+int(2*config['img_height']/(float(y.shape[0]) / y.shape[1]))
-        y = cv.resize(y,(w,2*config['img_height']))
-        y = np.float32(y / 255.)
-        bs = 1 # config['batch_size']
-        y = np.expand_dims(y,axis=0)
-        if bs > 1:
-            y = np.tile(y,[bs,1,1,1])
-        batch = np.tile(np.expand_dims(cv.resize(cv.imread(filepath), (w,config['img_height'])),axis=0),[bs,1,1,1])
-        batch = batch.astype(np.float32)
-        
-        # train model with new data multiple steps
-        ni = 3
-        for i in range(ni):
-            with tf.GradientTape(persistent=True) as tape:
-                predicted_heatmaps = training_model(batch, training=True)[-1]
-                y = y[:,:,:,:predicted_heatmaps.shape[3]]
-                predicted_heatmaps = tf.image.resize(predicted_heatmaps,(y.shape[1],y.shape[2]))
-                loss = 0.
-                for ph in predicted_heatmaps: 
-                    loss += model.get_loss(ph, y, config)
-                print('loss',i,loss)
-            # update network parameters
-            gradients = tape.gradient(loss,training_model.trainable_variables)
-            optimizer.apply_gradients(zip(gradients,training_model.trainable_variables))
+        if training_model is not None:
+            # draw sent data
+            filepath = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, data['project_id']), data['video_id']),'train','%s.png'%data['frame_idx'])
+            keypoints = [[d['keypoint_name'],d['id_ind'],d['x'],d['y']] for d in data['keypoints']]
+            y = heatmap_drawing.vis_heatmap(cv.imread(filepath), config['keypoint_names'], keypoints, horistack = False)
+            w = 1+int(2*config['img_height']/(float(y.shape[0]) / y.shape[1]))
+            y = cv.resize(y,(w,2*config['img_height']))
+            y = np.float32(y / 255.)
+            bs = 1 # config['batch_size']
+            y = np.expand_dims(y,axis=0)
+            if bs > 1:
+                y = np.tile(y,[bs,1,1,1])
+            batch = np.tile(np.expand_dims(cv.resize(cv.imread(filepath), (w,config['img_height'])),axis=0),[bs,1,1,1])
+            batch = batch.astype(np.float32)
+            
+            # train model with new data multiple steps
+            ni = 3
+            for i in range(ni):
+                with tf.GradientTape(persistent=True) as tape:
+                    predicted_heatmaps = training_model(batch, training=True)[-1]
+                    y = y[:,:,:,:predicted_heatmaps.shape[3]]
+                    predicted_heatmaps = tf.image.resize(predicted_heatmaps,(y.shape[1],y.shape[2]))
+                    loss = 0.
+                    for ph in predicted_heatmaps: 
+                        loss += model.get_loss(ph, y, config)
+                    print('loss',i,loss)
+                # update network parameters
+                gradients = tape.gradient(loss,training_model.trainable_variables)
+                optimizer.apply_gradients(zip(gradients,training_model.trainable_variables))
 
-        global count_active_steps
-        count_active_steps += 1
-        # sometimes save model to disk
-        if count_active_steps % 10 == 0:
-            training_model.save(args.model)
+            global count_active_steps
+            count_active_steps += 1
+            # sometimes save model to disk
+            if count_active_steps % 10 == 0:
+                training_model.save(args.model)
+    elif data['labeling_mode'] == 'bbox':
+        #print(data)
+        db.save_bbox_labeling(data)
 
     return json.dumps({'success':True}), 200, {'ContentType':'application/json'} 
 
