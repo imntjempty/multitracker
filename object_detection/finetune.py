@@ -120,8 +120,8 @@ def get_bbox_data(config, vis_input_data=True):
 
     if vis_input_data:
         plt.figure(figsize=(30, 15))
-        for idx in range(10):
-            plt.subplot(2, 3, idx+1)
+        for idx in range(9):
+            plt.subplot(3, 3, idx+1)
             f = os.path.join(frames_dir, '%s.png' % sorted(list(frame_bboxes.keys()))[idx])
             fo = '/tmp/oo_%s'%f.split('/')[-1]
             train_image_np = cv.imread(f)

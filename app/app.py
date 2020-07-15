@@ -353,7 +353,7 @@ def get_labeled_frame(project_id,video_id,frame_idx):
         return send_file(drawing_path, mimetype='image/%s' % drawing_path.split('.')[-1])
     except Exception as e:
         print('[E] /get_frame',project_id,video_id,frame_idx)
-        print(e)p = 
+        print(e)
         return json.dumps({'success':False}), 200, {'ContentType':'application/json'} 
 
 
