@@ -245,17 +245,25 @@ def inference_train_video(detection_model,config, steps, minutes = 0):
     frame_detections = {}
     for i in tqdm.tqdm(range(len(frame_files))):
         #images = []
-        image = cv.imread(frame_files[i])
-        input_tensor = tf.convert_to_tensor(np.expand_dims(image,axis=0), dtype=tf.float32)
-        detections = detect(input_tensor)
-        frame_detections[frame_files[i]] = detections
-        #print(i,'/',len(frame_files),frame_files[i])
-        plot_detections(
-            image,
-            detections['detection_boxes'][0].numpy(),
-            detections['detection_classes'][0].numpy().astype(np.uint32) + label_id_offset,
-            detections['detection_scores'][0].numpy(),
-            category_index, figsize=(15, 20), image_name=os.path.join(output_dir,"frame_" + ('%06d' % i) + ".png"))
+        if i>0 and i % 500 == 0:
+            file_bboxes = output_dir + '_bboxes'
+            np.savez_compressed(file_bboxes,boxes=frame_detections)
+            print('[*] saved',file_bboxes)
+
+        try:
+            image = cv.imread(frame_files[i])
+            input_tensor = tf.convert_to_tensor(np.expand_dims(image,axis=0), dtype=tf.float32)
+            detections = detect(input_tensor)
+            frame_detections[frame_files[i]] = detections
+            #print(i,'/',len(frame_files),frame_files[i])
+            plot_detections(
+                image,
+                detections['detection_boxes'][0].numpy(),
+                detections['detection_classes'][0].numpy().astype(np.uint32) + label_id_offset,
+                detections['detection_scores'][0].numpy(),
+                category_index, figsize=(15, 20), image_name=os.path.join(output_dir,"frame_" + ('%06d' % i) + ".png"))
+        except Exception as e:
+            print(e)
 
     file_bboxes = output_dir + '_bboxes'
     np.savez_compressed(file_bboxes,boxes=frame_detections)
@@ -369,8 +377,9 @@ def main(args):
             detection_model.save(finetuned_checkpoint_path)
             print('[*] saved model to', finetuned_checkpoint_path)'''
 
-        if idx > 0 and (idx % 15000 == 0):# or idx in [5000]):
+        if idx > 0 and (idx % 15000 == 0):# or idx in [500]):
             inference_train_video(detection_model,config,idx,args.minutes)
+            
     print('Done fine-tuning!')
 
 if __name__ == '__main__':
