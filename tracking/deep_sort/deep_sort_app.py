@@ -6,6 +6,7 @@ from __future__ import division, print_function, absolute_import
 import argparse
 import os
 from glob import glob 
+import subprocess
 
 import cv2 as cv 
 import numpy as np
@@ -115,28 +116,28 @@ def create_detections(detection_mat, frame_idx, min_height=0):
         detection_list.append(Detection(bbox, confidence, feature))
     return detection_list
 
+def load_feature_extractor(config):
+    ## feature extractor
+    config = {'img_height':640, 'img_width': 640}
+    inputs = tf.keras.layers.Input(shape=[config['img_height'], config['img_width'], 3])
+    feature_extractor,encoder = autoencoder.Encoder(inputs)
+    encoder_model = Model(inputs = inputs, outputs = [feature_extractor,encoder])
+    ckpt = tf.train.Checkpoint(encoder_model=encoder_model)
 
-## feature extractor
-config = {'img_height':640, 'img_width': 640}
-inputs = tf.keras.layers.Input(shape=[config['img_height'], config['img_width'], 3])
-feature_extractor,encoder = autoencoder.Encoder(inputs)
-encoder_model = Model(inputs = inputs, outputs = [feature_extractor,encoder])
-ckpt = tf.train.Checkpoint(encoder_model=encoder_model)
+    #checkpoint_path = '/home/alex/checkpoints/multitracker_ae_bbox/2020-08-04_22-10-19.256387' 
+    ckpt_manager = tf.train.CheckpointManager(ckpt, config['autoencoder_model'], max_to_keep=5)
 
-checkpoint_path = '/home/alex/checkpoints/multitracker_ae_bbox/2020-08-04_22-10-19.256387' 
-ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
-
-# if a checkpoint exists, restore the latest checkpoint.
-if ckpt_manager.latest_checkpoint:
-    ckpt.restore(ckpt_manager.latest_checkpoint)
-    print('[*] Latest checkpoint restored',ckpt_manager.latest_checkpoint)
-else:
-    print('[*] WARNING: could not load pretrained model!')
-
+    # if a checkpoint exists, restore the latest checkpoint.
+    if ckpt_manager.latest_checkpoint:
+        ckpt.restore(ckpt_manager.latest_checkpoint)
+        print('[*] Latest checkpoint restored',ckpt_manager.latest_checkpoint)
+    else:
+        print('[*] WARNING: could not load pretrained model!')
+    return encoder_model
 
 act_detection_part_file = None
 act_detection_part_data = None 
-def load_detections(seq_info, frame_idx):
+def load_detections(encoder_model, seq_info, frame_idx):
     global act_detection_part_file
     global act_detection_part_data
     max_detections_per_frame = 10
@@ -151,10 +152,14 @@ def load_detections(seq_info, frame_idx):
     _frame_idx = '/home/alex/data/multitracker/projects/7/9/frames/train/%05d.png' % frame_idx
     if not _frame_idx in act_detection_part_data.keys():
         _files = sorted(glob(seq_info['detection_file']))
-        act_detection_part_file = _files[_files.index(act_detection_part_file)+1]
-        act_detection_part_data = np.load(act_detection_part_file,allow_pickle=True)['boxes'].item()
-        print('[*] loaded detection data',act_detection_part_file)
-    
+        try:
+            act_detection_part_file = _files[_files.index(act_detection_part_file)+1]
+            act_detection_part_data = np.load(act_detection_part_file,allow_pickle=True)['boxes'].item()
+            print('[*] loaded detection data',act_detection_part_file)
+        except:
+            # finished, save results 
+            return None 
+
     inp_tensor = autoencoder.load_im(_frame_idx)
     inp_tensor = tf.expand_dims(inp_tensor,0)
     features, _ = encoder_model(inp_tensor,training=False)
@@ -228,6 +233,9 @@ def run(config, detection_file, output_file, min_confidence,
         If True, show visualization of intermediate tracking results.
 
     """
+
+    encoder_model = load_feature_extractor(config)
+
     seq_info = gather_sequence_info(config, detection_file)
     #print('seq_info',seq_info.keys())
     
@@ -242,11 +250,14 @@ def run(config, detection_file, output_file, min_confidence,
         # Load image and generate detections.
         #detections = create_detections(
         #    seq_info["detections"], frame_idx, min_detection_height)
-        detections = load_detections(seq_info, frame_idx)
+        detections = load_detections(encoder_model, seq_info, frame_idx)
+        if detections is None:
+            return False 
+
         detections = [d for d in detections if d.confidence >= min_confidence]
         print('[*] processing frame',frame_idx,'with %i detections ' % len(detections))
-        if len(detections) > 10:
-            detections = []
+        #if len(detections) > 10:
+        #    detections = []
 
         # Run non-maxima suppression.
         boxes = np.array([d.tlwh for d in detections])
@@ -289,11 +300,24 @@ def run(config, detection_file, output_file, min_confidence,
     visualizer.run(frame_callback)
 
     # Store results.
-    f = open(output_file, 'w')
-    for row in results:
-        print('%d,%d,%.2f,%.2f,%.2f,%.2f,1,-1,-1,-1' % (
-            row[0], row[1], row[2], row[3], row[4], row[5]),file=f)
+    #f = open(output_file, 'w')
+    #for row in results:
+    #    print('%d,%d,%.2f,%.2f,%.2f,%.2f,1,-1,-1,-1' % (
+    #        row[0], row[1], row[2], row[3], row[4], row[5]),file=f)
+    result_data = {}
+    for [frame_idx, track_id,a,b,c,d] in results:
+        if not frame_idx in result_data:
+            result_data[frame_idx] = []
+        result_data[frame_idx].append([track_id,a,b,c,d])
+    np.savez_compressed('.'.join(output_file.split('.')[:-1]), tracked_boxes=result_data)
+        
 
+    if display:
+        print('[*] finished frames, writing video ...')
+        file_video = '/tmp/tracking.mp4'
+        subprocess.call(['ffmpeg','-framerate','30','-i','/tmp/vis_%d.png', '-vf', 'format=yuv420p','-vcodec','libx265', file_video])
+        subprocess.call(['rm','/tmp/vis*.png'])
+        print('[*] wrote video to %s' % file_video)
 
 def bool_string(input_string):
     if input_string not in {"True","False"}:

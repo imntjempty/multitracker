@@ -1,7 +1,7 @@
 
 """
 
-    python3.7 -m multitracker.object_detection.finetune --project_id 7 --video_id 9 --minutes 0
+    python3.7 -m multitracker.object_detection.finetune --project_id 7 --video_id 9 --minutes 10
 
 """
 
@@ -273,13 +273,8 @@ def inference_train_video(detection_model,config, steps, minutes = 0):
     np.savez_compressed(file_bboxes,boxes=frame_detections)
     print('[*] saved',file_bboxes)
 
-def main(args):
+def finetune(config):
     #setup_oo_api() 
-
-    config = model.get_config(project_id = args.project_id)
-    config['project_id'] = args.project_id
-    config['video_id'] = args.video_id
-    config['finetune'] = args.finetune
 
     # load and prepare data 
     train_image_tensors, gt_box_tensors, gt_classes_one_hot_tensors = get_bbox_data(config)
@@ -393,6 +388,11 @@ if __name__ == '__main__':
     parser.add_argument('--video_id',required=True,type=int)
     parser.add_argument('--minutes',required=False,default=0.0,type=float)
     #parser.add_argument('--thresh_detection',required=False,default=0.5,type=float)
-    parser.add_argument('--finetune', dest='finetune', default=False, action='store_true')
     args = parser.parse_args()
-    main(args)
+
+    config = model.get_config(project_id = args.project_id)
+    config['project_id'] = args.project_id
+    config['video_id'] = args.video_id
+    
+    finetune(config)
+    
