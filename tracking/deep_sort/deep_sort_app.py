@@ -248,7 +248,7 @@ def run(config, detection_file, output_file, min_confidence,
             return False 
 
         detections = [d for d in detections if d.confidence >= min_confidence]
-        print('[*] processing frame',frame_idx,'with %i detections ' % len(detections))
+        #print('[*] processing frame',frame_idx,'with %i detections ' % len(detections))
         #if len(detections) > 10:
         #    detections = []
 

@@ -135,13 +135,14 @@ class Tracker:
         
         if len(unmatched_tracks) > 0: print('unmatched_tracks',unmatched_tracks)
         if len(unmatched_detections) > 0: print('unmatched_detections',unmatched_detections)
-        for tt in unmatched_tracks:
-            print('unmatched track',self.tracks[tt].mean)
-        for tt in unmatched_detections:
-            print('unmatched detection', detections[tt].tlwh, detections[tt].confidence)
+        
+        if 0:
+            for tt in unmatched_tracks:
+                print('unmatched track',self.tracks[tt].mean)
+            for tt in unmatched_detections:
+                print('unmatched detection', detections[tt].tlwh, detections[tt].confidence)
 
-        #if len(self.tracks) >= self.fixed_number and len(unmatched_tracks) > 0:
-        print('tracks',len(self.tracks),'new id',self._next_id)
+            print('tracks',len(self.tracks),'new id',self._next_id)
 
         return matches, unmatched_tracks, unmatched_detections
 

@@ -78,13 +78,13 @@ def main(args):
     config['object_model'] = args.object_model
     config['minutes'] = args.minutes
     
-    # train keypoint estimator model
+    # 1) train keypoint estimator model
     if config['keypoint_model'] is None:
         config['max_steps'] = 50000
         model.create_train_dataset(config)
         config['keypoint_model'] = model.train(config)
 
-    # detection stage
+    # 2) inference keypooint detection 
     file_keypoint_detections = '/tmp/keypoint_detections-%i-%f-%f.npz' % (args.video_id, args.minutes, args.thresh_detection)
     print('file_keypoint_detections',file_keypoint_detections)
     if not os.path.isfile(file_keypoint_detections):
@@ -95,7 +95,7 @@ def main(args):
         detections = np.load(file_keypoint_detections, allow_pickle=True)['detections'].item()
         wrote_detections = False 
 
-    # tracklet stage
+    # 3) keypoint tracklet stage
     file_tracklets = '/tmp/tracklets-%i-%f-%f.npz' % (args.video_id, args.minutes, args.thresh_detection)
     print('file_tracklets',file_tracklets)
     if wrote_detections or not os.path.isfile(file_tracklets):
@@ -106,7 +106,7 @@ def main(args):
         tracklets = np.load(file_tracklets, allow_pickle=True)['tracklets']#.item()
         wrote_tracklets = False 
 
-    # tracklet clustering stage
+    # 4) keypoint tracklet clustering stage
     file_clusters = '/tmp/clusters-%i-%f-%f.npz' % (args.video_id, args.minutes, args.thresh_detection)
     print('file_clusters',file_clusters)
     if wrote_tracklets or not os.path.isfile(file_clusters):
@@ -117,7 +117,7 @@ def main(args):
         clusters = np.load(file_clusters, allow_pickle=True)['clusters']#.item()
         wrote_clusters = False
     
-    # animal bounding box finetuning -> trains and inferences 
+    # 5) animal bounding box finetuning -> trains and inferences 
     config['max_steps'] = 15000
     detection_file_bboxes = '/tmp/multitracker/object_detection/predictions/%i/15000_bboxes_*.npz' % config['video_id']
     # train object detector
@@ -127,14 +127,15 @@ def main(args):
     # run animal tracking
     detection_file_trackbedbboxes = '/tmp/multitracker/tracked_boxes_%i.npz' % config['video_id']
 
-    # train autoencoder for tracking appearence vector
+    # 6) train autoencoder for tracking appearence vector
     if config['autoencoder_model'] is None:
         config_autoencoder = autoencoder.get_autoencoder_config()
         config_autoencoder['project_id'] = config['project_id']
         config_autoencoder['video_id'] = config['video_id']
         config['autoencoder_model'] = autoencoder.train(config_autoencoder)
     print('[*] autoencoder model',config['autoencoder_model'])
-    
+
+    # 7) run bbox tracking deep sort with fixed tracks
     min_confidence = 0.8 # Detection confidence threshold. Disregard all detections that have a confidence lower than this value.
     nms_max_overlap = 1.0 # Non-maxima suppression threshold: Maximum detection overlap
     max_cosine_distance = 0.2 # Gating threshold for cosine distance metric (object appearance).
@@ -148,7 +149,7 @@ def main(args):
     tracked_boxes = np.load(detection_file_trackbedbboxes, allow_pickle=True)['tracked_boxes']
     print('[*] loaded bbox animal tracking for %i frames' % len(list(tracked_boxes.keys())))
 
-    # visualize merged results
+    # 8) visualize merged results
     video_file = '/tmp/tracking_%i.mp4' % config['video_id']
     visualize_boxes_with_keypoints(tracked_boxes, clusters, video_file)
 
