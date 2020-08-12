@@ -249,7 +249,7 @@ def inference_train_video(detection_model,config, steps, minutes = 0):
             file_bboxes = output_dir + '_bboxes_%05d' % i 
             np.savez_compressed(file_bboxes,boxes=frame_detections)
             #np.save(file_bboxes,frame_detections)
-            print('[*] saved',file_bboxes)
+            #print('[*] saved',file_bboxes)
             frame_detections = {}
 
         try:
@@ -275,6 +275,8 @@ def inference_train_video(detection_model,config, steps, minutes = 0):
 
 def finetune(config):
     #setup_oo_api() 
+    if not 'finetune' in config:
+        config['finetune'] = False 
 
     # load and prepare data 
     train_image_tensors, gt_box_tensors, gt_classes_one_hot_tensors = get_bbox_data(config)
@@ -350,7 +352,7 @@ def finetune(config):
     train_step_fn = get_model_train_step_function(detection_model, optimizer, to_fine_tune)
 
     print('Start fine-tuning!', flush=True)
-    for idx in range(num_batches):
+    for idx in range(config['max_steps']):
         # Grab keys for a random subset of examples
         all_keys = list(range(len(train_image_tensors)))
         random.shuffle(all_keys)
@@ -368,7 +370,7 @@ def finetune(config):
         total_loss = train_step_fn(image_tensors, gt_boxes_list, gt_classes_list)
 
         if idx % 10 == 0:
-            print('batch ' + str(idx) + ' of ' + str(num_batches) + ', loss=' +  str(total_loss.numpy()), flush=True)
+            print('batch ' + str(idx) + ' of ' + str(config['max_steps']) + ', loss=' +  str(total_loss.numpy()), flush=True)
 
         '''if idx % 1000 == 0:
             finetuned_checkpoint_path = os.path.expanduser('~/checkpoints/object_detection')
@@ -376,10 +378,10 @@ def finetune(config):
             detection_model.save(finetuned_checkpoint_path)
             print('[*] saved model to', finetuned_checkpoint_path)'''
 
-        if idx > 0 and (idx % 15000 == 0):# or idx in [500]):
-            inference_train_video(detection_model,config,idx,args.minutes)
+    print('[*] Done fine-tuning object detection! inferencing all frames ...')    
+    inference_train_video(detection_model,config,idx,config['minutes'])
 
-    print('Done fine-tuning!')
+    
 
 if __name__ == '__main__':
     import argparse 
@@ -393,6 +395,7 @@ if __name__ == '__main__':
     config = model.get_config(project_id = args.project_id)
     config['project_id'] = args.project_id
     config['video_id'] = args.video_id
+    config['minutes'] = args.minutes
     
     finetune(config)
     

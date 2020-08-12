@@ -2,6 +2,7 @@
 import os
 import numpy as np 
 import tensorflow as tf 
+tf.get_logger().setLevel('INFO')
 from glob import glob 
 from random import shuffle 
 import time 
@@ -70,15 +71,16 @@ def visualize_boxes_with_keypoints(tracked_boxes, tracked_keypoints, video_file)
 def main(args):
     tstart = time.time()
     config = model.get_config(project_id = args.project_id)
+    config['project_id'] = args.project_id
     config['video_id'] = args.video_id
     config['keypoint_model'] = args.keypoint_model
     config['autoencoder_model'] = args.autoencoder_model 
     config['object_model'] = args.object_model
-
+    config['minutes'] = args.minutes
     
     # train keypoint estimator model
     if config['keypoint_model'] is None:
-        config['max_steps'] = 150000
+        config['max_steps'] = 50000
         model.create_train_dataset(config)
         config['keypoint_model'] = model.train(config)
 
@@ -116,7 +118,7 @@ def main(args):
         wrote_clusters = False
     
     # animal bounding box finetuning -> trains and inferences 
-    config['max_steps'] = 15001
+    config['max_steps'] = 15000
     detection_file_bboxes = '/tmp/multitracker/object_detection/predictions/%i/15000_bboxes_*.npz' % config['video_id']
     # train object detector
     if len(glob(detection_file_bboxes)) == 0:
@@ -127,8 +129,12 @@ def main(args):
 
     # train autoencoder for tracking appearence vector
     if config['autoencoder_model'] is None:
-        config['autoencoder_model'] = autoencoder.train()
-
+        config_autoencoder = autoencoder.get_autoencoder_config()
+        config_autoencoder['project_id'] = config['project_id']
+        config_autoencoder['video_id'] = config['video_id']
+        config['autoencoder_model'] = autoencoder.train(config_autoencoder)
+    print('[*] autoencoder model',config['autoencoder_model'])
+    
     min_confidence = 0.8 # Detection confidence threshold. Disregard all detections that have a confidence lower than this value.
     nms_max_overlap = 1.0 # Non-maxima suppression threshold: Maximum detection overlap
     max_cosine_distance = 0.2 # Gating threshold for cosine distance metric (object appearance).
@@ -138,8 +144,7 @@ def main(args):
     if not os.path.isfile(detection_file_trackbedbboxes):
         deep_sort_app.run(
             config, detection_file_bboxes, detection_file_trackbedbboxes,
-            min_confidence, nms_max_overlap, min_detection_height,
-            max_cosine_distance, nn_budget, display, feature_extractor_path)
+            min_confidence, nms_max_overlap, max_cosine_distance, nn_budget, display)
     tracked_boxes = np.load(detection_file_trackbedbboxes, allow_pickle=True)['tracked_boxes']
     print('[*] loaded bbox animal tracking for %i frames' % len(list(tracked_boxes.keys())))
 

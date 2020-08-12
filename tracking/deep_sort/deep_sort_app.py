@@ -118,7 +118,7 @@ def create_detections(detection_mat, frame_idx, min_height=0):
 
 def load_feature_extractor(config):
     ## feature extractor
-    config = {'img_height':640, 'img_width': 640}
+    config.update({'img_height':640, 'img_width': 640})
     inputs = tf.keras.layers.Input(shape=[config['img_height'], config['img_width'], 3])
     feature_extractor,encoder = autoencoder.Encoder(inputs)
     encoder_model = Model(inputs = inputs, outputs = [feature_extractor,encoder])
@@ -205,7 +205,7 @@ def load_detections(encoder_model, seq_info, frame_idx):
     return results        
 
 def run(config, detection_file, output_file, min_confidence,
-        nms_max_overlap, min_detection_height, max_cosine_distance,
+        nms_max_overlap, max_cosine_distance,
         nn_budget, display):
     """Run multi-target tracker on a particular sequence.
 
@@ -221,9 +221,6 @@ def run(config, detection_file, output_file, min_confidence,
         a confidence lower than this value.
     nms_max_overlap: float
         Maximum detection overlap (non-maxima suppression threshold).
-    min_detection_height : int
-        Detection height threshold. Disregard all detections that have
-        a height lower than this value.
     max_cosine_distance : float
         Gating threshold for cosine distance metric (object appearance).
     nn_budget : Optional[int]
@@ -246,10 +243,6 @@ def run(config, detection_file, output_file, min_confidence,
 
     def frame_callback(vis, frame_idx):
         #print("Processing frame %05d" % frame_idx)
-        
-        # Load image and generate detections.
-        #detections = create_detections(
-        #    seq_info["detections"], frame_idx, min_detection_height)
         detections = load_detections(encoder_model, seq_info, frame_idx)
         if detections is None:
             return False 
@@ -347,10 +340,6 @@ def parse_args():
         "all detections that have a confidence lower than this value.",
         default=0.8, type=float)
     parser.add_argument(
-        "--min_detection_height", help="Threshold on the detection bounding "
-        "box height. Detections with height smaller than this value are "
-        "disregarded", default=0, type=int)
-    parser.add_argument(
         "--nms_max_overlap",  help="Non-maxima suppression threshold: Maximum "
         "detection overlap.", default=1.0, type=float)
     parser.add_argument(
@@ -374,5 +363,5 @@ if __name__ == "__main__":
     config['video_id'] = args.video_id
     run(
         config, args.detection_file, args.output_file,
-        args.min_confidence, args.nms_max_overlap, args.min_detection_height,
+        args.min_confidence, args.nms_max_overlap,
         args.max_cosine_distance, args.nn_budget, args.display)

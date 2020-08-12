@@ -413,14 +413,16 @@ def train(config):
                         except Exception as e:
                             print(e)
                     else:
-                        return 
+                        _checkpoint_path = os.path.join(checkpoint_path,'trained_model.h5')
+                        model.save(_checkpoint_path)
+                        return _checkpoint_path
 
-                    if n % 1000 == 0:
+                    if n % 1000 == 0 and 0:
                         ckpt_save_path = ckpt_manager.save()
                         print('[*] saving model to %s'%ckpt_save_path)
                         model.save(os.path.join(checkpoint_path,'trained_model.h5'))
-                        if n % 5000 == 0:
-                            model.save(os.path.join(checkpoint_path,'trained_model-%ik.h5'%(n//1000)))
+                        #if n % 5000 == 0:
+                        #    model.save(os.path.join(checkpoint_path,'trained_model-%ik.h5'%(n//1000)))
 
                     n+=1
                     epoch_steps += 1
@@ -432,7 +434,9 @@ def train(config):
 
     ckpt_save_path = ckpt_manager.save()
     print('Saving checkpoint for epoch {} at {}'.format(config['epochs'], ckpt_save_path))
-    return checkpoint_path
+    _checkpoint_path = os.path.join(checkpoint_path,'trained_model.h5')
+    model.save(_checkpoint_path)
+    return _checkpoint_path
 
 # </train>
 def get_config(project_id = 3):
@@ -440,7 +444,7 @@ def get_config(project_id = 3):
     config['epochs'] = 1000000
     config['max_steps'] = 150000
     config['max_hours'] = 30.
-    config['lr'] = 2e-5 * 5   *5
+    config['lr'] = 2e-5 * 5   *5 *2.
     config['lr_scratch'] = 1e-4
     config['loss'] = ['l1','dice','focal','normed_l1','l2'][2]
     if config['loss'] == 'l2':
