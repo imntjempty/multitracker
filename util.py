@@ -1,5 +1,6 @@
 import os 
 import numpy as np 
+from random import shuffle
 
 def make_video(frames_dir, video_file, query = "predict-%05d.png"):
     import subprocess 
@@ -23,6 +24,7 @@ def get_colors():
         #colors[ccc] = [tuple(np.int32(256*c).tolist()) for c in mcolors.to_rgba(colors[ccc])[:3]]
         color_dicts[ccc] = tuple(np.int32(256*np.array(mcolors.to_rgba(color_dicts[ccc])[:3])))
         colors.append(color_dicts[ccc])
+    shuffle(colors)
     return colors 
 
 if __name__ == '__main__':

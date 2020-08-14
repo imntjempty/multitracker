@@ -12,11 +12,12 @@ import h5py
 
 
 from multitracker import util 
+from multitracker.be import video
 from multitracker.keypoint_detection import heatmap_drawing, model 
 from multitracker.keypoint_detection import predict
 from multitracker.tracking.inference import load_data, load_model, inference_heatmap, get_heatmaps_keypoints
 from multitracker.tracking.tracklets import get_tracklets
-from multitracker.tracking.clustering import get_clusters
+from multitracker.tracking.clustering import get_clustlets
 from multitracker.object_detection import finetune
 from multitracker.tracking.deep_sort import deep_sort_app
 from multitracker import autoencoder
@@ -62,11 +63,54 @@ def get_detections(config, model_path, project_id, video_id, max_minutes = 0, th
     
     return detections 
  
-def visualize_boxes_with_keypoints(tracked_boxes, tracked_keypoints, video_file):
+def visualize_boxes_with_keypoints(config,tracked_boxes, tracked_keypoints, video_file):
+    frames_dir = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'train')
+    print('[*] making visualization video with %i frames in dir %s' % (len(glob(os.path.join(frames_dir,'*.png'))),frames_dir))
+
+    colors = util.get_colors()
+    color_offset = 10
+
     print('[*] visualize_boxes_with_keypoints')
-    print('boxes:',list(tracked_boxes.keys()),'\n')
-    print('keypoints:',list(tracked_keypoints.keys()),'\n')
+    print('files:',len(list(tracked_boxes.keys())),'\n')
+    print('keypoints:',len(tracked_keypoints),'\n')
     print('video_file',video_file)
+    for frame_idx in tracked_boxes.keys():
+        f = os.path.join(frames_dir,'%05d.png' % int(frame_idx))
+        vis = cv.imread(f)
+        stroke_box = 1 + int(vis.shape[1]/600.)
+        radius_keypoint = int(vis.shape[1]/200.)
+
+        boxes = tracked_boxes[frame_idx]
+        #sprint('tracked_keypoints',tracked_keypoints)
+        keypoints = []
+        for clustlet in tracked_keypoints:
+            for kp in clustlet:
+        
+                if int(frame_idx) in kp['history_steps']:
+                    idx = kp['history_steps'].index(frame_idx)
+                    pos = kp['history'][idx]
+                    c = kp['history_class'][idx]
+                    keypoints.append([pos,c])
+
+        ## drawing idv boxes
+        for box in boxes:
+            idv, x1, y1, w, h = box
+            color_box = [int(cc) for cc in colors[(idv+color_offset)%len(colors)]]
+            x2, y2 = x1 + w, y1 + h 
+            x1, y1, x2, y2 = [int(round(q)) for q in [x1,y1,x2,y2]]
+            vis = cv.rectangle(vis,(x1,y1),(x2,y2),color_box,stroke_box)
+        
+        ## drawing keypoints 
+        for [pos,c] in keypoints:
+            x, y = [int(q) for q in np.int32(np.around(pos))]
+            color_keypoint = [int(ss) for ss in colors[c]]
+            vis = cv.circle(vis, (x,y), radius_keypoint, color_keypoint, -1)
+    
+        # write to disk
+        fo = '/tmp/merged-%s.png' % str(frame_idx)
+        cv.imwrite(fo,vis)
+        print(frame_idx,'boxes:',len(boxes),'keypoints:',len(keypoints))
+
 
 def main(args):
     tstart = time.time()
@@ -75,7 +119,6 @@ def main(args):
     config['video_id'] = args.video_id
     config['keypoint_model'] = args.keypoint_model
     config['autoencoder_model'] = args.autoencoder_model 
-    config['object_model'] = args.object_model
     config['minutes'] = args.minutes
     
     # 1) train keypoint estimator model
@@ -83,6 +126,7 @@ def main(args):
         config['max_steps'] = 50000
         model.create_train_dataset(config)
         config['keypoint_model'] = model.train(config)
+    print('[*] keypoint_model',config['keypoint_model'])
 
     # 2) inference keypooint detection 
     file_keypoint_detections = '/tmp/keypoint_detections-%i-%f-%f.npz' % (args.video_id, args.minutes, args.thresh_detection)
@@ -110,11 +154,13 @@ def main(args):
     file_clusters = '/tmp/clusters-%i-%f-%f.npz' % (args.video_id, args.minutes, args.thresh_detection)
     print('file_clusters',file_clusters)
     if wrote_tracklets or not os.path.isfile(file_clusters):
-        clusters = get_clusters(tracklets)
+        clusters = get_clustlets(tracklets)
         np.savez_compressed('.'.join(file_clusters.split('.')[:-1]), clusters=clusters)
         wrote_clusters = True
     else:
-        clusters = np.load(file_clusters, allow_pickle=True)['clusters']#.item()
+        clusters = np.load(file_clusters, allow_pickle=True)#['clusters']#.item()
+        clusters = dict(zip(("{}".format(k) for k in clusters), (clusters[k] for k in clusters)))['clusters']
+        print('clusters',len(clusters))
         wrote_clusters = False
     
     # 5) animal bounding box finetuning -> trains and inferences 
@@ -146,12 +192,12 @@ def main(args):
         deep_sort_app.run(
             config, detection_file_bboxes, detection_file_trackbedbboxes,
             min_confidence, nms_max_overlap, max_cosine_distance, nn_budget, display)
-    tracked_boxes = np.load(detection_file_trackbedbboxes, allow_pickle=True)['tracked_boxes']
+    tracked_boxes = np.load(detection_file_trackbedbboxes, allow_pickle=True)['tracked_boxes'].item()
     print('[*] loaded bbox animal tracking for %i frames' % len(list(tracked_boxes.keys())))
 
     # 8) visualize merged results
     video_file = '/tmp/tracking_%i.mp4' % config['video_id']
-    visualize_boxes_with_keypoints(tracked_boxes, clusters, video_file)
+    visualize_boxes_with_keypoints(config, tracked_boxes, clusters, video_file)
 
     tend = time.time()
     duration_min = int((tend - tstart)/60.)
@@ -163,7 +209,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--keypoint_model', required=False,default=None)
     parser.add_argument('--autoencoder_model', required=False,default=None)
-    parser.add_argument('--object_model', required=False,default=None)
     parser.add_argument('--project_id',required=True,type=int)
     parser.add_argument('--video_id',required=True,type=int)
     parser.add_argument('--minutes',required=False,default=0.0,type=float)
