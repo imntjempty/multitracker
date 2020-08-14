@@ -74,6 +74,7 @@ def visualize_boxes_with_keypoints(config,tracked_boxes, tracked_keypoints, vide
     print('files:',len(list(tracked_boxes.keys())),'\n')
     print('keypoints:',len(tracked_keypoints),'\n')
     print('video_file',video_file)
+    
     for frame_idx in tracked_boxes.keys():
         f = os.path.join(frames_dir,'%05d.png' % int(frame_idx))
         vis = cv.imread(f)
@@ -83,14 +84,12 @@ def visualize_boxes_with_keypoints(config,tracked_boxes, tracked_keypoints, vide
         boxes = tracked_boxes[frame_idx]
         #sprint('tracked_keypoints',tracked_keypoints)
         keypoints = []
-        for clustlet in tracked_keypoints:
-            for kp in clustlet:
-        
-                if int(frame_idx) in kp['history_steps']:
-                    idx = kp['history_steps'].index(frame_idx)
-                    pos = kp['history'][idx]
-                    c = kp['history_class'][idx]
-                    keypoints.append([pos,c])
+        for kp in tracked_keypoints:
+            if int(frame_idx) in kp['history_steps']:
+                idx = kp['history_steps'].index(frame_idx)
+                pos = kp['history'][idx]
+                c = kp['history_class'][idx]
+                keypoints.append([pos,c])
 
         ## drawing idv boxes
         for box in boxes:
@@ -150,19 +149,19 @@ def main(args):
         tracklets = np.load(file_tracklets, allow_pickle=True)['tracklets']#.item()
         wrote_tracklets = False 
 
-    # 4) keypoint tracklet clustering stage
-    file_clusters = '/tmp/clusters-%i-%f-%f.npz' % (args.video_id, args.minutes, args.thresh_detection)
-    print('file_clusters',file_clusters)
-    if wrote_tracklets or not os.path.isfile(file_clusters):
-        clusters = get_clustlets(tracklets)
-        np.savez_compressed('.'.join(file_clusters.split('.')[:-1]), clusters=clusters)
-        wrote_clusters = True
-    else:
-        clusters = np.load(file_clusters, allow_pickle=True)#['clusters']#.item()
-        clusters = dict(zip(("{}".format(k) for k in clusters), (clusters[k] for k in clusters)))['clusters']
-        print('clusters',len(clusters))
-        wrote_clusters = False
-    
+    if 0:
+        # 4) keypoint tracklet clustering stage
+        file_clusters = '/tmp/clusters-%i-%f-%f.npz' % (args.video_id, args.minutes, args.thresh_detection)
+        print('file_clusters',file_clusters)
+        if wrote_tracklets or not os.path.isfile(file_clusters):
+            clusters = get_clustlets(tracklets)
+            np.savez_compressed('.'.join(file_clusters.split('.')[:-1]), clusters=clusters)
+            wrote_clusters = True
+        else:
+            clusters = np.load(file_clusters, allow_pickle=True)#['clusters']#.item()
+            clusters = dict(zip(("{}".format(k) for k in clusters), (clusters[k] for k in clusters)))['clusters']
+            wrote_clusters = False
+        
     # 5) animal bounding box finetuning -> trains and inferences 
     config['max_steps'] = 15000
     detection_file_bboxes = '/tmp/multitracker/object_detection/predictions/%i/15000_bboxes_*.npz' % config['video_id']
@@ -182,7 +181,7 @@ def main(args):
     print('[*] autoencoder model',config['autoencoder_model'])
 
     # 7) run bbox tracking deep sort with fixed tracks
-    min_confidence = 0.8 # Detection confidence threshold. Disregard all detections that have a confidence lower than this value.
+    min_confidence = 0.5 # Detection confidence threshold. Disregard all detections that have a confidence lower than this value.
     nms_max_overlap = 1.0 # Non-maxima suppression threshold: Maximum detection overlap
     max_cosine_distance = 0.2 # Gating threshold for cosine distance metric (object appearance).
     nn_budget = None # Maximum size of the appearance descriptors gallery. If None, no budget is enforced.
@@ -197,7 +196,7 @@ def main(args):
 
     # 8) visualize merged results
     video_file = '/tmp/tracking_%i.mp4' % config['video_id']
-    visualize_boxes_with_keypoints(config, tracked_boxes, clusters, video_file)
+    visualize_boxes_with_keypoints(config, tracked_boxes, tracklets, video_file)
 
     tend = time.time()
     duration_min = int((tend - tstart)/60.)
@@ -212,6 +211,6 @@ if __name__ == '__main__':
     parser.add_argument('--project_id',required=True,type=int)
     parser.add_argument('--video_id',required=True,type=int)
     parser.add_argument('--minutes',required=False,default=0.0,type=float)
-    parser.add_argument('--thresh_detection',required=False,default=0.5,type=float)
+    parser.add_argument('--thresh_detection',required=False,default=0.4,type=float)
     args = parser.parse_args()
     main(args)

@@ -378,7 +378,7 @@ def train(config):
     import pickle 
     ttrainingstart = time.time()
     epoch = -1
-    while epoch < config['epochs'] and time.time()-ttrainingstart<config['max_hours'] * 60. * 60.:
+    while True:#epoch < config['epochs'] and time.time()-ttrainingstart<config['max_hours'] * 60. * 60.:
         epoch += 1 
         start = time.time()
         epoch_steps = 0
@@ -432,11 +432,6 @@ def train(config):
         end = time.time()
         print('[*] epoch %i (step %i) took %f seconds with train loss %f.'%(epoch,n, end-start,epoch_loss))
 
-    ckpt_save_path = ckpt_manager.save()
-    print('Saving checkpoint for epoch {} at {}'.format(config['epochs'], ckpt_save_path))
-    _checkpoint_path = os.path.join(checkpoint_path,'trained_model.h5')
-    model.save(_checkpoint_path)
-    return _checkpoint_path
 
 # </train>
 def get_config(project_id = 3):
