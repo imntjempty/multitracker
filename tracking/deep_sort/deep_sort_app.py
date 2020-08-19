@@ -137,7 +137,7 @@ def load_feature_extractor(config):
 
 act_detection_part_file = None
 act_detection_part_data = None 
-def load_detections(encoder_model, seq_info, frame_idx):
+def load_detections(config, encoder_model, seq_info, frame_idx):
     global act_detection_part_file
     global act_detection_part_data
     max_detections_per_frame = 10
@@ -149,7 +149,7 @@ def load_detections(encoder_model, seq_info, frame_idx):
         act_detection_part_data = np.load(act_detection_part_file,allow_pickle=True)['boxes'].item()
         print('[*] loaded detection data',act_detection_part_file)
 
-    _frame_idx = '/home/alex/data/multitracker/projects/7/9/frames/train/%05d.png' % frame_idx
+    _frame_idx = '/home/alex/data/multitracker/projects/%i/%i/frames/train/%05d.png' % (config['project_id'],config['video_id'], frame_idx)
     if not _frame_idx in act_detection_part_data.keys():
         _files = sorted(glob(seq_info['detection_file']))
         try:
@@ -238,12 +238,15 @@ def run(config, detection_file, output_file, min_confidence,
     
     metric = nn_matching.NearestNeighborDistanceMetric(
         "cosine", max_cosine_distance, nn_budget)
-    tracker = Tracker(metric)
+    if 'fixed_number' in config and config['fixed_number'] is not None:
+        tracker = Tracker(metric,fixed_number=config['fixed_number'])
+    else:
+        tracker = Tracker(metric)
     results = []
 
     def frame_callback(vis, frame_idx):
         #print("Processing frame %05d" % frame_idx)
-        detections = load_detections(encoder_model, seq_info, frame_idx)
+        detections = load_detections(config, encoder_model, seq_info, frame_idx)
         if detections is None:
             return False 
 

@@ -119,6 +119,7 @@ def main(args):
     config['keypoint_model'] = args.keypoint_model
     config['autoencoder_model'] = args.autoencoder_model 
     config['minutes'] = args.minutes
+    config['fixed_number'] = args.fixed_number
     
     # 1) train keypoint estimator model
     if config['keypoint_model'] is None:
@@ -164,7 +165,7 @@ def main(args):
         
     # 5) animal bounding box finetuning -> trains and inferences 
     config['max_steps'] = 15000
-    detection_file_bboxes = '/tmp/multitracker/object_detection/predictions/%i/15000_bboxes_*.npz' % config['video_id']
+    detection_file_bboxes = '/tmp/multitracker/object_detection/predictions/%i/%i_bboxes_*.npz' % (config['video_id'],config['max_steps']-1)
     # train object detector
     if len(glob(detection_file_bboxes)) == 0:
         finetune.finetune(config)
@@ -211,6 +212,7 @@ if __name__ == '__main__':
     parser.add_argument('--project_id',required=True,type=int)
     parser.add_argument('--video_id',required=True,type=int)
     parser.add_argument('--minutes',required=False,default=0.0,type=float)
-    parser.add_argument('--thresh_detection',required=False,default=0.4,type=float)
+    parser.add_argument('--thresh_detection',required=False,default=0.5,type=float)
+    parser.add_argument('--fixed_number',required=False,default=4,type=int)
     args = parser.parse_args()
     main(args)
