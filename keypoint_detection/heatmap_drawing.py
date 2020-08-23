@@ -11,6 +11,7 @@ import os
 from random import shuffle 
 from multitracker.be import dbconnection
 from glob import glob 
+from multiprocessing import Pool
 
 def gaussian_k(x0,y0,sigma, height, width):
     """ Make a square gaussian kernel centered at (x0, y0) with sigma as SD.
@@ -118,6 +119,16 @@ def style_augment(directory, style_directory = os.path.expanduser("~/data/multit
             # python main.py -content_path 'content_example.jpg' -style_path 'style_example.jpg'
             subprocess.call(['python3.7',os.path.expanduser('~/github/tensorflow-2-style-transfer/main.py'),'-content_path',"%s" % f, '-style_path',"%s" % fs,'-output_dir',"%s" % directory])
         
+def write_mp(frame_data):
+    filepath = os.path.expanduser("~/data/multitracker/projects/%i/%i/frames/train/%s.png" % (int(frame_data['project_id']), int(frame_data['video_id']), frame_data['frame_idx']))
+    #keypoints = [x for x in frame_data['frame_data']]
+    mode = 'train' if np.random.uniform() > 0.2 else 'test'
+    if os.path.isfile(filepath):
+        im = cv.imread(filepath)
+        vis = vis_heatmap(im, frame_data['keypoint_names'], frame_data['frame_data'], horistack = frame_data['horistack'])
+        vis_path = os.path.join(frame_data['dst_dir'],mode,'%s.png' % frame_data['frame_idx'] )
+        cv.imwrite(vis_path, vis)
+    return True 
 
 def randomly_drop_visualiztions(project_id, dst_dir = '/tmp/keypoint_heatmap_vis', num = -1, horistack=True ):
     # take random frames from the db and show their labeling as gaussian heatmaps
@@ -134,11 +145,21 @@ def randomly_drop_visualiztions(project_id, dst_dir = '/tmp/keypoint_heatmap_vis
             raise Exception("[ERROR] no video found for project!")
 
         # first get all frames 
-        q = "select frame_idx from keypoint_positions where video_id=%i;" % video_id
+        q = "select frame_idx, keypoint_name, individual_id, keypoint_x, keypoint_y from keypoint_positions where video_id=%i;" % video_id
         db.execute(q)
-        frame_idxs = [x[0] for x in db.cur.fetchall()]
-        frame_idxs = list(set(frame_idxs))
+        #frame_idxs = [x[0] for x in db.cur.fetchall()]
+        #frame_idxs = list(set(frame_idxs))
+        frame_data = {}
+        frame_idxs = []
+        for [frame_idx, keypoint_name, individual_id, keypoint_x, keypoint_y] in db.cur.fetchall():
+            #print('frame_idx',frame_idx, 'keypoint_name',keypoint_name, 'individual_id',individual_id, keypoint_x, keypoint_y)
+            if not frame_idx in frame_idxs:
+                frame_idxs.append(frame_idx)
+                frame_data[frame_idx] = []
+            frame_data[frame_idx].append([keypoint_name, individual_id, keypoint_x, keypoint_y])
+
     shuffle(frame_idxs)
+    #shuffle(frame_data)
 
     if num > 0:
         frame_idxs = frame_idxs[:min(num,len(frame_idxs))]
@@ -148,34 +169,12 @@ def randomly_drop_visualiztions(project_id, dst_dir = '/tmp/keypoint_heatmap_vis
             if not os.path.isdir(mode_dir):
                 os.makedirs(mode_dir)
 
-    for i in range(len(frame_idxs)):
-        filepath = os.path.expanduser("~/data/multitracker/projects/%i/%i/frames/train/%s.png" % (int(project_id), int(video_id), frame_idxs[i]))
-        q = "select keypoint_name, individual_id, keypoint_x, keypoint_y from keypoint_positions where video_id=%i and frame_idx='%s' order by individual_id, keypoint_name desc;" % (video_id,frame_idxs[i])
-        db.execute(q)
-        keypoints = [x for x in db.cur.fetchall()]
-        #print('frame',frame_idxs[i],'isfile',os.path.isfile(filepath),filepath)
-        #for kp in keypoints:
-        #    print(kp)
-        mode = 'train' if np.random.uniform() > 0.2 else 'test'
-        if os.path.isfile(filepath):
-            im = cv.imread(filepath)
-            vis = vis_heatmap(im, keypoint_names, keypoints, horistack = horistack)
-            vis_path = os.path.join(dst_dir,mode,'%s.png' % frame_idxs[i] )
-            cv.imwrite(vis_path, vis)
-
-            if mode == 'train': # only train
-                vis = vis_heatmap(im, keypoint_names, keypoints, horistack = horistack, apply_contrast_stretching=True)
-                vis_path = os.path.join(dst_dir,mode,'%sc0.png' % frame_idxs[i] )
-                cv.imwrite(vis_path, vis)
-
-                vis = vis_heatmap(im, keypoint_names, keypoints, horistack = horistack, apply_histogram_equalization=True)
-                vis_path = os.path.join(dst_dir,mode,'%sc1.png' % frame_idxs[i] )
-                cv.imwrite(vis_path, vis)
-                
-                vis = vis_heatmap(im, keypoint_names, keypoints, horistack = horistack, apply_adaptive_equalization=True)
-                vis_path = os.path.join(dst_dir,mode,'%sc2.png' % frame_idxs[i] )
-                cv.imwrite(vis_path, vis)
-        
+    with Pool(processes=os.cpu_count()) as pool:
+        result_objs=[]
+        for i, frame_idx in enumerate(frame_data.keys()):
+            result = pool.apply_async(write_mp,({'frame_idx':frame_idx,'frame_data':frame_data[frame_idx], 'project_id':project_id, 'video_id':video_id, 'dst_dir':dst_dir, 'keypoint_names':keypoint_names, 'horistack':horistack},))
+            result_objs.append(result)
+        results = [result.get() for result in result_objs]
 
 if __name__ == '__main__':
     project_id = 1
