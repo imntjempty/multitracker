@@ -126,11 +126,17 @@ def write_mp(frame_data):
     if os.path.isfile(filepath):
         im = cv.imread(filepath)
         vis = vis_heatmap(im, frame_data['keypoint_names'], frame_data['frame_data'], horistack = frame_data['horistack'])
+
+        if 'max_height' in frame_data and frame_data['max_height'] is not None:
+            _H,_W = vis.shape[:2]
+            newW = int(_W * float(frame_data['max_height']) / _H)
+            vis = cv.resize(vis,(newW,frame_data['max_height']))
+
         vis_path = os.path.join(frame_data['dst_dir'],mode,'%s.png' % frame_data['frame_idx'] )
         cv.imwrite(vis_path, vis)
     return True 
 
-def randomly_drop_visualiztions(project_id, dst_dir = '/tmp/keypoint_heatmap_vis', num = -1, horistack=True ):
+def randomly_drop_visualiztions(project_id, dst_dir = '/tmp/keypoint_heatmap_vis', num = -1, horistack=True,max_height=None ):
     # take random frames from the db and show their labeling as gaussian heatmaps
     if not os.path.isdir(dst_dir):
         os.makedirs(dst_dir)
@@ -172,7 +178,8 @@ def randomly_drop_visualiztions(project_id, dst_dir = '/tmp/keypoint_heatmap_vis
     with Pool(processes=os.cpu_count()) as pool:
         result_objs=[]
         for i, frame_idx in enumerate(frame_data.keys()):
-            result = pool.apply_async(write_mp,({'frame_idx':frame_idx,'frame_data':frame_data[frame_idx], 'project_id':project_id, 'video_id':video_id, 'dst_dir':dst_dir, 'keypoint_names':keypoint_names, 'horistack':horistack},))
+            result = pool.apply_async(write_mp,({'frame_idx':frame_idx,'frame_data':frame_data[frame_idx], 'project_id':project_id, 'video_id':video_id, 'dst_dir':dst_dir, 'keypoint_names':keypoint_names, 'horistack':horistack,'max_height':max_height},))
+            #write_mp({'frame_idx':frame_idx,'frame_data':frame_data[frame_idx], 'project_id':project_id, 'video_id':video_id, 'dst_dir':dst_dir, 'keypoint_names':keypoint_names, 'horistack':horistack,'max_height':max_height})
             result_objs.append(result)
         results = [result.get() for result in result_objs]
 

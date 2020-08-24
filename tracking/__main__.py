@@ -37,7 +37,8 @@ def get_detections(config, model_path, project_id, video_id, max_minutes = 0, th
     config['input_image_shape'] = cv.imread(frame_files[0]).shape[:2]
 
     detections = {} 
-    
+    #mean_rgb = model.calc_mean_rgb(config)
+
     for i, frame_file in enumerate(frame_files):
         tframestart = time.time()
         fnameo = os.path.join(output_dir,frame_file.split('/')[-1])
@@ -46,7 +47,7 @@ def get_detections(config, model_path, project_id, video_id, max_minutes = 0, th
         frame = cv.imread(frame_file)
         frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
         tread = time.time()
-        heatmaps = inference_heatmap(config, trained_model, frame)
+        heatmaps = inference_heatmap(config, trained_model, frame)#-mean_rgb)
         tinference = time.time()
         # detect keypoints
         keypoints = get_heatmaps_keypoints(heatmaps,thresh_detection=thresh_detection)
@@ -120,6 +121,7 @@ def main(args):
     config['autoencoder_model'] = args.autoencoder_model 
     config['minutes'] = args.minutes
     config['fixed_number'] = args.fixed_number
+    config['n_blocks'] = 4
     
     # 1) train keypoint estimator model
     if config['keypoint_model'] is None:
@@ -164,15 +166,15 @@ def main(args):
             wrote_clusters = False
         
     # 5) animal bounding box finetuning -> trains and inferences 
-    config['max_steps'] = 15000
+    config['objectdetection_max_steps'] = 15000
     detection_file_bboxes = '/tmp/multitracker/object_detection/predictions/%i/%i_bboxes_*.npz' % (config['video_id'],config['max_steps']-1)
     # train object detector
     if len(glob(detection_file_bboxes)) == 0:
         finetune.finetune(config)
 
-    # run animal tracking
-    detection_file_trackbedbboxes = '/tmp/multitracker/tracked_boxes_%i.npz' % config['video_id']
-
+    ## crop bbox detections and train keypoint estimation on extracted regions
+    #point_classification.calculate_keypoints(config, detection_file_bboxes)
+    
     # 6) train autoencoder for tracking appearence vector
     if config['autoencoder_model'] is None:
         config_autoencoder = autoencoder.get_autoencoder_config()
@@ -188,6 +190,7 @@ def main(args):
     nn_budget = None # Maximum size of the appearance descriptors gallery. If None, no budget is enforced.
     display = False # dont write vis images
 
+    detection_file_trackbedbboxes = '/tmp/multitracker/tracked_boxes_%i.npz' % config['video_id']
     if not os.path.isfile(detection_file_trackbedbboxes):
         deep_sort_app.run(
             config, detection_file_bboxes, detection_file_trackbedbboxes,
