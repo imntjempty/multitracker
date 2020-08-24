@@ -54,7 +54,18 @@ def inference_heatmap(config, trained_model, frame):
     #bs, config['n_inferences'] = 1, 1
     bs, config['n_inferences'] = 4, 1
     w = 1+int((1./config['fov'])*config['img_height']/(float(frame.shape[0]) / frame.shape[1]))
-    xsmall = cv.resize(frame, (w,int((1./config['fov'])*config['img_height'])))
+    h = int((1./config['fov'])*config['img_height'])
+    ggT = 2*2**config['n_blocks']
+    if (w//ggT)*ggT-w>ggT//2:
+        w = (w//ggT+1)*ggT 
+    else:
+        w = (w//ggT)*ggT 
+    if (h//ggT)*ggT-h>ggT//2:
+        h = (h//ggT+1)*ggT 
+    else:
+        h = (h//ggT)*ggT 
+
+    xsmall = cv.resize(frame, (w,h))
     xsmall = tf.expand_dims(tf.convert_to_tensor(xsmall),axis=0)
     
     if bs > 1: 
@@ -63,11 +74,11 @@ def inference_heatmap(config, trained_model, frame):
     # 1) inference: run trained_model to get heatmap predictions
     tsb = time.time()
     if config['n_inferences'] == 1 and bs == 1:
-        y = trained_model.predict(xsmall)[-1]
+        y = trained_model.predict(xsmall)
     else:
-        y = trained_model(xsmall, training=True)[-1] / config['n_inferences']
+        y = trained_model(xsmall, training=True) / config['n_inferences']
         for ii in range(config['n_inferences']-1):
-            y += trained_model(xsmall, training=True)[-1] / config['n_inferences']
+            y += trained_model(xsmall, training=True) / config['n_inferences']
     y = tf.reduce_mean(y,axis=[0]) # complete batch is of same image, so second dim average
     
     #if config['n_inferences'] > 1:
