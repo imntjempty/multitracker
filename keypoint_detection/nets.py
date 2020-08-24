@@ -100,7 +100,7 @@ def EncoderPretrained(config,inputs):
 
 
 def Decoder(config,encoder):
-    decoder = [DecoderErfnet, DecoderErfnetSmall, DecoderDefault][0] # graphics_decoder.GraphicsDecoder
+    decoder = [DecoderErfnet, DecoderErfnetSmall, DecoderDefault][2] # graphics_decoder.GraphicsDecoder
     return decoder(config,encoder)
         
 def DecoderErfnet(config, encoder, norm_type = "batchnorm"):

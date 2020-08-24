@@ -1,6 +1,6 @@
 """
 
-    python3.7 -m multitracker.keypoint_detection.model --project_id 3
+    python3.7 -m multitracker.keypoint_detection.model --project_id 7 --video_id 9
 """
 
 import os
@@ -16,7 +16,7 @@ import cv2 as cv
 from multitracker.be import dbconnection
 
 db = dbconnection.DatabaseConnection()
-from multitracker.keypoint_detection import heatmap_drawing, stacked_hourglass
+from multitracker.keypoint_detection import heatmap_drawing, stacked_hourglass, unet
 from multitracker.keypoint_detection.nets import Encoder, Decoder
 from multitracker.be import video 
 
@@ -74,9 +74,10 @@ def get_loss(predicted_heatmaps, y, config, mode = "train"):
 def get_model(config):
     if config['num_hourglass'] == 1:
         inputs = tf.keras.layers.Input(shape=[None, None, 3])
-        encoder = Encoder(config,inputs)
-        print('[*] hidden representation',encoder.outputs[0].get_shape().as_list())
-        model = Decoder(config,encoder)
+        #encoder = Encoder(config,inputs)
+        #print('[*] hidden representation',encoder.outputs[0].get_shape().as_list())
+        #model = Decoder(config,encoder)
+        model = unet.get_model(config)
         return model
     else:
         return stacked_hourglass.get_model(config)
@@ -85,6 +86,19 @@ def get_model(config):
 
 # <data>
 
+def calc_mean_rgb(config):
+    rgb = np.zeros((3,))
+    calcframes = glob(os.path.join(os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'train'),'*.png'))
+    shuffle(calcframes)
+    num = 100
+    calcframes = calcframes[:num]
+    for i in range(num):
+        _im = cv.imread(calcframes[i])
+        _im = np.reshape(_im,(_im.shape[0]*_im.shape[1],3))
+        rgb += np.mean(_im)
+    rgb /= num 
+    return rgb 
+    
 def load_raw_dataset(config,mode='train', image_directory = None):
     
     if mode=='train' or mode == 'test':
@@ -96,19 +110,8 @@ def load_raw_dataset(config,mode='train', image_directory = None):
     [H,W,_] = cv.imread(glob(os.path.join(os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'test'),'*.png'))[0]).shape
     [Hcomp,Wcomp,_] = cv.imread(glob(os.path.join(image_directory,'*.png'))[0]).shape
     
-    def calc_mean_rgb():
-        rgb = np.zeros((3,))
-        calcframes = glob(os.path.join(os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'train'),'*.png'))
-        shuffle(calcframes)
-        num = 100
-        calcframes = calcframes[:num]
-        for i in range(num):
-            _im = cv.imread(calcframes[i])
-            _im = np.reshape(_im,(_im.shape[0]*_im.shape[1],3))
-            rgb += np.mean(_im)
-        rgb /= num 
-        return rgb 
-    mean_rgb = calc_mean_rgb()
+    
+    #mean_rgb = calc_mean_rgb(config)
 
     def load_im(image_file):
         image = tf.io.read_file(image_file)
@@ -116,14 +119,14 @@ def load_raw_dataset(config,mode='train', image_directory = None):
         image = tf.cast(image,tf.float32)
         
         # decompose hstack to dstack
-        w = W#config['input_image_shape'][1] // (2 + len(config['keypoint_names'])//3)
-        h = int(H * config['fov'])
+        w = int(W*Hcomp/H)  #Wcomp#config['input_image_shape'][1] // (2 + len(config['keypoint_names'])//3)
+        h = int(Hcomp * config['fov'])
         
         if mode == 'train' or mode == 'test':
             # now stack depthwise for easy random cropping and other augmentation
             parts = []
-            for ii in range(Wcomp//W):#0, 1+len(config['keypoint_names'])//3):
-                cc = image[:,ii*W:(ii+1)*W,:]
+            for ii in range(Wcomp// w ):#0, 1+len(config['keypoint_names'])//3):
+                cc = image[:,ii*w:(ii+1)*w,:]
                 parts.append(cc)
             if mode == "train":
                 if tf.random.uniform([]) > 0.5:
@@ -146,8 +149,9 @@ def load_raw_dataset(config,mode='train', image_directory = None):
                     comp = tfa.image.rotate(comp, random_angle)
 
             # add black padding
-            p = 150
-            comp = tf.pad(comp,[[p,p],[p,p],[0,0]])
+            if 0:
+                p = 150
+                comp = tf.pad(comp,[[p,p],[p,p],[0,0]])
                 
             # add background of heatmap
             background = 255 - tf.reduce_sum(comp[:,:,3:],axis=2)
@@ -159,7 +163,7 @@ def load_raw_dataset(config,mode='train', image_directory = None):
             
             # split stack into images and heatmaps
             image = crop[:,:,:3]
-            image = image - mean_rgb
+            #image = image - mean_rgb
             heatmaps = crop[:,:,3:] / 255.
             return image, heatmaps
         else:
@@ -189,7 +193,7 @@ def load_raw_dataset(config,mode='train', image_directory = None):
 def create_train_dataset(config):
     # make sure that the heatmaps are 
     if not os.path.isdir(config['data_dir']) or len(glob(os.path.join(config['data_dir'],'train/*.png')))==0:
-        heatmap_drawing.randomly_drop_visualiztions(config['project_id'], dst_dir=config['data_dir'])
+        heatmap_drawing.randomly_drop_visualiztions(config['project_id'], dst_dir=config['data_dir'],max_height=512)
         
 
         if 0:
@@ -344,7 +348,7 @@ def train(config):
                     tf.summary.scalar("loss %s" % config['loss'],loss,step=global_step)
                     tf.summary.scalar('min',tf.reduce_min(all_predicted_heatmaps[-1][:,:,:,:-1]),step=global_step)
                     tf.summary.scalar('max',tf.reduce_max(all_predicted_heatmaps[-1][:,:,:,:-1]),step=global_step)
-                    im_summary('image',inp/255.)
+                    im_summary('image',inp/256.)
                     for kk in range(1+(y.shape[3]-1)//3):
                         im_summary('heatmaps-%i'%kk,tf.concat((y[:,:,:,kk*3:kk*3+3], predicted_heatmaps[:,:,:,kk*3:kk*3+3]),axis=2))
                     im_summary('background', tf.concat((tf.expand_dims(y[:,:,:,-1],axis=3),tf.expand_dims(predicted_heatmaps[:,:,:,-1],axis=3)),axis=2))
@@ -355,7 +359,7 @@ def train(config):
                 if should_test:            
                     with writer_test.as_default():
                         tf.summary.scalar("loss %s" % config['loss'],test_loss,step=global_step)
-                        im_summary('image',xt/255.)
+                        im_summary('image',xt/256.)
                         for i, pre in enumerate(predicted_test): 
                             for kk in range((yt.shape[3]-1)//3):
                                 im_summary('heatmaps%i-%i'%(kk,i),tf.concat((yt[:,:,:,:3], pre[:,:,:,:3]),axis=2))
@@ -371,7 +375,8 @@ def train(config):
         for j, keypoint_classnameB in enumerate(config['keypoint_names']):
             if 'left' in keypoint_classnameA and keypoint_classnameA.replace('left','right') == keypoint_classnameB:
                 swaps.append((i,j))
-    
+    print(config['keypoint_names'], 'swaps',swaps)
+
     n = 0
     
     ddata = {}
@@ -388,11 +393,12 @@ def train(config):
             for xx,yy in dataset_train:# </train>
                 x = xx 
                 y = yy
-                for _ in range(4):
-                    if np.random.random() < 0.5:
-                        x,y = hflip(swaps,x,y)
-                    if np.random.random() < 0.5:
-                        x,y = vflip(swaps,x,y)
+                for _ in range(1):
+                    if 0:
+                        if np.random.random() < 0.5:
+                            x,y = hflip(swaps,x,y)
+                        if np.random.random() < 0.5:
+                            x,y = vflip(swaps,x,y)
                         
                     # mixup augmentation
                     if np.random.random() < 0.9:
@@ -407,17 +413,24 @@ def train(config):
                     #(x - mean) * contrast_factor + mean
 
                     if n < config['max_steps']:
-                        should_summarize=n%50==0
-                        try:
+                        should_summarize=n%100==0
+                        
+                        ### self-training: 
+                        # 1) inference many unlabeled frames (20*num_labeled)
+                        # 2) dump inferenced as train samples 
+                        if 'selftrain_start_step' in config and n == config['selftrain_start_step']:
+                            pass
+                        
+                        if 1:#try:
                             epoch_loss += train_step(x, y, writer_train, writer_test, n, should_summarize=should_summarize)
-                        except Exception as e:
-                            print(e)
+                        #except Exception as e:
+                        #    print(e)
                     else:
                         _checkpoint_path = os.path.join(checkpoint_path,'trained_model.h5')
                         model.save(_checkpoint_path)
                         return _checkpoint_path
 
-                    if n % 1000 == 0 and 0:
+                    if n % 2000 == 0:
                         ckpt_save_path = ckpt_manager.save()
                         print('[*] saving model to %s'%ckpt_save_path)
                         model.save(os.path.join(checkpoint_path,'trained_model.h5'))
@@ -435,9 +448,11 @@ def train(config):
 
 # </train>
 def get_config(project_id = 3):
-    config = {'batch_size': 8, 'img_height': 256,'img_width': 256}
+    config = {'batch_size': 16}
+    config.update({'img_height': 256,'img_width': 256})
+    #config.update({'img_height': 512,'img_width': 512})
     config['epochs'] = 1000000
-    config['max_steps'] = 150000
+    config['max_steps'] = 40000
     config['max_hours'] = 30.
     config['lr'] = 2e-5 * 5   *5 *2.
     config['lr_scratch'] = 1e-4
@@ -447,9 +462,11 @@ def get_config(project_id = 3):
     config['autoencoding'] = [False, True][0]
     config['pretrained_encoder'] = [False,True][1]
     config['mixup'] = [False, True][0]
-    config['cutmix'] = [False, True][0]
-    config['num_hourglass'] = 8
+    config['cutmix'] = [False, True][1]
+    config['num_hourglass'] = 1 #8
     config['fov'] = 0.75 # default 0.5
+    config['selftrain_start_step'] = 10000
+    config['n_blocks'] = 4
 
     config['project_id'] = project_id
     config['project_name'] = db.get_project_name(project_id)
@@ -458,13 +475,13 @@ def get_config(project_id = 3):
 
     config['keypoint_names'] = db.get_keypoint_names(config['project_id'])
 
-    config['backbone'] = ["resnet","efficientnet"][0]
+    config['backbone'] = ["resnet","efficientnet"][1]
     return config 
 
 def main(args):
     config = get_config(args.project_id)
-    print(config,'\n')
     config['video_id'] = int(args.video_id)
+    print(config,'\n')
     create_train_dataset(config)
     checkpoint_path = train(config)
     predict.predict(config, checkpoint_path, int(args.project_id), int(args.video_id))
