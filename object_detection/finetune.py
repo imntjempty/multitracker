@@ -265,6 +265,7 @@ def inference_train_video(detection_model,config, steps, minutes = 0):
                     detections['detection_classes'][0].numpy().astype(np.uint32) + label_id_offset,
                     detections['detection_scores'][0].numpy(),
                     category_index, figsize=(15, 20), image_name=os.path.join(output_dir,"frame_" + ('%06d' % i) + ".png"))
+
         except Exception as e:
             print(e)
 
@@ -352,7 +353,7 @@ def finetune(config):
     train_step_fn = get_model_train_step_function(detection_model, optimizer, to_fine_tune)
 
     print('Start fine-tuning!', flush=True)
-    for idx in range(config['max_steps']):
+    for idx in range(config['objectdetection_max_steps']):
         # Grab keys for a random subset of examples
         all_keys = list(range(len(train_image_tensors)))
         random.shuffle(all_keys)
@@ -370,7 +371,7 @@ def finetune(config):
         total_loss = train_step_fn(image_tensors, gt_boxes_list, gt_classes_list)
 
         if idx % 10 == 0:
-            print('batch ' + str(idx) + ' of ' + str(config['max_steps']) + ', loss=' +  str(total_loss.numpy()), flush=True)
+            print('batch ' + str(idx) + ' of ' + str(config['objectdetection_max_steps']) + ', loss=' +  str(total_loss.numpy()), flush=True)
 
         '''if idx % 1000 == 0:
             finetuned_checkpoint_path = os.path.expanduser('~/checkpoints/object_detection')
