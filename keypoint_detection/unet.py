@@ -20,22 +20,24 @@ def get_model(config):
     for i_block in range(config['n_blocks']):
         nf = min(1024, bf * 2**i_block)
         x = upsample(nf,3,strides=-2)(x)
-        y = upsample(nf,3,strides=1)(x)
+        y = upsample(nf,5,strides=1)(x)
         y = upsample(nf,3,strides=1)(y)
         x = x + y
         layers.append(x)
     
     # decoding
     for i_block in range(config['n_blocks']-1,-1,-1):
-        nf = min(1024, bf * 2**i_block)
+        #nf = min(1024, bf * 2**i_block)
+        nf = layers[i_block].shape[3]
         x = upsample(nf,3,strides=2)(x)
         y = upsample(nf,3,strides=1)(x)
         y = upsample(nf,3,strides=1)(y)
         x = x + y
         # append encoder layer
         e = layers[i_block]
-        e = upsample(nf,1,strides=1)(e)
-        e = upsample(nf,1,strides=1)(e)
+        f = upsample(nf,3,strides=1)(e)
+        f = upsample(nf,3,strides=1)(f)
+        e = e + f
         #new_size = [inputs.shape[0]/2**i_block,inputs.shape[1]/2**(1+i_block)]
         #e = tf.image.resize(e,new_size)
         x = tf.concat([x,e],axis=3)

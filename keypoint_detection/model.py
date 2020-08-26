@@ -101,12 +101,13 @@ def calc_mean_rgb(config):
     
 def load_raw_dataset(config,mode='train', image_directory = None):
     
-    if mode=='train' or mode == 'test':
-        image_directory = os.path.join(config['data_dir'],'%s' % mode)
-    else:
-        video_id = db.get_random_project_video(config['project_id'])
-        #image_directory = video.get_frames_dir(config['project_id'], video_id)
-        image_directory = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'test')
+    if image_directory is None:
+        if mode=='train' or mode == 'test':
+            image_directory = os.path.join(config['data_dir'],'%s' % mode)
+        else:
+            video_id = db.get_random_project_video(config['project_id'])
+            #image_directory = video.get_frames_dir(config['project_id'], video_id)
+            image_directory = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'test')
     [H,W,_] = cv.imread(glob(os.path.join(os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'test'),'*.png'))[0]).shape
     [Hcomp,Wcomp,_] = cv.imread(glob(os.path.join(image_directory,'*.png'))[0]).shape
     
@@ -193,7 +194,7 @@ def load_raw_dataset(config,mode='train', image_directory = None):
 def create_train_dataset(config):
     # make sure that the heatmaps are 
     if not os.path.isdir(config['data_dir']) or len(glob(os.path.join(config['data_dir'],'train/*.png')))==0:
-        heatmap_drawing.randomly_drop_visualiztions(config['project_id'], dst_dir=config['data_dir'],max_height=512)
+        heatmap_drawing.randomly_drop_visualiztions(config['project_id'], dst_dir=config['data_dir'],max_height=config['max_height'])
         
 
         if 0:
@@ -393,7 +394,7 @@ def train(config):
             for xx,yy in dataset_train:# </train>
                 x = xx 
                 y = yy
-                for _ in range(1):
+                for _ in range(4):
                     if 0:
                         if np.random.random() < 0.5:
                             x,y = hflip(swaps,x,y)
@@ -468,6 +469,7 @@ def get_config(project_id = 3):
     config['selftrain_start_step'] = 10000
     config['n_blocks'] = 4
 
+    config['max_height'] = 512
     config['project_id'] = project_id
     config['project_name'] = db.get_project_name(project_id)
 
