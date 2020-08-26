@@ -167,7 +167,7 @@ def main(args):
         
     # 5) animal bounding box finetuning -> trains and inferences 
     config['objectdetection_max_steps'] = 15000
-    detection_file_bboxes = '/tmp/multitracker/object_detection/predictions/%i/%i_bboxes_*.npz' % (config['video_id'],config['max_steps']-1)
+    detection_file_bboxes = '/tmp/multitracker/object_detection/predictions/%i/%i_bboxes_*.npz' % (config['video_id'],config['objectdetection_max_steps']-1)
     # train object detector
     if len(glob(detection_file_bboxes)) == 0:
         finetune.finetune(config)
