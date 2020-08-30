@@ -133,7 +133,7 @@ def write_mp(frame_data):
             vis = cv.resize(vis,(newW,frame_data['max_height']))
 
         name = frame_data['frame_idx']
-        if frame_data['random_maps']:
+        if 'random_maps' in frame_data and frame_data['random_maps']==True:
             name += '--'+'_'.join([str(int(np.random.uniform(1e4))) for _ in range(5)])
             
         vis_path = os.path.join(frame_data['dst_dir'],mode,'%s.png' % name )
@@ -168,7 +168,7 @@ def randomly_drop_visualiztions(project_id, dst_dir = '/tmp/keypoint_heatmap_vis
                 frame_idxs.append(frame_idx)
                 frame_data[frame_idx] = []
 
-            if random_maps==False:
+            if random_maps==True:
                 # apply random noise to coordinates as augmentation 
                 KA = 400
                 keypoint_x += np.random.uniform(-KA,KA)
