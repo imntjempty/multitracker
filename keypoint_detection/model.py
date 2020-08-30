@@ -194,7 +194,10 @@ def load_raw_dataset(config,mode='train', image_directory = None):
 def create_train_dataset(config):
     # make sure that the heatmaps are 
     if not os.path.isdir(config['data_dir']) or len(glob(os.path.join(config['data_dir'],'train/*.png')))==0:
-        heatmap_drawing.randomly_drop_visualiztions(config['project_id'], dst_dir=config['data_dir'],max_height=config['max_height'])
+        max_height = None 
+        if 'max_height' in config:
+            max_height = config['max_height']
+        heatmap_drawing.randomly_drop_visualiztions(config['project_id'], dst_dir=config['data_dir'],max_height=max_height)
         
 
         if 0:
@@ -259,6 +262,15 @@ def vflip(swaps, x, y):
     vy = y[:,::-1,:,:]
     vy = swap_leftright_channels(swaps, vy)
     return vx, vy
+
+def get_swaps(config):
+    swaps = []
+    for i, keypoint_classnameA in enumerate(config['keypoint_names']):
+        for j, keypoint_classnameB in enumerate(config['keypoint_names']):
+            if 'left' in keypoint_classnameA and keypoint_classnameA.replace('left','right') == keypoint_classnameB:
+                swaps.append((i,j))
+    return swaps 
+
 # <train>
 #@tf.function 
 def train(config):
@@ -371,11 +383,7 @@ def train(config):
         return loss
 
     # determine left right swaps for vertical and hori channel swaps
-    swaps = []
-    for i, keypoint_classnameA in enumerate(config['keypoint_names']):
-        for j, keypoint_classnameB in enumerate(config['keypoint_names']):
-            if 'left' in keypoint_classnameA and keypoint_classnameA.replace('left','right') == keypoint_classnameB:
-                swaps.append((i,j))
+    swaps = get_swaps(config)
     print(config['keypoint_names'], 'swaps',swaps)
 
     n = 0
@@ -395,7 +403,7 @@ def train(config):
                 x = xx 
                 y = yy
                 for _ in range(4):
-                    if 0:
+                    if 1:
                         if np.random.random() < 0.5:
                             x,y = hflip(swaps,x,y)
                         if np.random.random() < 0.5:
@@ -467,13 +475,14 @@ def get_config(project_id = 3):
     config['num_hourglass'] = 1 #8
     config['fov'] = 0.75 # default 0.5
     config['selftrain_start_step'] = 10000
-    config['n_blocks'] = 4
+    config['n_blocks'] = 5
 
-    config['max_height'] = 512
+    #config['max_height'] = 1024
     config['project_id'] = project_id
     config['project_name'] = db.get_project_name(project_id)
 
     config['data_dir'] = os.path.join(os.path.expanduser('~/data/multitracker/projects/%i/data' % config['project_id']))
+    config['roi_dir'] = os.path.join(os.path.expanduser('~/data/multitracker/projects/%i/data_roi' % config['project_id']))
 
     config['keypoint_names'] = db.get_keypoint_names(config['project_id'])
 

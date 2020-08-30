@@ -1,7 +1,7 @@
 import tensorflow as tf 
 import tensorflow_addons as tfa 
 
-def upsample(nfilters, kernel_size, strides=2, dilation = (1,1), norm_type='instancenorm', act = tf.keras.layers.Activation('relu')):
+def upsample(nfilters, kernel_size, strides=2, dilation = (1,1), norm_type='batchnorm', act = tf.keras.layers.Activation('relu')):
     initializer = ['he_normal', tf.random_normal_initializer(0., 0.02)][0]
 
     if strides == 1 or strides < 0:
