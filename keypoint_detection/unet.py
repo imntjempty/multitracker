@@ -91,23 +91,27 @@ def get_efficient_model(config):
         except Exception as e :
             print(e)
 
+    bf = 64
     x = encoded_layers[-1]
     for i_block in range(3,-1,-1):
-        #nf = min(1024, bf * 2**i_block)
-        nf = encoded_layers[i_block].shape[3]
-        x = upsample(nf,3,strides=2)(x)
-        y = upsample(nf,3,strides=1)(x)
-        y = upsample(nf,3,strides=1)(y)
-        x = x + y
+        nf = min(1024, bf * 2**i_block)
+        #print('decoder',i_block,nf)
+        ne = encoded_layers[i_block+1].shape[3]
         # append encoder layer
-        e = encoded_layers[i_block]
-        f = upsample(nf,3,strides=1)(e)
-        f = upsample(nf,3,strides=1)(f)
+        e = encoded_layers[i_block+1]
+        f = upsample(ne,3,strides=1)(e)
+        f = upsample(ne,3,strides=1)(f)
         e = e + f
         #new_size = [inputs.shape[0]/2**i_block,inputs.shape[1]/2**(1+i_block)]
         #e = tf.image.resize(e,new_size)
         x = tf.concat([x,e],axis=3)
-
+        
+        x = upsample(nf,3,strides=2)(x)
+        y = upsample(nf,3,strides=1)(x)
+        y = upsample(nf,3,strides=1)(y)
+        x = x + y
+    x = upsample(64,3,strides=1)(x)    
+    x = upsample(64,3,strides=1)(x)
 
     # final classification layer
     x = upsample(1+len(config['keypoint_names']),5,2,norm_type=None,act=tf.keras.layers.Activation('softmax'))(x)     
