@@ -11,7 +11,7 @@
 
 """
 
-import tensorflow as tf
+import tensorflow as tf  File "/usr/local/lib/python3.7/dist-packages/tensorflow/python/ops/nn_ops.py", line
 from tensorflow_examples.models.pix2pix import pix2pix
 downsample, upsample = pix2pix.downsample, pix2pix.upsample
 
@@ -224,14 +224,17 @@ def load_segmentations(config,n_masks = 10):
     [H,W,_] = cv.imread(glob(os.path.join(image_directory ,'*.png'))[0]).shape
     h = int(H * config['fov'])
     w = int(W * config['fov'])
-
+    max_height = None 
+    if 'max_height' in config:
+        max_height = config['max_height']
+        
     segmentation_directory = '/tmp/segmentations'
     if not os.path.isdir(segmentation_directory): os.makedirs(segmentation_directory)
 
     if len(glob(os.path.join(segmentation_directory+'/train','*.png'))) == 0:
         # create random masks
         for i in range(n_masks):
-            heatmap_drawing.randomly_drop_visualiztions(config['project_id'], dst_dir=segmentation_directory,max_height=config['max_height'],random_maps=True)
+            heatmap_drawing.randomly_drop_visualiztions(config['project_id'], dst_dir=segmentation_directory,max_height=max_height,random_maps=True)
      
     return model.load_raw_dataset(config,mode='train', image_directory = segmentation_directory+'/train')[1]
 
