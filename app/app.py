@@ -136,6 +136,9 @@ def render_labeling(project_id):
                 maxidx = np.argmax(stds)
                 frame_idx = '.'.join(unlabeled[maxidx].split('/')[-1].split('.')[:-1])
                 print('[*] serving keypoint label job for frame %s with std %f.'%(frame_idx,stds[maxidx]))
+            else:
+                shuffle(unlabeled)
+                frame_idx = '.'.join(unlabeled[0].split('/')[-1].split('.')[:-1])
 
     frame_candidates = []
     if 0:
