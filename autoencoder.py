@@ -78,24 +78,22 @@ def downsample_stridedconv(filters, size, norm_type='batchnorm', apply_norm=True
 def Encoder(inputs, config={}):
     x = inputs
     # denoising
-    #x = tf.keras.layers.GaussianNoise(0.2)(x)
-    #x = llayers.downsample_stridedconv(32,(3,3), norm_type='batchnorm', apply_norm=False)(x) # 80
+    x = tf.keras.layers.GaussianNoise(0.2)(x)
     x = downsample_stridedconv(32,(3,3), norm_type='batchnorm', apply_norm=False)(x) # 40
     x = downsample_stridedconv(64,(3,3), norm_type='batchnorm', apply_norm=True)(x) # 20
-    x = downsample_stridedconv(128,(3,3), norm_type='batchnorm', apply_norm=True)(x) # 10
+    x = downsample_stridedconv(64,(3,3), norm_type='batchnorm', apply_norm=True)(x) # 10
     f = x 
-    x = downsample_stridedconv(128,(3,3), norm_type='batchnorm', apply_norm=True)(x) # 5
-    x = downsample_stridedconv(256,(3,3), norm_type='batchnorm', apply_norm=True)(x) # 5
-    #x = llayers.downsample_stridedconv(256,(3,3), norm_type='batchnorm', apply_norm=True)(x) # 5
-    x = downsample_stridedconv(n_latentcode,(3,3), norm_type='batchnorm', apply_norm=True)(x) 
+    #x = downsample_stridedconv(128,(3,3), norm_type='batchnorm', apply_norm=True)(x) # 5
+    #x = downsample_stridedconv(256,(3,3), norm_type='batchnorm', apply_norm=True)(x) # 5
+    #x = downsample_stridedconv(n_latentcode,(3,3), norm_type='batchnorm', apply_norm=True)(x) 
     return [f,x]
 
 def Decoder(config,encoder):
     x = encoder
-    x = upsample_transpconv(n_latentcode,(3,3), norm_type='batchnorm', apply_norm=True)(x) # 
+    #x = upsample_transpconv(n_latentcode,(3,3), norm_type='batchnorm', apply_norm=True)(x) # 
     #x = llayers.upsample_transpconv(256,(3,3), norm_type='batchnorm', apply_norm=True)(x) # 5
-    x = upsample_transpconv(128,(3,3), norm_type='batchnorm', apply_norm=True)(x) # 5
-    x = upsample_transpconv(128,(3,3), norm_type='batchnorm', apply_norm=True)(x) # 10
+    #x = upsample_transpconv(128,(3,3), norm_type='batchnorm', apply_norm=True)(x) # 5
+    #x = upsample_transpconv(128,(3,3), norm_type='batchnorm', apply_norm=True)(x) # 10
     x = upsample_transpconv(64,(3,3), norm_type='batchnorm', apply_norm=True)(x) # 20
     x = upsample_transpconv(32,(3,3), norm_type='batchnorm', apply_norm=True)(x) # 40
     x = upsample_transpconv(3,(3,3), norm_type='batchnorm', apply_norm=False,activation=tf.tanh)(x) # 80
@@ -232,7 +230,7 @@ def train(config=None):
 def get_autoencoder_config():
     config = {'batch_size':32, 'img_height':640,'img_width':640}
     config['epochs'] = 10
-    config['max_steps'] = 40000
+    config['max_steps'] = 25000
     config['lr'] = 5e-3
     return config
 
