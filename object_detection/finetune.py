@@ -201,7 +201,7 @@ def restore_weights():
     _ = detection_model.postprocess(prediction_dict, shapes)
     print('Weights restored!')
 
-    return model_config, detection_model
+    return ckpt, model_config, detection_model
 
 def inference_train_video(detection_model,config, steps, minutes = 0):
     project_id = int(config['project_id'])
@@ -274,14 +274,14 @@ def inference_train_video(detection_model,config, steps, minutes = 0):
     np.savez_compressed(file_bboxes,boxes=frame_detections)
     print('[*] saved',file_bboxes)
 
-def finetune(config):
+def finetune(config, checkpoint_directory):
     #setup_oo_api() 
     if not 'finetune' in config:
         config['finetune'] = False 
 
     # load and prepare data 
     train_image_tensors, gt_box_tensors, gt_classes_one_hot_tensors = get_bbox_data(config)
-    model_config, detection_model = restore_weights()
+    ckpt, model_config, detection_model = restore_weights()
 
     tf.keras.backend.set_learning_phase(True)
 
@@ -372,6 +372,10 @@ def finetune(config):
 
         if idx % 10 == 0:
             print('batch ' + str(idx) + ' of ' + str(config['objectdetection_max_steps']) + ', loss=' +  str(total_loss.numpy()), flush=True)
+        
+        if idx % 9999 == 0:
+            ckpt.save(checkpoint_directory)
+            print('[*] saved model to',checkpoint_directory)
 
         '''if idx % 1000 == 0:
             finetuned_checkpoint_path = os.path.expanduser('~/checkpoints/object_detection')
@@ -379,6 +383,8 @@ def finetune(config):
             detection_model.save(finetuned_checkpoint_path)
             print('[*] saved model to', finetuned_checkpoint_path)'''
 
+    ckpt.save(checkpoint_directory)
+    print('[*] saved model to',checkpoint_directory)
     print('[*] Done fine-tuning object detection! inferencing all frames ...')    
     inference_train_video(detection_model,config,idx,config['minutes'])
 
