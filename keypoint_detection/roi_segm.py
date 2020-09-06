@@ -99,7 +99,7 @@ def load_roi_dataset(config,mode='train'):
     hroi,wroicomp = cv.imread(glob(os.path.join(config['roi_dir'],'train','*.png'))[0]).shape[:2]
     wroi = hroi#wroicomp // (1+len(config['keypoint_names'])//3)
     print('wroi',hroi,wroicomp,wroi,'->',wroicomp//wroi)
-    h = int(hroi * 0.95)
+    h = int(hroi * 0.98)
     config['img_height'] = 224
     config['img_width'] = 224
 
@@ -146,7 +146,43 @@ def load_roi_dataset(config,mode='train'):
         data = data.shuffle(512)
     return data 
 
+def inference_heatmap(config, trained_model, frame, bounding_boxes):
+    if 'max_height' in config and config['max_height'] is not None:
+        H = config['max_height']
+    else:
+        H = frame.shape[0]
+    W = frame.shape[1] * H/frame.shape[0]
+    crop_dim = int(H/3.)
+    y = None 
+    for j, (y1,x1,y2,x2) in enumerate(bounding_boxes): 
+        incoords = [y1,x1,y2,x2]
+        # scale down bounding boxes 
+        x1*=H/frame.shape[0]
+        y1*=H/frame.shape[0]
+        x2*=H/frame.shape[0]
+        y2*=H/frame.shape[0]
 
+        # crop region around center of bounding box
+        center = [int(round(y1+(y2-y1)/2.)),int(round(x1+(x2-x1)/2.))]
+        
+        center[0] = min(H-crop_dim//2,center[0] )
+        center[0] = max(crop_dim//2,center[0] )
+        center[1] = min(W-crop_dim//2,center[1] )
+        center[1] = max(crop_dim//2,center[1] )
+        
+        roi = frame[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:]
+        roi = tf.image.resize(roi,[config['img_height'],config['img_width']])
+        roi = tf.expand_dims(tf.convert_to_tensor(roi),axis=0)
+        yroi = trained_model.predict(roi)
+        yroi = cv.resize(yroi,(crop_dim,crop_dim))
+
+        # paste onto whole frame y 
+        if y is None:
+            y = np.zeros([frame.shape[0],frame.shape[1],y.shape[-1]])
+
+        y[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:] += yroi 
+    return y 
+    
 def train(config):
     config['lr'] = 1e-4
     config['cutmix'] = False
