@@ -117,11 +117,11 @@ def get_efficient_model(config):
         y = tf.keras.layers.Dropout(0.5)(y)
         y = upsample(nf,3,strides=1)(y)
         x = x + y
-    x = upsample(64,3,strides=1)(x)    
+    x = upsample(32,3,strides=1)(x)    
     #x = upsample(64,3,strides=1)(x)
 
     # final classification layer
-    x = upsample(1+len(config['keypoint_names']),5,1,norm_type=None,act=tf.keras.layers.Activation('softmax'))(x)     
+    x = upsample(1+len(config['keypoint_names']),1,1,norm_type=None,act=tf.keras.layers.Activation('softmax'))(x)     
     
     model = tf.keras.Model(inputs=encoder.inputs, outputs=[[x]], name="Efficient Unet")
     model.summary()
