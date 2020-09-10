@@ -44,6 +44,8 @@ def load_roi_dataset(config,mode='train'):
     #print('hw',h,w)
     print('len_parts',len_parts,Wcomp/w)
 
+    #config['roi_dir'] = '/tmp/roisdat'
+    print('config',config['roi_dir'])
     for _mode in ['train','test']:
         if not os.path.isdir(os.path.join(config['roi_dir'],_mode)): os.makedirs(os.path.join(config['roi_dir'],_mode))
         
@@ -73,26 +75,26 @@ def load_roi_dataset(config,mode='train'):
             parts = [ im[:,ii*w:(ii+1)*w,:] for ii in range(len_parts )]
             
             # scale to fit max_height
-            frame_bboxes[frame_idx] = (Hcomp/H) * frame_bboxes[frame_idx]
+            #print('scaling',frame_bboxes[frame_idx][0],'to',(Hcomp/Hframe) * frame_bboxes[frame_idx][0])
+            frame_bboxes[frame_idx] = (Hcomp/Hframe) * frame_bboxes[frame_idx]
             
             for j, (y1,x1,y2,x2) in enumerate(frame_bboxes[frame_idx]):
                 # crop region around center of bounding box
-                center = [int(round(y1+(y2-y1)/2.)),int(round(x1+(x2-x1)/2.))]
-                
-                center[0] = min(Hcomp-crop_dim//2,center[0] )
-                center[0] = max(crop_dim//2,center[0] )
-                center[1] = min(w-crop_dim//2,center[1] )
-                center[1] = max(crop_dim//2,center[1] )
-                
-                rois = [part[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:] for part in parts]
-                roi_comp = np.hstack(rois)
-                #if min(roi_comp.shape[:2])>1:
-                
-                f_roi = os.path.join(config['roi_dir'],_mode,'%s_%i.png' % (frame_idx, j))
-                #print(j,'coords',y1,x1,y2,x2,'center',center,roi_comp.shape)
-                cv.imwrite(f_roi, roi_comp)
-                        
+                center = get_center(x1,y1,x2,y2,crop_dim)        
 
+                try:
+                    rois = [part[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:] for part in parts]
+                    roi_comp = np.hstack(rois)
+                    #if min(roi_comp.shape[:2])>1:
+                    
+                    f_roi = os.path.join(config['roi_dir'],_mode,'%s_%i.png' % (frame_idx, j))
+                    #print(j,'coords',y1,x1,y2,x2,'center',center,roi_comp.shape)
+                    #print(f_roi,roi_comp.shape)
+                    if np.min(roi_comp.shape)>=3:
+                        cv.imwrite(f_roi, roi_comp)
+                            
+                except Exception as e:
+                    print(e)
         # </bboxes>
     
     #mean_rgb = calc_mean_rgb(config)
@@ -114,7 +116,7 @@ def load_roi_dataset(config,mode='train'):
         if mode == 'train':
             # random scale augmentation
             if tf.random.uniform([]) > 0.3:
-                hh = h + int(np.random.uniform(-h/7,h/7)) #h += int(tf.random.uniform([],-h/7,h/7))
+                hh = h + int(tf.random.uniform([],-h/7,h/7)) #h += int(tf.random.uniform([],-h/7,h/7))
 
             # apply augmentations
             # random rotation
@@ -127,6 +129,7 @@ def load_roi_dataset(config,mode='train'):
         comp = tf.concat((comp,tf.expand_dims(background,axis=2)),axis=2)
 
         # crop
+        #crop = comp
         crop = tf.image.random_crop( comp, [hh,hh,1+3+len(config['keypoint_names'])])
         crop = tf.image.resize(crop,[config['img_height'],config['img_width']])
         
@@ -146,6 +149,15 @@ def load_roi_dataset(config,mode='train'):
         data = data.shuffle(512)
     return data 
 
+def get_center(x1,y1,x2,y2,crop_dim):
+    center = [int(round(y1+(y2-y1)/2.)),int(round(x1+(x2-x1)/2.))]
+        
+    center[0] = min(H-crop_dim//2,center[0] )
+    center[0] = max(crop_dim//2,center[0] )
+    center[1] = min(W-crop_dim//2,center[1] )
+    center[1] = max(crop_dim//2,center[1] )
+    return center 
+
 def inference_heatmap(config, trained_model, frame, bounding_boxes):
     if 'max_height' in config and config['max_height'] is not None:
         H = config['max_height']
@@ -163,12 +175,7 @@ def inference_heatmap(config, trained_model, frame, bounding_boxes):
         y2*=H/frame.shape[0]
 
         # crop region around center of bounding box
-        center = [int(round(y1+(y2-y1)/2.)),int(round(x1+(x2-x1)/2.))]
-        
-        center[0] = min(H-crop_dim//2,center[0] )
-        center[0] = max(crop_dim//2,center[0] )
-        center[1] = min(W-crop_dim//2,center[1] )
-        center[1] = max(crop_dim//2,center[1] )
+        center = get_center(x1,y1,x2,y2, crop_dim)
         
         roi = frame[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:]
         roi = tf.image.resize(roi,[config['img_height'],config['img_width']])
@@ -320,7 +327,7 @@ def main(args):
     config['video_id'] = int(args.video_id)
 
     print(config,'\n')
-    #create_train_dataset(config)
+    model.create_train_dataset(config)
     checkpoint_path = train(config)
     #predict.predict(config, checkpoint_path, int(args.project_id), int(args.video_id))
 
