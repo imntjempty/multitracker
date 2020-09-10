@@ -158,13 +158,14 @@ def get_bbox_data(config, vis_input_data=0):
     
     return train_image_tensors, gt_box_tensors, gt_classes_one_hot_tensors
 
-def restore_weights():
+def restore_weights(checkpoint_path = None):
     tf.keras.backend.clear_session()
 
     print('Building model and restoring weights for fine-tuning...', flush=True)
     num_classes = 1
     pipeline_config = os.path.expanduser('~/github/models/research/object_detection/configs/tf2/ssd_resnet50_v1_fpn_640x640_coco17_tpu-8.config')
-    checkpoint_path = os.path.expanduser('~/data/multitracker/object_detection/ssd_resnet50_v1_fpn_640x640_coco17_tpu-8/checkpoint/ckpt-0.index')
+    if checkpoint_path is not None:
+        checkpoint_path = os.path.expanduser('~/data/multitracker/object_detection/ssd_resnet50_v1_fpn_640x640_coco17_tpu-8/checkpoint/ckpt-0.index')
 
     # Load pipeline config and build a detection model.
     #
@@ -208,7 +209,7 @@ def inference_train_video(detection_model,config, steps, minutes = 0):
     output_dir = '/tmp/multitracker/object_detection/predictions/%i/%i' % (config['video_id'], steps)
     if not os.path.isdir(output_dir):
         os.makedirs(output_dir)
-    print('[*] writing %f minutes of video %i frames to %s for step %i' % (minutes,config['video_id'],output_dir,steps))
+    print('[*] writing object detection bounding boxes %f minutes of video %i frames to %s for step %i' % (minutes,config['video_id'],output_dir,steps))
 
     frames_dir = os.path.expanduser('~/data/multitracker/projects/%i/%i/frames/train' % (config['project_id'], config['video_id']))
     frame_files = sorted(glob(os.path.join(frames_dir,'*.png')))
@@ -274,119 +275,120 @@ def inference_train_video(detection_model,config, steps, minutes = 0):
     np.savez_compressed(file_bboxes,boxes=frame_detections)
     print('[*] saved',file_bboxes)
 
-def finetune(config, checkpoint_directory):
+def finetune(config, checkpoint_directory, checkpoint_restore = None):
     #setup_oo_api() 
     if not 'finetune' in config:
         config['finetune'] = False 
 
     # load and prepare data 
     train_image_tensors, gt_box_tensors, gt_classes_one_hot_tensors = get_bbox_data(config)
-    ckpt, model_config, detection_model = restore_weights()
+    ckpt, model_config, detection_model = restore_weights(checkpoint_restore)
+    if checkpoint_restore is None:
+        tf.keras.backend.set_learning_phase(True)
 
-    tf.keras.backend.set_learning_phase(True)
+        # These parameters can be tuned; since our training set has 5 images
+        # it doesn't make sense to have a much larger batch size, though we could
+        # fit more examples in memory if we wanted to.
+        batch_size = 8
+        learning_rate = 0.001
+        num_batches = int(1e7) # was 100 with 5 examples
 
-    # These parameters can be tuned; since our training set has 5 images
-    # it doesn't make sense to have a much larger batch size, though we could
-    # fit more examples in memory if we wanted to.
-    batch_size = 8
-    learning_rate = 0.001
-    num_batches = int(1e7) # was 100 with 5 examples
-
-    # Select variables in top layers to fine-tune.
-    trainable_variables = detection_model.trainable_variables
-    
-    to_fine_tune = []
-    if config['finetune']:
-        prefixes_to_train = [
-            'WeightSharedConvolutionalBoxPredictor/WeightSharedConvolutionalBoxHead',
-            'WeightSharedConvolutionalBoxPredictor/WeightSharedConvolutionalClassHead']
-        for var in trainable_variables:
-            if any([var.name.startswith(prefix) for prefix in prefixes_to_train]):
-                to_fine_tune.append(var)
-    else:
-        to_fine_tune = trainable_variables
-
-    # Set up forward + backward pass for a single train step.
-    def get_model_train_step_function(model, optimizer, vars_to_fine_tune):
-        """Get a tf.function for training step."""
-
-        # Use tf.function for a bit of speed.
-        # Comment out the tf.function decorator if you want the inside of the
-        # function to run eagerly.
-        @tf.function
-        def train_step_fn(image_tensors,
-                        groundtruth_boxes_list,
-                        groundtruth_classes_list):
-            """A single training iteration.
-
-            Args:
-                image_tensors: A list of [1, height, width, 3] Tensor of type tf.float32.
-                Note that the height and width can vary across images, as they are
-                reshaped within this function to be 640x640.
-                groundtruth_boxes_list: A list of Tensors of shape [N_i, 4] with type
-                tf.float32 representing groundtruth boxes for each image in the batch.
-                groundtruth_classes_list: A list of Tensors of shape [N_i, num_classes]
-                with type tf.float32 representing groundtruth boxes for each image in
-                the batch.
-
-            Returns:
-                A scalar tensor representing the total loss for the input batch.
-            """
-            shapes = tf.constant(batch_size * [[640, 640, 3]], dtype=tf.int32)
-            model.provide_groundtruth(
-                groundtruth_boxes_list=groundtruth_boxes_list,
-                groundtruth_classes_list=groundtruth_classes_list)
-            with tf.GradientTape() as tape:
-                preprocessed_images = tf.concat(
-                    [detection_model.preprocess(image_tensor)[0]
-                    for image_tensor in image_tensors], axis=0)
-                prediction_dict = model.predict(preprocessed_images, shapes)
-                losses_dict = model.loss(prediction_dict, shapes)
-                total_loss = losses_dict['Loss/localization_loss'] + losses_dict['Loss/classification_loss']
-                gradients = tape.gradient(total_loss, vars_to_fine_tune)
-                optimizer.apply_gradients(zip(gradients, vars_to_fine_tune))
-            return total_loss
-
-        return train_step_fn
-
-    optimizer = tf.keras.optimizers.SGD(learning_rate=learning_rate, momentum=0.9)
-    train_step_fn = get_model_train_step_function(detection_model, optimizer, to_fine_tune)
-
-    print('Start fine-tuning!', flush=True)
-    for idx in range(config['objectdetection_max_steps']):
-        # Grab keys for a random subset of examples
-        all_keys = list(range(len(train_image_tensors)))
-        random.shuffle(all_keys)
-        example_keys = all_keys[:batch_size]
-
-        # Note that we do not do data augmentation in this demo.  If you want a
-        # a fun exercise, we recommend experimenting with random horizontal flipping
-        # and random cropping :)
-        gt_boxes_list = [gt_box_tensors[key] for key in example_keys]
-        #print('gt_boxes_list',gt_boxes_list)
-        gt_classes_list = [gt_classes_one_hot_tensors[key] for key in example_keys]
-        image_tensors = [train_image_tensors[key] for key in example_keys]
-
-        # Training step (forward pass + backwards pass)
-        total_loss = train_step_fn(image_tensors, gt_boxes_list, gt_classes_list)
-
-        if idx % 10 == 0:
-            print('batch ' + str(idx) + ' of ' + str(config['objectdetection_max_steps']) + ', loss=' +  str(total_loss.numpy()), flush=True)
+        # Select variables in top layers to fine-tune.
+        trainable_variables = detection_model.trainable_variables
         
-        if idx % 9999 == 0:
-            ckpt.save(checkpoint_directory)
-            print('[*] saved model to',checkpoint_directory)
+        to_fine_tune = []
+        if config['finetune']:
+            prefixes_to_train = [
+                'WeightSharedConvolutionalBoxPredictor/WeightSharedConvolutionalBoxHead',
+                'WeightSharedConvolutionalBoxPredictor/WeightSharedConvolutionalClassHead']
+            for var in trainable_variables:
+                if any([var.name.startswith(prefix) for prefix in prefixes_to_train]):
+                    to_fine_tune.append(var)
+        else:
+            to_fine_tune = trainable_variables
 
-        '''if idx % 1000 == 0:
-            finetuned_checkpoint_path = os.path.expanduser('~/checkpoints/object_detection')
-            finetuned_checkpoint_path = os.path.join(finetuned_checkpoint_path,'finetuned_%i.h5' % idx)
-            detection_model.save(finetuned_checkpoint_path)
-            print('[*] saved model to', finetuned_checkpoint_path)'''
+        # Set up forward + backward pass for a single train step.
+        def get_model_train_step_function(model, optimizer, vars_to_fine_tune):
+            """Get a tf.function for training step."""
 
-    ckpt.save(checkpoint_directory)
-    print('[*] saved model to',checkpoint_directory)
-    print('[*] Done fine-tuning object detection! inferencing all frames ...')    
-    inference_train_video(detection_model,config,idx,config['minutes'])
+            # Use tf.function for a bit of speed.
+            # Comment out the tf.function decorator if you want the inside of the
+            # function to run eagerly.
+            @tf.function
+            def train_step_fn(image_tensors,
+                            groundtruth_boxes_list,
+                            groundtruth_classes_list):
+                """A single training iteration.
+
+                Args:
+                    image_tensors: A list of [1, height, width, 3] Tensor of type tf.float32.
+                    Note that the height and width can vary across images, as they are
+                    reshaped within this function to be 640x640.
+                    groundtruth_boxes_list: A list of Tensors of shape [N_i, 4] with type
+                    tf.float32 representing groundtruth boxes for each image in the batch.
+                    groundtruth_classes_list: A list of Tensors of shape [N_i, num_classes]
+                    with type tf.float32 representing groundtruth boxes for each image in
+                    the batch.
+
+                Returns:
+                    A scalar tensor representing the total loss for the input batch.
+                """
+                shapes = tf.constant(batch_size * [[640, 640, 3]], dtype=tf.int32)
+                model.provide_groundtruth(
+                    groundtruth_boxes_list=groundtruth_boxes_list,
+                    groundtruth_classes_list=groundtruth_classes_list)
+                with tf.GradientTape() as tape:
+                    preprocessed_images = tf.concat(
+                        [detection_model.preprocess(image_tensor)[0]
+                        for image_tensor in image_tensors], axis=0)
+                    prediction_dict = model.predict(preprocessed_images, shapes)
+                    losses_dict = model.loss(prediction_dict, shapes)
+                    total_loss = losses_dict['Loss/localization_loss'] + losses_dict['Loss/classification_loss']
+                    gradients = tape.gradient(total_loss, vars_to_fine_tune)
+                    optimizer.apply_gradients(zip(gradients, vars_to_fine_tune))
+                return total_loss
+
+            return train_step_fn
+
+        optimizer = tf.keras.optimizers.SGD(learning_rate=learning_rate, momentum=0.9)
+        train_step_fn = get_model_train_step_function(detection_model, optimizer, to_fine_tune)
+
+        print('Start fine-tuning!', flush=True)
+        for idx in range(config['objectdetection_max_steps']):
+            # Grab keys for a random subset of examples
+            all_keys = list(range(len(train_image_tensors)))
+            random.shuffle(all_keys)
+            example_keys = all_keys[:batch_size]
+
+            # Note that we do not do data augmentation in this demo.  If you want a
+            # a fun exercise, we recommend experimenting with random horizontal flipping
+            # and random cropping :)
+            gt_boxes_list = [gt_box_tensors[key] for key in example_keys]
+            #print('gt_boxes_list',gt_boxes_list)
+            gt_classes_list = [gt_classes_one_hot_tensors[key] for key in example_keys]
+            image_tensors = [train_image_tensors[key] for key in example_keys]
+
+            # Training step (forward pass + backwards pass)
+            total_loss = train_step_fn(image_tensors, gt_boxes_list, gt_classes_list)
+
+            if idx % 10 == 0:
+                print('batch ' + str(idx) + ' of ' + str(config['objectdetection_max_steps']) + ', loss=' +  str(total_loss.numpy()), flush=True)
+            
+            if idx % 9999 == 0:
+                ckpt.save(checkpoint_directory)
+                print('[*] saved model to',checkpoint_directory)
+
+            '''if idx % 1000 == 0:
+                finetuned_checkpoint_path = os.path.expanduser('~/checkpoints/object_detection')
+                finetuned_checkpoint_path = os.path.join(finetuned_checkpoint_path,'finetuned_%i.h5' % idx)
+                detection_model.save(finetuned_checkpoint_path)
+                print('[*] saved model to', finetuned_checkpoint_path)'''
+
+        ckpt.save(checkpoint_directory)
+        print('[*] saved model to',checkpoint_directory)
+        print('[*] Done fine-tuning object detection! inferencing all frames ...')    
+        
+    inference_train_video(detection_model,config,config['objectdetection_max_steps']-1,config['minutes'])
 
     
 
