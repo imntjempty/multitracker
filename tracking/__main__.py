@@ -16,7 +16,7 @@ from multitracker.be import video
 from multitracker.keypoint_detection import heatmap_drawing, model 
 from multitracker.keypoint_detection import predict
 from multitracker.tracking.inference import load_data, load_model, get_heatmaps_keypoints
-from multitracker.keypoint_detection.roi_segm import inference_heatmap
+from multitracker.keypoint_detection.roi_segm import inference_heatmap, get_center
 from multitracker.tracking.tracklets import get_tracklets
 from multitracker.tracking.clustering import get_clustlets
 from multitracker.object_detection import finetune
@@ -81,7 +81,9 @@ def visualize_boxes_with_keypoints(config,tracked_boxes, tracked_keypoints, vide
     
     for frame_idx in tracked_boxes.keys():
         f = os.path.join(frames_dir,'%05d.png' % int(frame_idx))
-        vis = cv.imread(f)
+        im = cv.imread(f)
+        vis = np.array(im,copy=True)
+        crop_dim = int(vis.shape[0]/3.)
         stroke_box = 1 + int(vis.shape[1]/600.)
         radius_keypoint = int(vis.shape[1]/200.)
 
@@ -96,22 +98,30 @@ def visualize_boxes_with_keypoints(config,tracked_boxes, tracked_keypoints, vide
                 keypoints.append([pos,c])
 
         ## drawing idv boxes
-        for box in boxes:
+        vis_boxes = []
+        for ibox, box in enumerate(boxes):
             idv, x1, y1, w, h = box
             color_box = [int(cc) for cc in colors[(idv+color_offset)%len(colors)]]
             x2, y2 = x1 + w, y1 + h 
             x1, y1, x2, y2 = [int(round(q)) for q in [x1,y1,x2,y2]]
             vis = cv.rectangle(vis,(x1,y1),(x2,y2),color_box,stroke_box)
         
-        ## drawing keypoints 
-        for [pos,c] in keypoints:
-            x, y = [int(q) for q in np.int32(np.around(pos))]
-            color_keypoint = [int(ss) for ss in colors[c]]
-            vis = cv.circle(vis, (x,y), radius_keypoint, color_keypoint, -1)
-    
+            center = get_center(x1,y1,x2,y2,crop_dim)
+            vis_keypoints_box = im[center[0]-crop_dim//2,center[0]+crop_dim//2,center[1]-crop_dim//2,center[1]+crop_dim//2,:]
+
+            ## drawing keypoints 
+            for [pos,c] in keypoints:
+                x, y = [int(q) for q in np.int32(np.around(pos))]
+                color_keypoint = [int(ss) for ss in colors[c]]
+                vis_keypoints_box = cv.circle(vis_keypoints_box, (x-center[1]-crop_dim//2,y-center[0]-crop_dim//2), radius_keypoint, color_keypoint, -1)
+            vis_boxes.append(vis_keypoints_box)
+        
+        kp_stacked = np.vstack((np.hstack((vis_boxes[0],vis_boxes[1])),np.hstack((vis_boxes[2],vis_boxes[3]))))
+        kp_stacked = cv.resize(kp_stacked, (vis.shape[0],vis.shape[0]))
+        stacked = np.hstack((vis, kp_stacked))
         # write to disk
         fo = '/tmp/merged-%s.png' % str(frame_idx)
-        cv.imwrite(fo,vis)
+        cv.imwrite(fo,stacked)
         print(frame_idx,'boxes:',len(boxes),'keypoints:',len(keypoints))
 
 
@@ -122,6 +132,7 @@ def main(args):
     config['video_id'] = args.video_id
     config['keypoint_model'] = args.keypoint_model
     config['autoencoder_model'] = args.autoencoder_model 
+    config['objectdetection_model'] = args.objectdetection_model
     config['minutes'] = args.minutes
     config['fixed_number'] = args.fixed_number
     config['n_blocks'] = 4
@@ -133,7 +144,10 @@ def main(args):
     # train object detector
     if len(glob(detection_file_bboxes)) == 0:
         checkpoint_directory_object_detection = os.path.expanduser('~/checkpoints/bbox_detection/%s_vid%i' % (config['project_name'], int(config['video_id'])))
-        finetune.finetune(config, checkpoint_directory_object_detection)
+        object_detect_restore = None 
+        if 'objectdetection_model' in config and config['objectdetection_model'] is not None:
+            object_detect_restore = config['objectdetection_model']
+        finetune.finetune(config, checkpoint_directory_object_detection, checkpoint_restore = object_detect_restore)
 
     ## crop bbox detections and train keypoint estimation on extracted regions
     #point_classification.calculate_keypoints(config, detection_file_bboxes)
@@ -226,4 +240,7 @@ if __name__ == '__main__':
     parser.add_argument('--thresh_detection',required=False,default=0.5,type=float)
     parser.add_argument('--fixed_number',required=False,default=4,type=int)
     args = parser.parse_args()
+    
+    assert args.objectdetection_model is None or (args.objectdetection_model is not None and args.objectdetection_model.endswith('.index'))
+
     main(args)
