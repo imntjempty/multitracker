@@ -371,9 +371,10 @@ def receive_labeling():
 
         if training_model is not None:
             # draw sent data
+            frames_dir = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, data['project_id']), data['video_id']),'train')
             filepath = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, data['project_id']), data['video_id']),'train','%s.png'%data['frame_idx'])
             keypoints = [[d['keypoint_name'],d['id_ind'],d['x'],d['y']] for d in data['keypoints']]
-            y = heatmap_drawing.vis_heatmap(cv.imread(filepath), config['keypoint_names'], keypoints, horistack = False)
+            y = heatmap_drawing.vis_heatmap(cv.imread(filepath), int(data['frame_idx']) , config['keypoint_names'], keypoints, horistack = False)
             w = 1+int(2*config['img_height']/(float(y.shape[0]) / y.shape[1]))
             y = cv.resize(y,(w,2*config['img_height']))
             y = np.float32(y / 255.)
