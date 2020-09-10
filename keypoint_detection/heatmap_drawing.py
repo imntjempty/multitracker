@@ -8,10 +8,12 @@ import numpy as np
 import cv2 as cv 
 #import tensorflow as tf 
 import os 
-from random import shuffle 
-from multitracker.be import dbconnection
 from glob import glob 
 from multiprocessing import Pool
+from random import shuffle 
+
+from multitracker.be import dbconnection
+from multitracker.be import video
 
 def gaussian_k(x0,y0,sigma, height, width):
     """ Make a square gaussian kernel centered at (x0, y0) with sigma as SD.
@@ -44,7 +46,7 @@ def generate_hm(height, width ,landmarks, keypoint_names, s=None):
     return hm
 
 
-def vis_heatmap(image, keypoint_names, keypoints, horistack=True, apply_contrast_stretching=False, apply_histogram_equalization=False, apply_adaptive_equalization=False ):
+def vis_heatmap(image, frame_idx, frames_dir, mode, keypoint_names, keypoints, horistack=True, apply_contrast_stretching=False, apply_histogram_equalization=False, apply_adaptive_equalization=False, time_diff = False ):
     hm = generate_hm(image.shape[0], image.shape[1] , [ [int(kp[2]),int(kp[3]),kp[0]] for kp in keypoints ], keypoint_names)
     
     im = image 
@@ -63,6 +65,37 @@ def vis_heatmap(image, keypoint_names, keypoints, horistack=True, apply_contrast
         # Adaptive Equalization
         im = exposure.equalize_adapthist(im, clip_limit=0.03)
         im = np.uint8(np.around(255 * im))
+
+
+    # time differencing 
+    if time_diff:
+        #print('im',im.shape, 'hm', hm.shape, frame_idx)
+        offi = 3
+        found_diff = False 
+        imnow = im 
+        while not found_diff:
+            prev_frameidx = '%05d.png' % (int(frame_idx)-offi) 
+            flast = os.path.join(frames_dir,'train',prev_frameidx)
+            imlast = np.float32(cv.imread(flast))
+            imlast = np.float32(imlast)
+            diff = imnow-imlast
+            diff = np.abs(diff)
+            #diff = diff/2. + 128.
+            #diff[diff<0] = 0. 
+            #diff[diff>255.] = 255. 
+
+            diff = np.uint8(np.around(diff))
+            found_diff = (diff.min()<90)
+            if found_diff:
+                # stack 3channel image: R,G+B, time difference
+                print('imlast', flast, os.path.isfile(flast) ,imlast.shape,'diff',diff.shape)
+                merged = np.dstack((imlast[:,:,0],imlast[:,:,1]//2+imlast[:,:,2]//2,cv.cvtColor(diff,cv.COLOR_BGR2GRAY))) 
+                
+                #fo = os.path.join(dir_out,files_in[i].split('/')[-1])
+                #cv.imwrite(fo, merged )
+                im = merged 
+            else:
+                offi += 1 
 
     if not horistack:
         # overlay
@@ -125,7 +158,7 @@ def write_mp(frame_data):
     mode = 'train' if np.random.uniform() > 0.2 else 'test'
     if os.path.isfile(filepath):
         im = cv.imread(filepath)
-        vis = vis_heatmap(im, frame_data['keypoint_names'], frame_data['frame_data'], horistack = frame_data['horistack'])
+        vis = vis_heatmap(im, frame_data['frame_idx'], frame_data['frames_dir'], mode, frame_data['keypoint_names'], frame_data['frame_data'], horistack = frame_data['horistack'])
 
         if 'max_height' in frame_data and frame_data['max_height'] is not None:
             _H,_W = vis.shape[:2]
@@ -187,10 +220,11 @@ def randomly_drop_visualiztions(project_id, dst_dir = '/tmp/keypoint_heatmap_vis
             if not os.path.isdir(mode_dir):
                 os.makedirs(mode_dir)
 
+    frames_dir = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, project_id), video_id))
     with Pool(processes=os.cpu_count()) as pool:
         result_objs=[]
         for i, frame_idx in enumerate(frame_data.keys()):
-            result = pool.apply_async(write_mp,({'frame_idx':frame_idx,'frame_data':frame_data[frame_idx], 'project_id':project_id, 'video_id':video_id, 'random_maps':random_maps, 'dst_dir':dst_dir, 'keypoint_names':keypoint_names, 'horistack':horistack,'max_height':max_height},))
+            result = pool.apply_async(write_mp,({'frame_idx':frame_idx,'frame_data':frame_data[frame_idx], 'frames_dir': frames_dir, 'project_id':project_id, 'video_id':video_id, 'random_maps':random_maps, 'dst_dir':dst_dir, 'keypoint_names':keypoint_names, 'horistack':horistack,'max_height':max_height},))
             #write_mp({'frame_idx':frame_idx,'frame_data':frame_data[frame_idx], 'project_id':project_id, 'video_id':video_id, 'dst_dir':dst_dir, 'keypoint_names':keypoint_names, 'horistack':horistack,'max_height':max_height})
             result_objs.append(result)
         results = [result.get() for result in result_objs]
