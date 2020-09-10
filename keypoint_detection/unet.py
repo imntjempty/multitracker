@@ -74,16 +74,18 @@ def get_efficient_model(config):
         'block1a_activation', # (112,112,32)
         'block3a_expand_activation', # (56,56,144)
         'block4a_expand_activation', # (28,28,240)
-        'block5a_expand_activation', # (14,14,672)
-        'block6a_activation' # (7,7,1152)
+        'block5a_expand_activation'#, # (14,14,672)
+        #'block6a_activation' # (7,7,1152)
     ]
 
     encoded_layers = []
     for i , l in enumerate(encoder.layers):
         l.trainable = True
         if l.name in encoded_layer_names:
-             
-            encoded_layers.append(l.output)
+            x = l.output
+            #if l.output.shape[3] > 256:
+            #    x = upsample(256,1,strides=1)(x)
+            encoded_layers.append(x)
             print('efficient',i, l.output.shape, l.name )
         try:
             #print('efficient',i, [w.shape for w in l.weights], l.name )
@@ -92,13 +94,19 @@ def get_efficient_model(config):
         except Exception as e :
             print(e)
 
+
+
+
     #down1 = upsample(256,3,strides=-2)(encoded_layers[-1])
     #down2 = upsample(256,3,strides=-2)(encoded_layers[-1])
     #encoded_layers.append( down1 )
 
     bf = 64
     x = encoded_layers[-1]
-    for i_block in range(4,-1,-1):
+    for _ in range(2):
+        x = upsample(512,3,strides=1)(x)
+
+    for i_block in range(len(encoded_layers)-1,-1,-1):
         nf = min(512, bf * 2**i_block)
         #print('decoder',i_block,nf)
         ne = encoded_layers[i_block].shape[3]
