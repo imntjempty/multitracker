@@ -102,6 +102,9 @@ def Decoder(config,encoder):
 def load_im(image_file):
     image = tf.io.read_file(image_file)
     image = tf.image.decode_jpeg(image,channels=3)
+    return preprocess(image)
+
+def preprocess(image):
     image = tf.image.resize_with_pad(image,640,640,antialias=True)
     image = tf.cast(image,tf.float32)
     image = (image / 127.5) - 1
@@ -147,7 +150,7 @@ def train(config=None):
     autoencoder = Model(inputs = inputs, outputs = [feature_extractor, reconstructed]) #dataset['train'][0],outputsdataset['train'][1])
 
     # checkpoints and tensorboard summary writer
-    now = str(datetime.now()).replace(' ','_').replace(':','-')
+    now = str(datetime.now()).replace(' ','_').replace(':','-').split('.')[0]
     checkpoint_path = os.path.expanduser("~/checkpoints/multitracker_ae_bbox/%s" % now)
     vis_directory = os.path.join(checkpoint_path,'vis')
     logdir = os.path.join(checkpoint_path,'logs')
