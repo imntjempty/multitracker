@@ -18,7 +18,7 @@ def load_model(path_model):
     t0 = time.time()
     trained_model = tf.keras.models.load_model(h5py.File(path_model, 'r'))
     t1 = time.time()
-    print('[*] loaded model from %s in %f seconds.' %(path_model,t1-t0))
+    print('[*] loaded keypoint model from %s in %f seconds.' %(path_model,t1-t0))
     return trained_model 
 
 def load_data(project_id,video_id,max_minutes=0):

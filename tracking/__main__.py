@@ -14,115 +14,14 @@ import h5py
 from multitracker import util 
 from multitracker.be import video
 from multitracker.keypoint_detection import heatmap_drawing, model 
-from multitracker.keypoint_detection import predict
+from multitracker.keypoint_detection import predict 
+from multitracker.tracking.inference import load_model as load_keypoint_model
 from multitracker.tracking.inference import load_data, load_model, get_heatmaps_keypoints
 from multitracker.keypoint_detection.roi_segm import inference_heatmap, get_center
 from multitracker.tracking.tracklets import get_tracklets
 from multitracker.tracking.clustering import get_clustlets
 from multitracker.object_detection import finetune
 from multitracker.tracking.deep_sort import deep_sort_app
-from multitracker import autoencoder
-
-def get_detections(config, model_path, project_id, video_id, bounding_boxes, max_minutes = 0, thresh_detection = 0.5):
-    project_id = int(project_id)
-    video_id = int(video_id)
-    output_dir = os.path.expanduser('~/data/multitracker/tracks/%i/%i/%s' % (project_id, video_id, model_path.split('/')[-1].split('.')[0]))
-    if not os.path.isdir(output_dir):
-        os.makedirs(output_dir)
-
-    # load pretrained model
-    trained_model = load_model(model_path)
-
-    # load frame files
-    frame_files = load_data(project_id,video_id, max_minutes=max_minutes)
-    config['input_image_shape'] = cv.imread(frame_files[0]).shape[:2]
-
-    detections = {} 
-    #mean_rgb = model.calc_mean_rgb(config)
-
-    print('bounding_boxes',list(bounding_boxes.keys()))
-
-    for i, frame_file in enumerate(frame_files):
-        tframestart = time.time()
-        fnameo = os.path.join(output_dir,frame_file.split('/')[-1])
-        # inference frame
-        #print('frame_file',frame_file)
-        frame = cv.imread(frame_file)
-        frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
-        tread = time.time()
-        heatmaps = inference_heatmap(config, trained_model, frame, bounding_boxes[frame_file])#-mean_rgb)
-        tinference = time.time()
-        # detect keypoints
-        keypoints = get_heatmaps_keypoints(heatmaps,thresh_detection=thresh_detection)
-        tkeypoints = time.time()
-        detections[frame_file] = keypoints
-        tframeend = time.time()
-        eta_min = (len(frame_files)-i) * (tframeend - tframestart) / 60.
-        print('[* %i/%i]'%(i,len(frame_files)), fnameo ,'heatmaps',heatmaps.shape,'min/max %f/%f'%(heatmaps.min(),heatmaps.max()),'found %i keypoints'%len(keypoints),'in %f seconds. estimated %f minutes remaining'%(tframeend - tframestart,eta_min))
-        if 1:
-            print('[* timings] dump detections: ioread %f, inference %f, keypoints %f'%(tread-tframestart,tinference-tread,tkeypoints-tinference))
-    
-    #if 1:
-    #    util.make_video(output_dir, output_dir+'.mp4',"%05d.png")
-    
-    return detections 
- 
-def visualize_boxes_with_keypoints(config,tracked_boxes, tracked_keypoints, video_file):
-    frames_dir = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'train')
-    print('[*] making visualization video with %i frames in dir %s' % (len(glob(os.path.join(frames_dir,'*.png'))),frames_dir))
-
-    colors = util.get_colors()
-    color_offset = 10
-
-    print('[*] visualize_boxes_with_keypoints')
-    print('files:',len(list(tracked_boxes.keys())),'\n')
-    print('keypoints:',len(tracked_keypoints),'\n')
-    print('video_file',video_file)
-    
-    for frame_idx in tracked_boxes.keys():
-        f = os.path.join(frames_dir,'%05d.png' % int(frame_idx))
-        im = cv.imread(f)
-        vis = np.array(im,copy=True)
-        crop_dim = int(vis.shape[0]/3.)
-        stroke_box = 1 + int(vis.shape[1]/600.)
-        radius_keypoint = int(vis.shape[1]/200.)
-
-        boxes = tracked_boxes[frame_idx]
-        #sprint('tracked_keypoints',tracked_keypoints)
-        keypoints = []
-        for kp in tracked_keypoints:
-            if int(frame_idx) in kp['history_steps']:
-                idx = kp['history_steps'].index(frame_idx)
-                pos = kp['history'][idx]
-                c = kp['history_class'][idx]
-                keypoints.append([pos,c])
-
-        ## drawing idv boxes
-        vis_boxes = []
-        for ibox, box in enumerate(boxes):
-            idv, x1, y1, w, h = box
-            color_box = [int(cc) for cc in colors[(idv+color_offset)%len(colors)]]
-            x2, y2 = x1 + w, y1 + h 
-            x1, y1, x2, y2 = [int(round(q)) for q in [x1,y1,x2,y2]]
-            vis = cv.rectangle(vis,(x1,y1),(x2,y2),color_box,stroke_box)
-        
-            center = get_center(x1,y1,x2,y2,crop_dim)
-            vis_keypoints_box = im[center[0]-crop_dim//2,center[0]+crop_dim//2,center[1]-crop_dim//2,center[1]+crop_dim//2,:]
-
-            ## drawing keypoints 
-            for [pos,c] in keypoints:
-                x, y = [int(q) for q in np.int32(np.around(pos))]
-                color_keypoint = [int(ss) for ss in colors[c]]
-                vis_keypoints_box = cv.circle(vis_keypoints_box, (x-center[1]-crop_dim//2,y-center[0]-crop_dim//2), radius_keypoint, color_keypoint, -1)
-            vis_boxes.append(vis_keypoints_box)
-        
-        kp_stacked = np.vstack((np.hstack((vis_boxes[0],vis_boxes[1])),np.hstack((vis_boxes[2],vis_boxes[3]))))
-        kp_stacked = cv.resize(kp_stacked, (vis.shape[0],vis.shape[0]))
-        stacked = np.hstack((vis, kp_stacked))
-        # write to disk
-        fo = '/tmp/merged-%s.png' % str(frame_idx)
-        cv.imwrite(fo,stacked)
-        print(frame_idx,'boxes:',len(boxes),'keypoints:',len(keypoints))
 
 
 def main(args):
@@ -137,17 +36,37 @@ def main(args):
     config['fixed_number'] = args.fixed_number
     config['n_blocks'] = 4
 
+    # <load frames>
+    output_dir = '/tmp/multitracker/object_detection/predictions/%i' % (config['video_id'])
+    if not os.path.isdir(output_dir):
+        os.makedirs(output_dir)
+    print('[*] writing object detection bounding boxes %f minutes of video %i frames to %s' % (config['minutes'],config['video_id'],output_dir))
 
+    frames_dir = os.path.expanduser('~/data/multitracker/projects/%i/%i/frames/train' % (config['project_id'], config['video_id']))
+    frame_files = sorted(glob(os.path.join(frames_dir,'*.png')))
+    if len(frame_files) == 0:
+        raise Exception("ERROR: no frames found in " + str(frames_dir))
+    
+    if config['minutes']> 0:
+        frame_files = frame_files[:int(30. * 60. * config['minutes'])]
+
+    # </load frames>
+
+    # <train models>
     # 1) animal bounding box finetuning -> trains and inferences 
-    config['objectdetection_max_steps'] = 25000
-    detection_file_bboxes = '/tmp/multitracker/object_detection/predictions/%i/%i_bboxes_*.npz' % (config['video_id'],config['objectdetection_max_steps']-1)
+    config['objectdetection_max_steps'] = 30000
     # train object detector
-    if len(glob(detection_file_bboxes)) == 0:
-        checkpoint_directory_object_detection = os.path.expanduser('~/checkpoints/bbox_detection/%s_vid%i' % (config['project_name'], int(config['video_id'])))
-        object_detect_restore = None 
-        if 'objectdetection_model' in config and config['objectdetection_model'] is not None:
-            object_detect_restore = config['objectdetection_model']
-        finetune.finetune(config, checkpoint_directory_object_detection, checkpoint_restore = object_detect_restore)
+    now = str(datetime.now()).replace(' ','_').replace(':','-').split('.')[0]
+    checkpoint_directory_object_detection = os.path.expanduser('~/checkpoints/bbox_detection/%s_vid%i/%s' % (config['project_name'], int(config['video_id']),now))
+    object_detect_restore = None 
+    if 'objectdetection_model' in config and config['objectdetection_model'] is not None:
+        object_detect_restore = config['objectdetection_model']
+    
+    detection_model = None
+    if object_detect_restore is None:
+        detection_model = finetune.finetune(config, checkpoint_directory_object_detection, checkpoint_restore = object_detect_restore)
+        print('[*] trained object detection model',checkpoint_directory_object_detection)
+        config['object_detection_model'] = checkpoint_directory_object_detection
 
     ## crop bbox detections and train keypoint estimation on extracted regions
     #point_classification.calculate_keypoints(config, detection_file_bboxes)
@@ -158,75 +77,47 @@ def main(args):
         config_autoencoder['project_id'] = config['project_id']
         config_autoencoder['video_id'] = config['video_id']
         config['autoencoder_model'] = autoencoder.train(config_autoencoder)
-    print('[*] autoencoder model',config['autoencoder_model'])
-
-    # 3) run bbox tracking deep sort with fixed tracks
-    min_confidence = 0.5 # Detection confidence threshold. Disregard all detections that have a confidence lower than this value.
-    nms_max_overlap = 1.0 # Non-maxima suppression threshold: Maximum detection overlap
-    max_cosine_distance = 0.2 # Gating threshold for cosine distance metric (object appearance).
-    nn_budget = None # Maximum size of the appearance descriptors gallery. If None, no budget is enforced.
-    display = False # dont write vis images
-
-    detection_file_trackbedbboxes = '/tmp/multitracker/tracked_boxes_%i.npz' % config['video_id']
-    if not os.path.isfile(detection_file_trackbedbboxes):
-        deep_sort_app.run(
-            config, detection_file_bboxes, detection_file_trackbedbboxes,
-            min_confidence, nms_max_overlap, max_cosine_distance, nn_budget, display)
-    tracked_boxes = np.load(detection_file_trackbedbboxes, allow_pickle=True)['tracked_boxes'].item()
-    print('[*] loaded bbox animal tracking for %i frames' % len(list(tracked_boxes.keys())))
-
-
+    print('[*] trained autoencoder model',config['autoencoder_model'])
 
     # 4) train keypoint estimator model
     if config['keypoint_model'] is None:
         config['max_steps'] = 50000
         model.create_train_dataset(config)
         config['keypoint_model'] = model.train(config)
-    print('[*] keypoint_model',config['keypoint_model'])
+    print('[*] trained keypoint_model',config['keypoint_model'])
+    # </train models>
 
-    # 5) inference keypoint detection 
-    file_keypoint_detections = '/tmp/keypoint_detections-%i-%f-%f.npz' % (args.video_id, args.minutes, args.thresh_detection)
-    print('file_keypoint_detections',file_keypoint_detections)
-    if not os.path.isfile(file_keypoint_detections):
-        detections = get_detections(config, config['keypoint_model'], args.project_id, args.video_id, tracked_boxes, max_minutes=args.minutes, thresh_detection=args.thresh_detection)
-        np.savez_compressed('.'.join(file_keypoint_detections.split('.')[:-1]), detections=detections)
-        wrote_detections = True 
-    else:
-        detections = np.load(file_keypoint_detections, allow_pickle=True)['detections'].item()
-        wrote_detections = False 
+    # <load models>
+    # load trained object detection model
+    if detection_model is None:
+        #ckpt_detect, model_config_detect, detection_model = finetune.restore_weights(config['objectdetection_model'])
+        from object_detection.utils import config_util
+        from object_detection.builders import model_builder
+        configs = config_util.get_configs_from_pipeline_file(finetune.get_pipeline_config())
+        model_config = configs['model']
+        model_config.ssd.num_classes = 1
+        detection_model = model_builder.build(model_config=model_config, is_training=False)
+        ckpt = tf.compat.v2.train.Checkpoint(detection_model=detection_model)
+        ckpt.restore(tf.train.latest_checkpoint(config['objectdetection_model'])).expect_partial()
 
-    # 6) keypoint tracklet stage
-    file_tracklets = '/tmp/tracklets-%i-%f-%f.npz' % (args.video_id, args.minutes, args.thresh_detection)
-    print('file_tracklets',file_tracklets)
-    if wrote_detections or not os.path.isfile(file_tracklets):
-        tracklets = get_tracklets(detections, config['keypoint_model'], config, args.project_id, args.video_id)
-        np.savez_compressed('.'.join(file_tracklets.split('.')[:-1]), tracklets=tracklets)
-        wrote_tracklets = True 
-    else:
-        tracklets = np.load(file_tracklets, allow_pickle=True)['tracklets']#.item()
-        wrote_tracklets = False 
+    # load trained autoencoder model for Deep Sort Tracking 
+    encoder_model = deep_sort_app.load_feature_extractor(config)
 
-    if 0:
-        # 4) keypoint tracklet clustering stage
-        file_clusters = '/tmp/clusters-%i-%f-%f.npz' % (args.video_id, args.minutes, args.thresh_detection)
-        print('file_clusters',file_clusters)
-        if wrote_tracklets or not os.path.isfile(file_clusters):
-            clusters = get_clustlets(tracklets)
-            np.savez_compressed('.'.join(file_clusters.split('.')[:-1]), clusters=clusters)
-            wrote_clusters = True
-        else:
-            clusters = np.load(file_clusters, allow_pickle=True)#['clusters']#.item()
-            clusters = dict(zip(("{}".format(k) for k in clusters), (clusters[k] for k in clusters)))['clusters']
-            wrote_clusters = False
-        
-    # 7) visualize merged results
-    video_file = '/tmp/tracking_%i.mp4' % config['video_id']
-    visualize_boxes_with_keypoints(config, tracked_boxes, tracklets, video_file)
+    # load trained keypoint model
+    keypoint_model = load_keypoint_model(config['keypoint_model'])
+    # </load models>
 
-    tend = time.time()
-    duration_min = int((tend - tstart)/60.)
-    duration_h = int((tend - tstart)/3600.)
-    print('[*] finished tracking after %i minutes. (%i hours)' % (duration_min, duration_h))
+    # 3) run bbox tracking deep sort with fixed tracks
+    min_confidence = 0.5 # Detection confidence threshold. Disregard all detections that have a confidence lower than this value.
+    nms_max_overlap = 1.0 # Non-maxima suppression threshold: Maximum detection overlap
+    max_cosine_distance = 0.2 # Gating threshold for cosine distance metric (object appearance).
+    nn_budget = None # Maximum size of the appearance descriptors gallery. If None, no budget is enforced.
+    display = True # dont write vis images
+
+    deep_sort_app.run(config, detection_model, encoder_model, keypoint_model, output_dir, 
+            min_confidence, nms_max_overlap, max_cosine_distance, nn_budget, display)
+    
+    print('[*] done tracking')
 
 if __name__ == '__main__':
     import argparse
@@ -241,6 +132,7 @@ if __name__ == '__main__':
     parser.add_argument('--fixed_number',required=False,default=4,type=int)
     args = parser.parse_args()
     
-    assert args.objectdetection_model is None or (args.objectdetection_model is not None and args.objectdetection_model.endswith('.index'))
+    #assert args.objectdetection_model is None or (args.objectdetection_model is not None and args.objectdetection_model.endswith('.index'))
+    assert args.keypoint_model is None or (args.keypoint_model is not None and args.keypoint_model.endswith('.h5'))
 
     main(args)

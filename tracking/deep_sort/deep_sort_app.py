@@ -12,7 +12,8 @@ import cv2 as cv
 import numpy as np
 import tensorflow as tf 
 assert tf.__version__.startswith('2.'), 'YOU MUST INSTALL TENSORFLOW 2.X'
-
+print('[*] TF version',tf.__version__)
+tf.compat.v1.enable_eager_execution()
 from tensorflow.keras.models import Model
 
 from multitracker.tracking.deep_sort.application_util import preprocessing
@@ -21,10 +22,11 @@ from multitracker.tracking.deep_sort.deep_sort import nn_matching
 from multitracker.tracking.deep_sort.deep_sort.detection import Detection
 from multitracker.tracking.deep_sort.deep_sort.tracker import Tracker
 from multitracker import autoencoder
+from multitracker.keypoint_detection import roi_segm
 
 from multitracker.be import video
 
-def gather_sequence_info(config, detection_file):
+def gather_sequence_info(config):
     """Gather sequence information, such as image filenames, detections,
     groundtruth (if available).
 
@@ -70,12 +72,10 @@ def gather_sequence_info(config, detection_file):
     else:
         image_size = None
 
-    
     feature_dim = 128#detections.shape[1] - 10 if detections is not None else 0
     seq_info = {
         "sequence_name": config['project_name'],
         "image_filenames": image_filenames,
-        'detection_file': detection_file,
         "image_size": image_size,
         "min_frame_idx": min_frame_idx,
         "max_frame_idx": max_frame_idx,
@@ -135,13 +135,45 @@ def load_feature_extractor(config):
         print('[*] WARNING: could not load pretrained model!')
     return encoder_model
 
+# Again, uncomment this decorator if you want to run inference eagerly
+#@tf.function
+def detect_bounding_boxes(detection_model, input_tensor):
+    """Run detection on an input image.
+
+    Args:
+        input_tensor: A [1, height, width, 3] Tensor of type tf.float32.
+        Note that height and width can be anything since the image will be
+        immediately resized according to the needs of the model within this
+        function.
+
+    Returns:
+        A dict containing 3 Tensors (`detection_boxes`, `detection_classes`,
+        and `detection_scores`).
+    """
+    #if len(inp_tensor.shape)==3:
+    #    input_tensor = tf.expand_dims(input_tensor, 0)
+    input_tensor = tf.cast(input_tensor,tf.float32)
+    print('SHAPES',input_tensor.shape)
+    preprocessed_image, shapes = detection_model.preprocess(input_tensor)
+    print('preprocessed_image',preprocessed_image.shape,'shapes',shapes)
+    prediction_dict = detection_model.predict(preprocessed_image, shapes)
+    detections = detection_model.postprocess(prediction_dict, shapes)
+    detections['detection_boxes'] = detections['detection_boxes'][0,:,:]
+    detections['detection_scores'] = detections['detection_scores'][0]
+    print('BOXES',detections['detection_boxes'].shape)
+    #print(detections['detection_scores'].numpy()) #tf.make_ndarray(detections['detection_scores']))
+    print(detections['detection_scores'].numpy())
+    return detections
+
 act_detection_part_file = None
 act_detection_part_data = None 
-def load_detections(config, encoder_model, seq_info, frame_idx):
+def load_detections(config, detection_model, encoder_model, seq_info, frame_idx):
+    frame_directory = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'train')
+    frame_file = os.path.join(frame_directory, '%05d.png' % frame_idx)
     global act_detection_part_file
     global act_detection_part_data
     max_detections_per_frame = 10
-
+    '''
     ## detection
     results = []
     if act_detection_part_file is None:
@@ -159,22 +191,25 @@ def load_detections(config, encoder_model, seq_info, frame_idx):
         except:
             # finished, save results 
             return None 
-
-    inp_tensor = autoencoder.load_im(_frame_idx)
+    '''
+     
+    inp_tensor = cv.imread(frame_file)
     inp_tensor = tf.expand_dims(inp_tensor,0)
-    features, _ = encoder_model(inp_tensor,training=False)
+    features, _ = encoder_model(autoencoder.preprocess(inp_tensor),training=False)
     #print('features',features.shape)
     
-    act_detection_part_data[_frame_idx]['detection_boxes'] = np.reshape(act_detection_part_data[_frame_idx]['detection_boxes'],act_detection_part_data[_frame_idx]['detection_boxes'].shape[1:])
+    '''act_detection_part_data[_frame_idx]['detection_boxes'] = np.reshape(act_detection_part_data[_frame_idx]['detection_boxes'],act_detection_part_data[_frame_idx]['detection_boxes'].shape[1:])
     act_detection_part_data[_frame_idx]['detection_scores'] = np.reshape(act_detection_part_data[_frame_idx]['detection_scores'],act_detection_part_data[_frame_idx]['detection_scores'].shape[1:])
-    bboxes = act_detection_part_data[_frame_idx]
-    #for i in range(bboxes['detection_boxes'].shape[0]):
+    bboxes = act_detection_part_data[_frame_idx]'''
     
+    bboxes = detect_bounding_boxes(detection_model, inp_tensor)
+    #for i in range(bboxes['detection_boxes'].shape[0]):
+    results = []
     for j in range(bboxes['detection_boxes'].shape[0]):
         #print(i,j,'bbox',frame_idx,bboxes['detection_boxes'][i].shape,bboxes['detection_scores'][i].shape)
         class_id = 1
         proba = bboxes['detection_scores'][j]
-        
+        #print('box',j,bboxes['detection_boxes'][j])
         top,left,height,width = bboxes['detection_boxes'][j]
         top *= seq_info['image_size'][0]
         height *= seq_info['image_size'][0]
@@ -189,12 +224,13 @@ def load_detections(config, encoder_model, seq_info, frame_idx):
         features_crop = tf.keras.layers.GlobalAveragePooling2D()(features_crop)
         features_crop = features_crop.numpy()[0,:]
 
-        #print('xxx',bboxes['detection_boxes'][j],proba,'features',features_crop.shape)
+        #print('xxx',bboxes['detection_boxes'][j],'QQQ',top,left,height,width,'proba',proba,'features',features_crop.shape)
 
 
         detection = Detection([left,top,width,height], proba, features_crop)
-            
+         
         results.append(detection)
+        #print(results[-1])
     
     # ignore detections for frame if too many things detected 
     #if len(results) > 10:
@@ -202,11 +238,15 @@ def load_detections(config, encoder_model, seq_info, frame_idx):
     #    results = results[:10]
         
 
-    return results        
+    return inp_tensor[0,:,:,:], results        
 
-def run(config, detection_file, output_file, min_confidence,
+#def run(config, detection_file, output_file, min_confidence,
+#        nms_max_overlap, max_cosine_distance,
+#        nn_budget, display):
+def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_confidence,
         nms_max_overlap, max_cosine_distance,
         nn_budget, display):
+            
     """Run multi-target tracker on a particular sequence.
 
     Parameters
@@ -231,9 +271,7 @@ def run(config, detection_file, output_file, min_confidence,
 
     """
 
-    encoder_model = load_feature_extractor(config)
-
-    seq_info = gather_sequence_info(config, detection_file)
+    seq_info = gather_sequence_info(config)
     #print('seq_info',seq_info.keys())
     
     metric = nn_matching.NearestNeighborDistanceMetric(
@@ -244,11 +282,16 @@ def run(config, detection_file, output_file, min_confidence,
         tracker = Tracker(metric)
     results = []
 
+    
+
     def frame_callback(vis, frame_idx):
         #print("Processing frame %05d" % frame_idx)
-        detections = load_detections(config, encoder_model, seq_info, frame_idx)
-        if detections is None:
-            return False 
+        frame, detections = load_detections(config, detection_model, encoder_model, seq_info, frame_idx)
+        print('frame',frame.shape)
+        crop_dim = int(frame.shape[0]/3.)
+        
+        #if detections is None:
+        #    return False 
 
         detections = [d for d in detections if d.confidence >= min_confidence]
         #print('[*] processing frame',frame_idx,'with %i detections ' % len(detections))
@@ -266,6 +309,22 @@ def run(config, detection_file, output_file, min_confidence,
         tracker.predict()
         tracker.update(detections)
         
+        # inference keypoints for all tracks
+        for i, track in enumerate(tracker.tracks):
+            
+            x1,y1,x2,y2 = track.to_tlbr()
+            print(i,x1,y1,x2,y2)
+            # crop region around center of bounding box
+            center = roi_segm.get_center(x1,y1,x2,y2, crop_dim)
+            
+            roi = frame[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:]
+            roi = tf.image.resize(roi,[config['img_height'],config['img_width']])
+            roi = tf.expand_dims(tf.convert_to_tensor(roi),axis=0)
+            yroi = trained_model.predict(roi)
+            print('yroi',yroi.shape)
+
+
+
         # Update visualization.
         if display:
             #print(seq_info["image_filenames"].keys())
@@ -277,7 +336,7 @@ def run(config, detection_file, output_file, min_confidence,
             vis.draw_trackers(tracker.tracks)
             fo = '/tmp/vis_%s.png'%frame_idx
             cv.imwrite(fo,vis.viewer.image)
-            #print('[*] wrote %s' % fo )
+            print('[*] wrote %s' % fo )
 
         # Store results.
         for track in tracker.tracks:
