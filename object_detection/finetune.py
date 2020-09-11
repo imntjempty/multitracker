@@ -158,15 +158,18 @@ def get_bbox_data(config, vis_input_data=0):
     
     return train_image_tensors, gt_box_tensors, gt_classes_one_hot_tensors
 
+def get_pipeline_config():
+    return  os.path.expanduser('~/github/models/research/object_detection/configs/tf2/ssd_resnet50_v1_fpn_640x640_coco17_tpu-8.config')
+
 def restore_weights(checkpoint_path = None):
     tf.keras.backend.clear_session()
 
     print('Building model and restoring weights for fine-tuning...', flush=True)
     num_classes = 1
-    pipeline_config = os.path.expanduser('~/github/models/research/object_detection/configs/tf2/ssd_resnet50_v1_fpn_640x640_coco17_tpu-8.config')
-    if checkpoint_path is not None:
+    pipeline_config = get_pipeline_config()
+    if checkpoint_path is None:
         checkpoint_path = os.path.expanduser('~/data/multitracker/object_detection/ssd_resnet50_v1_fpn_640x640_coco17_tpu-8/checkpoint/ckpt-0.index')
-
+    
     # Load pipeline config and build a detection model.
     #
     # Since we are working off of a COCO architecture which predicts 90
@@ -189,7 +192,8 @@ def restore_weights(checkpoint_path = None):
         # _prediction_heads=detection_model._box_predictor._prediction_heads,
         #    (i.e., the classification head that we *will not* restore)
         _box_prediction_head=detection_model._box_predictor._box_prediction_head,
-        )
+    )
+    
     fake_model = tf.compat.v2.train.Checkpoint(
             _feature_extractor=detection_model._feature_extractor,
             _box_predictor=fake_box_predictor)
@@ -200,7 +204,7 @@ def restore_weights(checkpoint_path = None):
     image, shapes = detection_model.preprocess(tf.zeros([1, 640, 640, 3]))
     prediction_dict = detection_model.predict(image, shapes)
     _ = detection_model.postprocess(prediction_dict, shapes)
-    print('Weights restored!')
+    print('[*] object detection weights restored from %s' % checkpoint_path)
 
     return ckpt, model_config, detection_model
 
@@ -234,6 +238,7 @@ def inference_train_video(detection_model,config, steps, minutes = 0):
             A dict containing 3 Tensors (`detection_boxes`, `detection_classes`,
             and `detection_scores`).
         """
+        #input_tensor = tf.image.resize_with_pad(input_tensor,640,640,antialias=True)
         preprocessed_image, shapes = detection_model.preprocess(input_tensor)
         prediction_dict = detection_model.predict(preprocessed_image, shapes)
         return detection_model.postprocess(prediction_dict, shapes)
@@ -289,8 +294,8 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
         # These parameters can be tuned; since our training set has 5 images
         # it doesn't make sense to have a much larger batch size, though we could
         # fit more examples in memory if we wanted to.
-        batch_size = 8
-        learning_rate = 0.001
+        batch_size = 4
+        learning_rate = 0.001 
         num_batches = int(1e7) # was 100 with 5 examples
 
         # Select variables in top layers to fine-tune.
@@ -352,7 +357,8 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
 
         optimizer = tf.keras.optimizers.SGD(learning_rate=learning_rate, momentum=0.9)
         train_step_fn = get_model_train_step_function(detection_model, optimizer, to_fine_tune)
-
+        writer_train = tf.summary.create_file_writer(checkpoint_directory+'/train')
+    
         print('Start fine-tuning!', flush=True)
         for idx in range(config['objectdetection_max_steps']):
             # Grab keys for a random subset of examples
@@ -371,25 +377,24 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
             # Training step (forward pass + backwards pass)
             total_loss = train_step_fn(image_tensors, gt_boxes_list, gt_classes_list)
 
-            if idx % 10 == 0:
+            if idx % 100 == 0:
                 print('batch ' + str(idx) + ' of ' + str(config['objectdetection_max_steps']) + ', loss=' +  str(total_loss.numpy()), flush=True)
             
-            if idx % 9999 == 0:
-                ckpt.save(checkpoint_directory)
-                print('[*] saved model to',checkpoint_directory)
+            if idx % 100 == 0:
+                with writer_train.as_default():
+                    tf.summary.scalar("loss",total_loss,step=idx)
+                    writer_train.flush()
 
-            '''if idx % 1000 == 0:
-                finetuned_checkpoint_path = os.path.expanduser('~/checkpoints/object_detection')
-                finetuned_checkpoint_path = os.path.join(finetuned_checkpoint_path,'finetuned_%i.h5' % idx)
-                detection_model.save(finetuned_checkpoint_path)
-                print('[*] saved model to', finetuned_checkpoint_path)'''
-
-        ckpt.save(checkpoint_directory)
-        print('[*] saved model to',checkpoint_directory)
-        print('[*] Done fine-tuning object detection! inferencing all frames ...')    
+        # save model for later use
+        ckpt_saver = tf.compat.v2.train.Checkpoint(detection_model=detection_model)
+        ckpt_manager = tf.train.CheckpointManager(ckpt_saver, checkpoint_directory, max_to_keep=5)
+        saved_path = ckpt_manager.save()
         
-    inference_train_video(detection_model,config,config['objectdetection_max_steps']-1,config['minutes'])
-
+        print('[*] saved object detection model to',checkpoint_directory,'->',saved_path)
+        #print('[*] Done fine-tuning object detection! inferencing all frames ...')    
+        
+    #inference_train_video(detection_model,config,config['objectdetection_max_steps']-1,config['minutes'])
+    return detection_model
     
 
 if __name__ == '__main__':
