@@ -56,18 +56,23 @@ def get_vanilla_model(config):
     model.summary()
     return model 
 
+def preprocess(x):
+    #return x 
+    return tf.keras.applications.efficientnet.preprocess_input(x)
+
 def get_efficient_model(config):
     # https://keras.io/examples/vision/image_classification_efficientnet_fine_tuning/
     
     IMG_SIZE = 224
     size = (IMG_SIZE, IMG_SIZE)
     inputs = tf.keras.layers.Input(shape=(IMG_SIZE, IMG_SIZE, 3))
-
+    #x = tf.keras.layers.GaussianNoise(20)(inputs)
+    x = inputs 
     from tensorflow.keras.applications import EfficientNetB0
     weights='imagenet'
     #weights = None
     
-    encoder = EfficientNetB0(include_top=False, weights=weights, drop_connect_rate=0.2,input_tensor=inputs)
+    encoder = EfficientNetB0(include_top=False, weights=weights, drop_connect_rate=0.2,input_tensor=x)
     encoder.trainable = True 
 
     encoded_layer_names = [
@@ -105,6 +110,7 @@ def get_efficient_model(config):
     x = encoded_layers[-1]
     for _ in range(2):
         x = upsample(512,3,strides=1)(x)
+        #x = tf.keras.layers.Dropout(0.5)(x)
 
     for i_block in range(len(encoded_layers)-1,-1,-1):
         nf = min(512, bf * 2**i_block)
@@ -131,7 +137,7 @@ def get_efficient_model(config):
     # final classification layer
     x = upsample(1+len(config['keypoint_names']),1,1,norm_type=None,act=tf.keras.layers.Activation('softmax'))(x)     
     
-    model = tf.keras.Model(inputs=encoder.inputs, outputs=[[x]], name="Efficient Unet")
+    model = tf.keras.Model(inputs=encoder.inputs, outputs=[[x]], name="EfficientUnet")
     model.summary()
     return model 
 
