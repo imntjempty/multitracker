@@ -137,7 +137,6 @@ def load_roi_dataset(config,mode='train'):
         comp = [ image[:,ii*wroi:(ii+1)*wroi,:] for ii in range(wroicomp//wroi)] # from hstacked to depth stacked
         
         # preprocess rgb image 
-        print('shape0',comp[0])
         comp[0] = unet.preprocess(comp[0])
         comp = tf.concat(comp,axis=2)
         comp = comp[:,:,:(3+len(config['keypoint_names']))]
@@ -264,22 +263,22 @@ def train(config):
         optimizer.apply_gradients(zip(gradients,net.trainable_variables))
 
 
+        should_test = global_step % 250 == 0
+        test_loss = 0.0
+        if should_test:
+            # test data
+            nt = 0
+            for xt,yt in dataset_test:
+                predicted_test = net(xt,training=False)[0]
+                if not predicted_test.shape[1] == y.shape[1]:
+                    predicted_test = tf.image.resize(predicted_test, x.shape[1:3]) 
+
+                test_loss += loss_func(predicted_test, yt)
+                nt += 1 
+            test_loss = test_loss / nt 
+
         # write summary
         if should_summarize:
-            should_test = should_summarize and global_step % 500 == 0
-            if should_test:
-                # test data
-                test_loss = 0.0
-                nt = 0
-                for xt,yt in dataset_test:
-                    predicted_test = net(xt,training=False)[0]
-                    if not predicted_test.shape[1] == y.shape[1]:
-                        predicted_test = tf.image.resize(predicted_test, x.shape[1:3]) 
-    
-                    test_loss += loss_func(predicted_test, yt)
-                    nt += 1 
-                test_loss = test_loss / nt 
-
             with tf.device("cpu:0"):
                 def im_summary(name,data):
                     tf.summary.image(name,data,step=global_step)
@@ -306,22 +305,29 @@ def train(config):
                         im_summary('background', tf.concat((tf.expand_dims(yt[:,:,:,-1],axis=3),tf.expand_dims(predicted_test[:,:,:,-1],axis=3)),axis=2))
                             
                         writer_test.flush()
-        return loss
+
+        
+        result = {'train_loss':loss}
+        if should_test:
+            result['test_loss'] = test_loss 
+        return result 
 
     n = 0
     swaps = model.get_swaps(config)
+    test_losses = []
     
     ddata = {}
     import pickle 
     ttrainingstart = time.time()
     epoch = -1
-    while True:#epoch < config['epochs'] and time.time()-ttrainingstart<config['max_hours'] * 60. * 60.:
+    early_stopping = False
+    while True:
         epoch += 1 
         start = time.time()
         epoch_steps = 0
         epoch_loss = 0.0
 
-        try:
+        if 1:# try:
             for x,y in dataset_train:
                 if 1:
                     if np.random.random() < 0.5:
@@ -338,15 +344,33 @@ def train(config):
                                 x, y = model.cutmix(x,y)
                     
                 should_summarize=n%100==0
-                train_step(x, y, writer_train, writer_test, n, should_summarize=should_summarize)
+                step_result = train_step(x, y, writer_train, writer_test, n, should_summarize=should_summarize)
+                
                 if n % 2000 == 0:
                     ckpt_save_path = ckpt_manager.save()
                     print('[*] saving model to %s'%ckpt_save_path)
                     net.save(os.path.join(checkpoint_path,'trained_model.h5'))
                 
+                if 'test_loss' in step_result:
+                    test_losses.append(step_result['test_loss'])
+                
+                finish = False
+                if n == config['max_steps']-1:
+                    print('[*] stopping keypoint estimation after step %i, because computational budget run out.' % n)
+                    finish = True 
+                
+                if 'test_loss' in step_result and config['early_stopping'] and len(test_losses) > 3:
+                    # early stopping        
+                    if step_result['test_loss'] > test_losses[-2] and step_result['test_loss'] > test_losses[-3] and step_result['test_loss'] > test_losses[-4]:
+                        finish = True 
+                        print('[*] stopping keypoint estimation early at step %i, because current test loss %f is higher than previous %f and %f' % (n, test_losses[-1], test_losses[-2], test_losses[-3]))
+                
+                if finish:
+                    return True 
+            
                 n+=1
-        except Exception as e:
-            print('step',n,'\n',e)
+        #except Exception as e:
+        #    print('step',n,'\n',e)
                 
 def main(args):
     config = model.get_config(args.project_id)

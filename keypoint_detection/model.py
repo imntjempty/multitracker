@@ -476,7 +476,8 @@ def get_config(project_id = 3):
     config['fov'] = 0.75 # default 0.5
     config['selftrain_start_step'] = 10000
     config['n_blocks'] = 5
-
+    config['early_stopping'] = True 
+    
     config['max_height'] = 1024
     config['project_id'] = project_id
     config['project_name'] = db.get_project_name(project_id)

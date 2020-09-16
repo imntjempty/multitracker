@@ -76,6 +76,7 @@ def main(args):
         config_autoencoder = autoencoder.get_autoencoder_config()
         config_autoencoder['project_id'] = config['project_id']
         config_autoencoder['video_id'] = config['video_id']
+        config_autoencoder['project_name'] = config['project_name']
         config['autoencoder_model'] = autoencoder.train(config_autoencoder)
     print('[*] trained autoencoder model',config['autoencoder_model'])
 
