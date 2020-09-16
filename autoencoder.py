@@ -231,7 +231,7 @@ def train(config=None):
         print('[*] epoch %i took %f seconds.'%(epoch,end-start))
     
 def get_autoencoder_config():
-    config = {'batch_size':32, 'img_height':640,'img_width':640}
+    config = {'batch_size':8, 'img_height':640,'img_width':640}
     config['max_steps'] = 15000
     config['lr'] = 1e-4
     return config
