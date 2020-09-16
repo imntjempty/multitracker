@@ -52,7 +52,7 @@ def get_roi_crop_dim(project_id, video_id, Htarget):
     crop_dim = int(crop_dim * Htarget/Hframe) 
 
     # not bigger than image 
-    crop_dim = min(crop_dim,H)
+    crop_dim = min(crop_dim,Htarget)
     return crop_dim
     #return int(Htarget/3.)
 
