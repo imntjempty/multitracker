@@ -163,35 +163,34 @@ def get_next_bbox_frame(project_id):
     project_id = int(project_id)
     config = model.get_config(project_id)
     
-    
     # load labeled frame idxs
     labeled_frames_keypoints = db.get_labeled_frames(project_id)
     labeled_frame_idxs = db.get_labeled_bbox_frames(project_id)
     num_db_frames = len(labeled_frame_idxs)
     
     # load frame files from disk
-    #frames = []
-    #while len(frames) == 0:
-    #    video_id = db.get_random_project_video(project_id)
-    #    frames_dir = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, project_id), video_id),'train')
-    #    frames = sorted(glob(os.path.join(frames_dir, '*.png')))
     video_id = db.get_random_project_video(project_id)
     frames_dir = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, project_id), video_id),'train')
     frames = [os.path.join(frames_dir, '%s.png' % ff) for ff in labeled_frames_keypoints]
     shuffle(frames)
     
     unlabeled_frame_found = False 
-    while not unlabeled_frame_found:
+    tries = 0
+    while not unlabeled_frame_found and tries < 50:
         ridx = int(np.random.uniform(len(frames)))
         if ridx > 0 and ridx < len(frames):
             frame_idx = frames[ridx]
             #frame_idx = frames[int(len(frames)*np.random.random())] # random sampling
             frame_idx = '.'.join(frame_idx.split('/')[-1].split('.')[:-1])
             unlabeled_frame_found = not (frame_idx in labeled_frame_idxs)
-
-    print('[*] serving bbox label job for frame %s.'%(frame_idx))
-
-    return render_template('labeling.html',project_id = int(project_id), video_id = int(video_id), frame_idx = frame_idx, num_db_frames = num_db_frames, keypoint_names = db.list_sep.join(config['keypoint_names']), sep = db.list_sep, labeling_mode = 'bbox')
+            if not unlabeled_frame_found:
+                tries += 1 
+    if unlabeled_frame_found:
+        print('[*] serving bbox label job for frame %s.'%(frame_idx))
+        return render_template('labeling.html',project_id = int(project_id), video_id = int(video_id), frame_idx = frame_idx, num_db_frames = num_db_frames, keypoint_names = db.list_sep.join(config['keypoint_names']), sep = db.list_sep, labeling_mode = 'bbox')
+    else:
+        print('[*] redirecting to keypoint labeling')
+        return render_labeling(project_id)
 
 @app.route('/get_frame/<project_id>/<video_id>/<frame_idx>')
 def get_frame(project_id,video_id,frame_idx):
