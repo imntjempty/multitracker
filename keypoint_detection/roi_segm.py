@@ -25,6 +25,37 @@ focal_loss = tfa.losses.SigmoidFocalCrossEntropy(False)
 def loss_func(ytrue,ypred):
     return tf.reduce_mean( focal_loss(ytrue,ypred))
 
+def get_roi_crop_dim(project_id, video_id, Htarget):
+    """
+        we need to crop around the centers of bounding boxes
+        the crop dimension should be high enough to see the whole animal but as small as possible
+        different videos show animals in different sizes, so we scan the db for all bboxes and take 98% median as size
+    """
+    [Hframe,Wframe,_] = cv.imread(glob(os.path.join(os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, project_id), video_id),'test'),'*.png'))[0]).shape
+    db.execute("select * from bboxes where video_id=%i;" % video_id)
+    db_boxxes = [x for x in db.cur.fetchall()]
+    assert len(db_boxxes) > 0, "[*] ERROR: no labeled bounding boxes found! please label at least one bounding box for video " + str(video_id) 
+        
+    deltas = []
+    for i, [_, _, frame_idx,x1,y1,x2,y2] in enumerate(db_boxxes):
+        deltas.extend([x2-x1,y2-y1])
+    deltas = np.array(deltas)
+    if 0:
+        print('deltas',deltas.shape,deltas.mean(),deltas.std(),'min/max',deltas.min(),deltas.max())
+        for pp in [50, 75, 90, 95, 96, 97, 98, 99]:
+            print('perc',pp,np.percentile(deltas, pp))
+    
+    # take 97% percentile with margin of 20%
+    crop_dim = np.percentile(deltas, 97) * 1.2
+    
+    # scale to target frame height
+    crop_dim = int(crop_dim * Htarget/Hframe) 
+
+    # not bigger than image 
+    crop_dim = min(crop_dim,H)
+    return crop_dim
+    #return int(Htarget/3.)
+
 def load_roi_dataset(config,mode='train'):
     if mode=='train' or mode == 'test':
         image_directory = os.path.join(config['data_dir'],'%s' % mode)
@@ -37,15 +68,8 @@ def load_roi_dataset(config,mode='train'):
     #w = H#int(W*Hcomp/H)
      #config['fov'])
     len_parts = Wcomp // w  
-    crop_dim = int(Hcomp/3.)
+    crop_dim = get_roi_crop_dim(config['project_id'], config['video_id'], Hcomp)
     
-    print('HW',H,w)
-    print('HWcomp',Hcomp,Wcomp)
-    #print('hw',h,w)
-    print('len_parts',len_parts,Wcomp/w)
-
-    #config['roi_dir'] = '/tmp/roisdat'
-    print('config',config['roi_dir'])
     for _mode in ['train','test']:
         if not os.path.isdir(os.path.join(config['roi_dir'],_mode)): os.makedirs(os.path.join(config['roi_dir'],_mode))
         
@@ -168,7 +192,8 @@ def inference_heatmap(config, trained_model, frame, bounding_boxes):
     else:
         H = frame.shape[0]
     W = frame.shape[1] * H/frame.shape[0]
-    crop_dim = int(H/3.)
+    crop_dim = get_roi_crop_dim(config['project_id'], config['video_id'], H)
+
     y = None 
     for j, (y1,x1,y2,x2) in enumerate(bounding_boxes): 
         incoords = [y1,x1,y2,x2]
@@ -298,8 +323,6 @@ def train(config):
 
         try:
             for x,y in dataset_train:
-                
-
                 if 1:
                     if np.random.random() < 0.5:
                         x,y = model.hflip(swaps,x,y)
@@ -315,9 +338,7 @@ def train(config):
                                 x, y = model.cutmix(x,y)
                     
                 should_summarize=n%100==0
-
                 train_step(x, y, writer_train, writer_test, n, should_summarize=should_summarize)
-                
                 if n % 2000 == 0:
                     ckpt_save_path = ckpt_manager.save()
                     print('[*] saving model to %s'%ckpt_save_path)
@@ -334,8 +355,6 @@ def main(args):
     print(config,'\n')
     model.create_train_dataset(config)
     checkpoint_path = train(config)
-    #predict.predict(config, checkpoint_path, int(args.project_id), int(args.video_id))
-
 
 if __name__ == '__main__':
     import argparse

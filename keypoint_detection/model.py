@@ -495,7 +495,7 @@ def main(args):
     print(config,'\n')
     create_train_dataset(config)
     checkpoint_path = train(config)
-    predict.predict(config, checkpoint_path, int(args.project_id), int(args.video_id))
+    #predict.predict(config, checkpoint_path, int(args.project_id), int(args.video_id))
 
 
 if __name__ == '__main__':

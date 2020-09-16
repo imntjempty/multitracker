@@ -254,7 +254,7 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
         #print('frame',frame.dtype,frame.shape)
         #im = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
         frame_kp = unet.preprocess(frame)
-        crop_dim = int(frame.shape[0]/3.)
+        crop_dim = get_roi_crop_dim(config['project_id'], config['video_id'], frame.shape[0]) 
         
         #if detections is None:
         #    return False 
