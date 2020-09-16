@@ -369,7 +369,10 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
     
         print('Start fine-tuning!', flush=True)
         early_stopping = False 
-        for idx in range(config['objectdetection_max_steps']):
+        idx = 0
+        test_losses = []
+
+        while idx < config['objectdetection_max_steps'] and not early_stopping:
             # Grab keys for a random subset of examples
             all_keys = list(range(len(train_image_tensors)))
             random.shuffle(all_keys)
@@ -391,9 +394,9 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
                 with writer_train.as_default():
                     tf.summary.scalar("loss",total_loss,step=idx)
                     writer_train.flush()
-            
+    
             ## Test images
-            if idx % 500 == 0:
+            if idx % 250 == 0:
                 num_test_batches = 8
                 test_loss = 0.
                 for itest in range(num_test_batches):
@@ -407,11 +410,20 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
 
                     # Test step (forward pass only)
                     test_loss = test_loss + train_step_fn(image_tensors, gt_boxes_list, gt_classes_list, update_weights = False)/num_test_batches
-                
+                test_losses.append(test_loss)
+
                 # write tensorboard summary
                 with writer_test.as_default():
                     tf.summary.scalar("loss",test_loss,step=idx)
                     writer_test.flush()
+
+                # check for early stopping -> stop training if test loss is increasing
+                if config['early_stopping'] and len(test_losses) > 3:
+                    if test_loss > test_losses[-2] and test_loss > test_losses[-3] and test_loss > test_losses[-4]:
+                        early_stopping = True 
+                        print('[*] stopping object detection early at step %i, because current test loss %f is higher than previous %f and %f' % (idx, test_loss, test_losses[-2], test_losses[-3]))
+
+            idx += 1 
 
         # save model for later use
         ckpt_saver = tf.compat.v2.train.Checkpoint(detection_model=detection_model)
