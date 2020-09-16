@@ -127,7 +127,6 @@ def load_feature_extractor(config):
     encoder_model = Model(inputs = inputs, outputs = [feature_extractor,encoder])
     ckpt = tf.train.Checkpoint(encoder_model=encoder_model)
 
-    #checkpoint_path = '/home/alex/checkpoints/multitracker_ae_bbox/2020-08-04_22-10-19.256387' 
     ckpt_manager = tf.train.CheckpointManager(ckpt, config['autoencoder_model'], max_to_keep=5)
 
     # if a checkpoint exists, restore the latest checkpoint.

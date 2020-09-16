@@ -151,7 +151,7 @@ def train(config=None):
 
     # checkpoints and tensorboard summary writer
     now = str(datetime.now()).replace(' ','_').replace(':','-').split('.')[0]
-    checkpoint_path = os.path.expanduser("~/checkpoints/multitracker_ae_bbox/%s" % now)
+    checkpoint_path = os.path.expanduser("~/checkpoints/multitracker_ae_bbox/%s/%s" % (config['project_name'], now))
     vis_directory = os.path.join(checkpoint_path,'vis')
     logdir = os.path.join(checkpoint_path,'logs')
     for _directory in [checkpoint_path,logdir]:
@@ -232,9 +232,8 @@ def train(config=None):
     
 def get_autoencoder_config():
     config = {'batch_size':32, 'img_height':640,'img_width':640}
-    config['epochs'] = 10
-    config['max_steps'] = 25000
-    config['lr'] = 5e-3
+    config['max_steps'] = 15000
+    config['lr'] = 1e-4
     return config
 
 if __name__ == '__main__':
