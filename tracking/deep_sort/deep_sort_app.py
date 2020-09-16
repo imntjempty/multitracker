@@ -247,9 +247,12 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
 
     if not os.path.isdir('/tmp/vis/'): os.makedirs('/tmp/vis/')
 
+    video_writer = None
     def frame_callback(vis, frame_idx):
         #print("Processing frame %05d" % frame_idx)
         frame, detections = load_detections(config, detection_model, encoder_model, seq_info, frame_idx)
+        if video_writer is None:
+            video_writer = cv.VideoWriter('/tmp/video_tracking_vid%i.mp4' % config['video_id'],cv.VideoWriter_fourcc('H','E','V','C'), 30, (frame.shape[1],frame.shape[0]))
         #print('frame',frame.dtype,frame.shape)
         #im = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
         frame_kp = unet.preprocess(frame)
@@ -278,22 +281,16 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
         y_kpheatmaps = np.zeros((frame.shape[0],frame.shape[1],1+len(config['keypoint_names'])),np.float32)
         #for i, track in enumerate(tracker.tracks):
         for i, detection in enumerate(detections):
-            #x1,y1,x2,y2 = track.last_detection.to_tlbr()
             x1,y1,x2,y2 = detection.to_tlbr()
-            #print('detect',i,x1,y1,x2,y2)
-            #x1,y1,x2,y2 = track.to_tlbr()
             # crop region around center of bounding box
             center = roi_segm.get_center(x1,y1,x2,y2, frame.shape[0], frame.shape[1], crop_dim)
             center[0] = int(round(center[0]))
             center[1] = int(round(center[1]))
             roi = frame_kp[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:]
-            #roi = tf.image.resize(roi,[config['img_height'],config['img_width']])
             roi = tf.image.resize(roi,[224,224])
             roi = tf.expand_dims(tf.convert_to_tensor(roi),axis=0)
-            #yroi = keypoint_model.predict(roi)
             yroi = keypoint_model(roi, training=False).numpy()
             yroi = yroi[0,:,:,:]
-            #print('yroi', crop_dim, yroi.dtype, yroi.shape,center[0]-crop_dim//2,center[0]+crop_dim//2,center[1]-crop_dim//2,center[1]+crop_dim//2)
             yroi = cv.resize(yroi,(crop_dim//2*2,crop_dim//2*2))
             
             y_kpheatmaps[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:] = yroi
@@ -302,9 +299,6 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
 
         # Update visualization.
         if display:
-            #print(seq_info["image_filenames"].keys())
-            #print('A',seq_info["image_filenames"].keys())
-            #print('sev',len(seq_info["image_filenames"][1][int(frame_idx)]))
             image = cv.imread(seq_info["image_filenames"][1][int(frame_idx)], cv.IMREAD_COLOR)
             vis.set_image(image.copy())
             vis.draw_detections(detections)
@@ -324,13 +318,10 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
             vis_crops = [  ]
             for i, track in enumerate(tracker.tracks):
                 x1,y1,x2,y2 = track.to_tlbr()
-                #x1,y1,x2,y2 = track.last_detection.to_tlbr()
                 center = roi_segm.get_center(x1,y1,x2,y2, image.shape[0],image.shape[1], crop_dim)
                 vis_crops.append( im[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:] )    
-                #if vis_crops[-1] is not None:
                 vis_crops[-1] = cv.resize(vis_crops[-1], (im.shape[0]//2,im.shape[0]//2))
             
-            #print('len tracks',len(tracker.tracks),'len vis crops',len(vis_crops))
             for i in range(4-len(vis_crops)):
                 vis_crops.append( np.zeros((im.shape[0]//2,im.shape[1]//2,3),'uint8'))
 
@@ -360,12 +351,13 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
                     channel = np.int32(255.*(channel-channel.min())/(channel.max() - channel.min()))
                     vis_keypoints[:,:,ii%3] = channel 
                 out = np.hstack((vis_keypoints,out))
-            # write image to disk
-            fo = '/tmp/vis/%s.png'  %frame_idx
-            cv.imwrite(fo,out)
-            print('[*] wrote %s' % fo )
+            if 0:
+                # write image to disk
+                fo = '/tmp/vis/%s.png'  %frame_idx
+                cv.imwrite(fo,out)
+                print('[*] wrote %s' % fo )
+            video_writer.write(out)
 
-            
         # Store results.
         for track in tracker.tracks:
             if not track.is_confirmed() or track.time_since_update > 1:
@@ -387,20 +379,21 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
     #for row in results:
     #    print('%d,%d,%.2f,%.2f,%.2f,%.2f,1,-1,-1,-1' % (
     #        row[0], row[1], row[2], row[3], row[4], row[5]),file=f)
-    result_data = {}
+    """result_data = {}
     for [frame_idx, track_id,a,b,c,d] in results:
         if not frame_idx in result_data:
             result_data[frame_idx] = []
         result_data[frame_idx].append([track_id,a,b,c,d])
-    np.savez_compressed('.'.join(output_file.split('.')[:-1]), tracked_boxes=result_data)
+    np.savez_compressed('.'.join(output_file.split('.')[:-1]), tracked_boxes=result_data)"""
         
 
-    if display:
+    if 0 and display:
         print('[*] finished frames, writing video ...')
         file_video = '/tmp/tracking.mp4'
         subprocess.call(['ffmpeg','-framerate','30','-i','/tmp/vis/%d.png', '-vf', 'format=yuv420p','-vcodec','libx265', file_video])
         subprocess.call(['rm','/tmp/vis/*.png'])
         print('[*] wrote video to %s' % file_video)
+    video_writer.release() 
 
 def bool_string(input_string):
     if input_string not in {"True","False"}:
