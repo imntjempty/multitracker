@@ -13,7 +13,7 @@ import h5py
 
 from multitracker import util 
 from multitracker.be import video
-from multitracker.keypoint_detection import heatmap_drawing, model 
+from multitracker.keypoint_detection import heatmap_drawing, model , roi_segm
 from multitracker.keypoint_detection import predict 
 from multitracker.tracking.inference import load_model as load_keypoint_model
 from multitracker.tracking.inference import load_data, load_model, get_heatmaps_keypoints
@@ -22,7 +22,7 @@ from multitracker.tracking.tracklets import get_tracklets
 from multitracker.tracking.clustering import get_clustlets
 from multitracker.object_detection import finetune
 from multitracker.tracking.deep_sort import deep_sort_app
-
+from multitracker import autoencoder
 
 def main(args):
     tstart = time.time()
@@ -83,7 +83,7 @@ def main(args):
     if config['keypoint_model'] is None:
         config['max_steps'] = 50000
         model.create_train_dataset(config)
-        config['keypoint_model'] = model.train(config)
+        config['keypoint_model'] = roi_segm.train(config)
     print('[*] trained keypoint_model',config['keypoint_model'])
     # </train models>
 
