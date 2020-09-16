@@ -80,7 +80,7 @@ def load_roi_dataset(config,mode='train'):
             
             for j, (y1,x1,y2,x2) in enumerate(frame_bboxes[frame_idx]):
                 # crop region around center of bounding box
-                center = get_center(x1,y1,x2,y2,crop_dim)        
+                center = get_center(x1,y1,x2,y2,im.shape[0], im.shape[1], crop_dim)        
 
                 try:
                     rois = [part[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:] for part in parts]
@@ -110,13 +110,18 @@ def load_roi_dataset(config,mode='train'):
         image = tf.io.read_file(image_file)
         image = tf.image.decode_png(image,channels=3)
         image = tf.cast(image,tf.float32)
-        comp = tf.concat([ image[:,ii*wroi:(ii+1)*wroi,:] for ii in range(wroicomp//wroi)],axis=2) # from hstacked to depth stacked
+        comp = [ image[:,ii*wroi:(ii+1)*wroi,:] for ii in range(wroicomp//wroi)] # from hstacked to depth stacked
+        
+        # preprocess rgb image 
+        print('shape0',comp[0])
+        comp[0] = unet.preprocess(comp[0])
+        comp = tf.concat(comp,axis=2)
         comp = comp[:,:,:(3+len(config['keypoint_names']))]
         hh = h 
         if mode == 'train':
             # random scale augmentation
             if tf.random.uniform([]) > 0.3:
-                hh = h + int(tf.random.uniform([],-h/7,h/7)) #h += int(tf.random.uniform([],-h/7,h/7))
+                hh = h + int(tf.random.uniform([],-h/10,h/10)) #h += int(tf.random.uniform([],-h/7,h/7))
 
             # apply augmentations
             # random rotation
@@ -129,14 +134,13 @@ def load_roi_dataset(config,mode='train'):
         comp = tf.concat((comp,tf.expand_dims(background,axis=2)),axis=2)
 
         # crop
-        #crop = comp
-        crop = tf.image.random_crop( comp, [hh,hh,1+3+len(config['keypoint_names'])])
-        crop = tf.image.resize(crop,[config['img_height'],config['img_width']])
-        
+        #crop = tf.image.random_crop( comp, [hh,hh,1+3+len(config['keypoint_names'])])
+        #crop = tf.image.resize(crop,[config['img_height'],config['img_width']])
+        comp = tf.image.resize(comp,[int(tf.random.uniform([],0,10))+config['img_height'],int(tf.random.uniform([],0,10))+config['img_width']])
+        crop = tf.image.random_crop( comp, [config['img_height'],config['img_width'],1+3+len(config['keypoint_names'])])
         # split stack into images and heatmaps
         image = crop[:,:,:3]
-        image = preprocess_input(image)
-    
+        
         #image = image - mean_rgb
         heatmaps = crop[:,:,3:] / 255.
         return image, heatmaps
@@ -149,7 +153,7 @@ def load_roi_dataset(config,mode='train'):
         data = data.shuffle(512)
     return data 
 
-def get_center(x1,y1,x2,y2,crop_dim):
+def get_center(x1,y1,x2,y2,H,W,crop_dim):
     center = [int(round(y1+(y2-y1)/2.)),int(round(x1+(x2-x1)/2.))]
         
     center[0] = min(H-crop_dim//2,center[0] )
@@ -175,7 +179,7 @@ def inference_heatmap(config, trained_model, frame, bounding_boxes):
         y2*=H/frame.shape[0]
 
         # crop region around center of bounding box
-        center = get_center(x1,y1,x2,y2, crop_dim)
+        center = get_center(x1,y1,x2,y2, H, W, crop_dim)
         
         roi = frame[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:]
         roi = tf.image.resize(roi,[config['img_height'],config['img_width']])
@@ -192,7 +196,7 @@ def inference_heatmap(config, trained_model, frame, bounding_boxes):
     
 def train(config):
     config['lr'] = 1e-4
-    config['cutmix'] = False
+    config['cutmix'] = True
     print('[*] config', config)
     
     
@@ -259,8 +263,8 @@ def train(config):
                     tf.summary.scalar('min',tf.reduce_min(predicted_heatmaps[:,:,:,:-1]),step=global_step)
                     tf.summary.scalar('max',tf.reduce_max(predicted_heatmaps[:,:,:,:-1]),step=global_step)
                     im_summary('image',inp/256.)
-                    for kk in range(1+(y.shape[3]-1)//3):
-                        im_summary('heatmaps-%i'%kk,tf.concat((inp[:,:,:,:3]/255.,y[:,:,:,kk*3:kk*3+3], predicted_heatmaps[:,:,:,kk*3:kk*3+3]),axis=2))
+                    for kk, keypoint_name in enumerate(config['keypoint_names']):
+                        im_summary('heatmap_%s' % keypoint_name, tf.concat((tf.expand_dims(y[:,:,:,kk],axis=3), tf.expand_dims(predicted_heatmaps[:,:,:,kk],axis=3)),axis=2))
                     im_summary('background', tf.concat((tf.expand_dims(y[:,:,:,-1],axis=3),tf.expand_dims(predicted_heatmaps[:,:,:,-1],axis=3)),axis=2))
                     
                     tf.summary.scalar("learning rate", lr(global_step), step = global_step)
@@ -271,8 +275,9 @@ def train(config):
                         tf.summary.scalar("loss %s" % config['loss'],test_loss,step=global_step)
                         im_summary('image',xt/256.)
                         
-                        im_summary('heatmaps-0',tf.concat((xt/256., yt[:,:,:,:3], predicted_test[:,:,:,:3]),axis=2))
-                        im_summary('heatmaps-1',tf.concat((xt/256., yt[:,:,:,3:6], predicted_test[:,:,:,3:6]),axis=2))
+                        for kk, keypoint_name in enumerate(config['keypoint_names']):
+                            im_summary('heatmap_%s' % keypoint_name, tf.concat((tf.expand_dims(yt[:,:,:,kk],axis=3), tf.expand_dims(predicted_test[:,:,:,kk],axis=3)),axis=2))
+                        
                         im_summary('background', tf.concat((tf.expand_dims(yt[:,:,:,-1],axis=3),tf.expand_dims(predicted_test[:,:,:,-1],axis=3)),axis=2))
                             
                         writer_test.flush()
@@ -280,7 +285,7 @@ def train(config):
 
     n = 0
     swaps = model.get_swaps(config)
-    print('swaps',swaps)
+    
     ddata = {}
     import pickle 
     ttrainingstart = time.time()
