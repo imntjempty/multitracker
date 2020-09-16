@@ -101,7 +101,7 @@ def render_labeling(project_id):
             # choose random frame that is not already labeled
             unlabeled_frame_found = False 
             while not unlabeled_frame_found:
-                ridx = int( len(frames) * num_db_frames / float(args.num_labeling_base) ) + int(np.random.uniform(-50,50))
+                ridx = int( len(frames) * num_db_frames / float(args.num_labeling_base) ) + int(np.random.uniform(-5,5))
                 if ridx > 0 and ridx < len(frames):
                     frame_idx = frames[ridx]
                     #frame_idx = frames[int(len(frames)*np.random.random())] # random sampling
