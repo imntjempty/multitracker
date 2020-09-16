@@ -22,9 +22,12 @@ from multitracker.tracking.deep_sort.deep_sort import nn_matching
 from multitracker.tracking.deep_sort.deep_sort.detection import Detection
 from multitracker.tracking.deep_sort.deep_sort.tracker import Tracker
 from multitracker import autoencoder
-from multitracker.keypoint_detection import roi_segm
-
+from multitracker.keypoint_detection import roi_segm, unet
+from multitracker.tracking.inference import get_heatmaps_keypoints
 from multitracker.be import video
+from multitracker import util 
+
+colors = util.get_colors()
 
 def gather_sequence_info(config):
     """Gather sequence information, such as image filenames, detections,
@@ -153,54 +156,24 @@ def detect_bounding_boxes(detection_model, input_tensor):
     #if len(inp_tensor.shape)==3:
     #    input_tensor = tf.expand_dims(input_tensor, 0)
     input_tensor = tf.cast(input_tensor,tf.float32)
-    print('SHAPES',input_tensor.shape)
+    #print('SHAPES',input_tensor.shape)
     preprocessed_image, shapes = detection_model.preprocess(input_tensor)
-    print('preprocessed_image',preprocessed_image.shape,'shapes',shapes)
+    #print('preprocessed_image',preprocessed_image.shape,'shapes',shapes)
     prediction_dict = detection_model.predict(preprocessed_image, shapes)
     detections = detection_model.postprocess(prediction_dict, shapes)
     detections['detection_boxes'] = detections['detection_boxes'][0,:,:]
     detections['detection_scores'] = detections['detection_scores'][0]
-    print('BOXES',detections['detection_boxes'].shape)
-    #print(detections['detection_scores'].numpy()) #tf.make_ndarray(detections['detection_scores']))
-    print(detections['detection_scores'].numpy())
     return detections
 
 act_detection_part_file = None
 act_detection_part_data = None 
-def load_detections(config, detection_model, encoder_model, seq_info, frame_idx):
+def load_detections(config, detection_model, encoder_model, seq_info, frame_idx, thresh_detection = 0.8):
     frame_directory = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'train')
     frame_file = os.path.join(frame_directory, '%05d.png' % frame_idx)
-    global act_detection_part_file
-    global act_detection_part_data
-    max_detections_per_frame = 10
-    '''
-    ## detection
-    results = []
-    if act_detection_part_file is None:
-        act_detection_part_file = sorted(glob(seq_info['detection_file']))[0]
-        act_detection_part_data = np.load(act_detection_part_file,allow_pickle=True)['boxes'].item()
-        print('[*] loaded detection data',act_detection_part_file)
-
-    _frame_idx = '/home/alex/data/multitracker/projects/%i/%i/frames/train/%05d.png' % (config['project_id'],config['video_id'], frame_idx)
-    if not _frame_idx in act_detection_part_data.keys():
-        _files = sorted(glob(seq_info['detection_file']))
-        try:
-            act_detection_part_file = _files[_files.index(act_detection_part_file)+1]
-            act_detection_part_data = np.load(act_detection_part_file,allow_pickle=True)['boxes'].item()
-            print('[*] loaded detection data',act_detection_part_file)
-        except:
-            # finished, save results 
-            return None 
-    '''
-     
+    
     inp_tensor = cv.imread(frame_file)
     inp_tensor = tf.expand_dims(inp_tensor,0)
     features, _ = encoder_model(autoencoder.preprocess(inp_tensor),training=False)
-    #print('features',features.shape)
-    
-    '''act_detection_part_data[_frame_idx]['detection_boxes'] = np.reshape(act_detection_part_data[_frame_idx]['detection_boxes'],act_detection_part_data[_frame_idx]['detection_boxes'].shape[1:])
-    act_detection_part_data[_frame_idx]['detection_scores'] = np.reshape(act_detection_part_data[_frame_idx]['detection_scores'],act_detection_part_data[_frame_idx]['detection_scores'].shape[1:])
-    bboxes = act_detection_part_data[_frame_idx]'''
     
     bboxes = detect_bounding_boxes(detection_model, inp_tensor)
     #for i in range(bboxes['detection_boxes'].shape[0]):
@@ -209,34 +182,25 @@ def load_detections(config, detection_model, encoder_model, seq_info, frame_idx)
         #print(i,j,'bbox',frame_idx,bboxes['detection_boxes'][i].shape,bboxes['detection_scores'][i].shape)
         class_id = 1
         proba = bboxes['detection_scores'][j]
-        #print('box',j,bboxes['detection_boxes'][j])
-        top,left,height,width = bboxes['detection_boxes'][j]
-        top *= seq_info['image_size'][0]
-        height *= seq_info['image_size'][0]
-        left *= seq_info['image_size'][1]
-        width *= seq_info['image_size'][1]
-        height = height - top  
-        width = width - left
+        if proba > thresh_detection:
+            #print('box',j,bboxes['detection_boxes'][j])
+            top,left,height,width = bboxes['detection_boxes'][j]
+            top *= seq_info['image_size'][0]
+            height *= seq_info['image_size'][0]
+            left *= seq_info['image_size'][1]
+            width *= seq_info['image_size'][1]
+            height = height - top  
+            width = width - left
 
-        _scale = inp_tensor.shape[2]/1920
-        features_crop = features[:,int(_scale*top/8.):int(_scale*(top+height)/8.),int(_scale*left/8.):int(_scale*(left+width)/8.),:] 
-        #print('[*] cropped',int(_scale*top/8.),int(_scale*(top+height)/8.),int(_scale*left/8.),int(_scale*(left+width)/8.),'->',features_crop.shape)
-        features_crop = tf.keras.layers.GlobalAveragePooling2D()(features_crop)
-        features_crop = features_crop.numpy()[0,:]
+            _scale = inp_tensor.shape[2]/1920
+            features_crop = features[:,int(_scale*top/8.):int(_scale*(top+height)/8.),int(_scale*left/8.):int(_scale*(left+width)/8.),:] 
+            #print('[*] cropped',int(_scale*top/8.),int(_scale*(top+height)/8.),int(_scale*left/8.),int(_scale*(left+width)/8.),'->',features_crop.shape)
+            features_crop = tf.keras.layers.GlobalAveragePooling2D()(features_crop)
+            features_crop = features_crop.numpy()[0,:]
 
-        #print('xxx',bboxes['detection_boxes'][j],'QQQ',top,left,height,width,'proba',proba,'features',features_crop.shape)
-
-
-        detection = Detection([left,top,width,height], proba, features_crop)
-         
-        results.append(detection)
-        #print(results[-1])
-    
-    # ignore detections for frame if too many things detected 
-    #if len(results) > 10:
-        #print('[*] frame', frame_idx, 'has %i detections, taking 10...' % len(results))
-    #    results = results[:10]
-        
+            detection = Detection([left,top,width,height], proba, features_crop)
+            
+            results.append(detection)        
 
     return inp_tensor[0,:,:,:], results        
 
@@ -282,12 +246,14 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
         tracker = Tracker(metric)
     results = []
 
-    
+    if not os.path.isdir('/tmp/vis/'): os.makedirs('/tmp/vis/')
 
     def frame_callback(vis, frame_idx):
         #print("Processing frame %05d" % frame_idx)
         frame, detections = load_detections(config, detection_model, encoder_model, seq_info, frame_idx)
-        print('frame',frame.shape)
+        #print('frame',frame.dtype,frame.shape)
+        #im = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
+        frame_kp = unet.preprocess(frame)
         crop_dim = int(frame.shape[0]/3.)
         
         #if detections is None:
@@ -304,26 +270,36 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
         indices = preprocessing.non_max_suppression(
             boxes, nms_max_overlap, scores)
         detections = [detections[i] for i in indices]
-        
+        #print('[*] found %i detections' % len(detections))
         # Update tracker.
         tracker.predict()
         tracker.update(detections)
         
-        # inference keypoints for all tracks
-        for i, track in enumerate(tracker.tracks):
-            
-            x1,y1,x2,y2 = track.to_tlbr()
-            print(i,x1,y1,x2,y2)
+        # inference keypoints for all detections
+        y_kpheatmaps = np.zeros((frame.shape[0],frame.shape[1],1+len(config['keypoint_names'])),np.float32)
+        #for i, track in enumerate(tracker.tracks):
+        for i, detection in enumerate(detections):
+            #x1,y1,x2,y2 = track.last_detection.to_tlbr()
+            x1,y1,x2,y2 = detection.to_tlbr()
+            #print('detect',i,x1,y1,x2,y2)
+            #x1,y1,x2,y2 = track.to_tlbr()
             # crop region around center of bounding box
-            center = roi_segm.get_center(x1,y1,x2,y2, crop_dim)
-            
-            roi = frame[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:]
-            roi = tf.image.resize(roi,[config['img_height'],config['img_width']])
+            center = roi_segm.get_center(x1,y1,x2,y2, frame.shape[0], frame.shape[1], crop_dim)
+            center[0] = int(round(center[0]))
+            center[1] = int(round(center[1]))
+            roi = frame_kp[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:]
+            #roi = tf.image.resize(roi,[config['img_height'],config['img_width']])
+            roi = tf.image.resize(roi,[224,224])
             roi = tf.expand_dims(tf.convert_to_tensor(roi),axis=0)
-            yroi = trained_model.predict(roi)
-            print('yroi',yroi.shape)
-
-
+            #yroi = keypoint_model.predict(roi)
+            yroi = keypoint_model(roi, training=False).numpy()
+            yroi = yroi[0,:,:,:]
+            #print('yroi', crop_dim, yroi.dtype, yroi.shape,center[0]-crop_dim//2,center[0]+crop_dim//2,center[1]-crop_dim//2,center[1]+crop_dim//2)
+            yroi = cv.resize(yroi,(crop_dim//2*2,crop_dim//2*2))
+            
+            y_kpheatmaps[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:] = yroi
+        keypoints = get_heatmaps_keypoints(y_kpheatmaps, thresh_detection=0.5)
+        print('%i keypoints' % len(keypoints),[kp for kp in keypoints])
 
         # Update visualization.
         if display:
@@ -334,10 +310,63 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
             vis.set_image(image.copy())
             vis.draw_detections(detections)
             vis.draw_trackers(tracker.tracks)
-            fo = '/tmp/vis_%s.png'%frame_idx
-            cv.imwrite(fo,vis.viewer.image)
+            
+            # draw keypoints 
+            im = np.array(vis.viewer.image, copy=True)
+            
+            color_offset = 10
+            radius_keypoint = 10
+            for [x,y,c] in keypoints:
+                x, y = [int(round(x)),int(round(y))]
+                color_keypoint = [int(ss) for ss in colors[c]]
+                im = cv.circle(im, (x,y), radius_keypoint, color_keypoint, -1)
+            
+            # crop keypointed vis 
+            vis_crops = [  ]
+            for i, track in enumerate(tracker.tracks):
+                x1,y1,x2,y2 = track.to_tlbr()
+                #x1,y1,x2,y2 = track.last_detection.to_tlbr()
+                center = roi_segm.get_center(x1,y1,x2,y2, image.shape[0],image.shape[1], crop_dim)
+                vis_crops.append( im[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:] )    
+                #if vis_crops[-1] is not None:
+                vis_crops[-1] = cv.resize(vis_crops[-1], (im.shape[0]//2,im.shape[0]//2))
+            
+            #print('len tracks',len(tracker.tracks),'len vis crops',len(vis_crops))
+            for i in range(4-len(vis_crops)):
+                vis_crops.append( np.zeros((im.shape[0]//2,im.shape[1]//2,3),'uint8'))
+
+            # stack output image together
+            # left side: original visualization with boxes and tracks
+            # right side: moasics focused on tracks with keypoints
+            out = vis.viewer.image
+            out = np.hstack((
+                out,
+                np.vstack((
+                    vis_crops[0],
+                    vis_crops[2]
+                )),
+                np.vstack((
+                    vis_crops[1],
+                    vis_crops[3]
+                ))
+            ))
+            vis.set_image(out.copy())
+
+            if 0 :
+                # write drawn keypoint image
+                vis_keypoints = np.zeros((y_kpheatmaps.shape[0],y_kpheatmaps.shape[1],3),'uint8')
+                for ii in range(len(config['keypoint_names'])):
+                    channel = y_kpheatmaps[:,:,ii]
+                    print('minmax',channel.min(),channel.max())
+                    channel = np.int32(255.*(channel-channel.min())/(channel.max() - channel.min()))
+                    vis_keypoints[:,:,ii%3] = channel 
+                out = np.hstack((vis_keypoints,out))
+            # write image to disk
+            fo = '/tmp/vis/%s.png'  %frame_idx
+            cv.imwrite(fo,out)
             print('[*] wrote %s' % fo )
 
+            
         # Store results.
         for track in tracker.tracks:
             if not track.is_confirmed() or track.time_since_update > 1:
@@ -370,8 +399,8 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
     if display:
         print('[*] finished frames, writing video ...')
         file_video = '/tmp/tracking.mp4'
-        subprocess.call(['ffmpeg','-framerate','30','-i','/tmp/vis_%d.png', '-vf', 'format=yuv420p','-vcodec','libx265', file_video])
-        subprocess.call(['rm','/tmp/vis*.png'])
+        subprocess.call(['ffmpeg','-framerate','30','-i','/tmp/vis/%d.png', '-vf', 'format=yuv420p','-vcodec','libx265', file_video])
+        subprocess.call(['rm','/tmp/vis/*.png'])
         print('[*] wrote video to %s' % file_video)
 
 def bool_string(input_string):
