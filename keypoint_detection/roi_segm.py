@@ -114,7 +114,7 @@ def load_roi_dataset(config,mode='train'):
                     f_roi = os.path.join(config['roi_dir'],_mode,'%s_%i.png' % (frame_idx, j))
                     #print(j,'coords',y1,x1,y2,x2,'center',center,roi_comp.shape)
                     #print(f_roi,roi_comp.shape)
-                    if np.min(roi_comp.shape)>=3:
+                    if np.min(roi_comp.shape)>=3 and roi_comp.shape[1]==(len_parts * crop_dim):
                         cv.imwrite(f_roi, roi_comp)
                             
                 except Exception as e:
@@ -134,8 +134,8 @@ def load_roi_dataset(config,mode='train'):
         image = tf.io.read_file(image_file)
         image = tf.image.decode_png(image,channels=3)
         image = tf.cast(image,tf.float32)
-        comp = [ image[:,ii*wroi:(ii+1)*wroi,:] for ii in range(wroicomp//wroi)] # from hstacked to depth stacked
         
+        comp = [ image[:,ii*wroi:(ii+1)*wroi,:] for ii in range(wroicomp//wroi)] # from hstacked to depth stacked
         # preprocess rgb image 
         comp[0] = unet.preprocess(comp[0])
         comp = tf.concat(comp,axis=2)
@@ -327,7 +327,7 @@ def train(config):
         epoch_steps = 0
         epoch_loss = 0.0
 
-        if 1:# try:
+        try:
             for x,y in dataset_train:
                 if 1:
                     if np.random.random() < 0.5:
@@ -369,8 +369,8 @@ def train(config):
                     return True 
             
                 n+=1
-        #except Exception as e:
-        #    print('step',n,'\n',e)
+        except Exception as e:
+            print('step',n,'\n',e)
                 
 def main(args):
     config = model.get_config(args.project_id)
