@@ -28,7 +28,7 @@ def get_frames_dir(project_dir, video_id):
 def get_project_dir(base_dir, project_id):
     return os.path.join(base_dir,str(project_id))
 
-def add_video_to_project(base_dir, project_id, source_video_file, fixed_number):
+def add_video_to_project(base_dir, project_id, source_video_file, fixed_number, half_resolution=False):
     project_dir = get_project_dir(base_dir, project_id)
 
     video_dir = os.path.join(project_dir,"videos")
@@ -52,7 +52,7 @@ def add_video_to_project(base_dir, project_id, source_video_file, fixed_number):
         shutil.copy(source_video_file, video_file)
 
     # sample frames 
-    if args.half_resolution:
+    if half_resolution:
         subprocess.call(['ffmpeg','-i',video_file, '-vf', 'fps=30','-vf', "scale=iw/2:ih/2", frames_dir+'/%05d.png'])
     else:
         subprocess.call(['ffmpeg','-i',video_file, '-vf', 'fps=30', frames_dir+'/%05d.png'])
@@ -82,4 +82,4 @@ if __name__ == "__main__":
     parser.add_argument('--half_resolution', default = False, dest='half_resolution', action='store_true')
     args = parser.parse_args()
 
-    add_video_to_project(args.base_dir, args.add_project, args.add_video, args.fixed_number)
+    add_video_to_project(args.base_dir, args.add_project, args.add_video, args.fixed_number, args.half_resolution)

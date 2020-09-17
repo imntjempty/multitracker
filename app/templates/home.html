@@ -47,7 +47,7 @@
       <img src="/static/images/icon-video-add.png">
     </div>
     <div class="description">
-        <form class="ui form" action="/add_video"> 
+        <form class="ui form" action="/add_video" method="post" enctype="multipart/form-data"> 
             <div class="ui header">Let us track another video!</div>
             <p>We will create a tracking video in simple 3 steps: we setup a new video, label some frames and finally create a tracking for your video</p>
             <p>Shall we get started?</p>
@@ -62,7 +62,7 @@
                 </div>
                 <div class="field">
                     <label>Number of animals</label>
-                    <input type="text" name="fixed_number" placeholder="dynamic">
+                    <input type="text" name="fixed-number" placeholder="dynamic">
                 </div>  
                 <div class="field">
                     <label>Your Name</label>

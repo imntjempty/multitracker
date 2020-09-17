@@ -8,7 +8,7 @@
     python3.7 -m multitracker.app.app --model /home/alex/checkpoints/keypoint_tracking/Resocialization_Gruppe2_2-2020-06-09_17-50-12/trained_model.h5 --project_id 3
 """
 
-from flask import Flask, render_template, Response, send_file, abort
+from flask import Flask, render_template, Response, send_file, abort, redirect
 from flask import request
 import os 
 import json
@@ -23,7 +23,7 @@ import tensorflow as tf
 tf.get_logger().setLevel(logging.ERROR)
 
 #from multitracker.be.db.dbconnection import get_connector
-from multitracker.be import video
+from multitracker.be import video, project
 from multitracker.keypoint_detection import model, predict
 from multitracker.keypoint_detection import heatmap_drawing
 from multitracker import util
@@ -195,7 +195,7 @@ def get_next_bbox_frame(project_id):
 @app.route('/get_frame/<project_id>/<video_id>/<frame_idx>')
 def get_frame(project_id,video_id,frame_idx):
     try:
-        local_path = os.path.expanduser("~/data/multitracker/projects/%s/%s/frames/train/%s.png" % (project_id, video_id, frame_idx))
+        local_path = os.path.join(dbconnection.base_data_dir, "projects/%s/%s/frames/train/%s.png" % (project_id, video_id, frame_idx))
         return send_file(local_path, mimetype='image/%s' % local_path.split('.')[-1])
     except Exception as e:
         print('[E] /get_frame',project_id,video_id,frame_idx)
@@ -275,7 +275,7 @@ def check_labeling_handler(project_id, video_id):
     db.execute(q)
     keypoints = [x for x in db.cur.fetchall()]
     
-    filepath = os.path.expanduser("~/data/multitracker/projects/%i/%i/frames/train/%s.png" % (int(project_id), int(video_id), frame_idx))
+    filepath = os.path.join(dbconnection.base_data_dir, "projects/%i/%i/frames/train/%s.png" % (int(project_id), int(video_id), frame_idx))
     im = cv.imread(filepath)
     
     hm = heatmap_drawing.generate_hm(im.shape[0], im.shape[1] , [ [int(kp[2]),int(kp[3]),kp[0]] for kp in keypoints ], config['keypoint_names'])
@@ -346,7 +346,6 @@ def check_labeling_handler(project_id, video_id):
 @app.route('/get_labeled_frame/<project_id>/<video_id>/<frame_idx>')
 def get_labeled_frame(project_id,video_id,frame_idx):
     try:
-        #local_path = os.path.expanduser("~/data/multitracker/projects/%s/%s/frames/train/%s.png" % (project_id, video_id, frame_idx))
         # get labeling and draw it on image
         drawing_path = '/tmp/check_%i-%s.png' % (int(video_id), frame_idx) 
         print('[*] trying to read',drawing_path)
@@ -365,15 +364,37 @@ def get_home():
 @app.route('/add_video', methods=["POST"])
 def add_video():
     # read data 
-    data = request.get_json(silent=True,force=True)
-    print('[*] received labeling for frame .', data)#%(int(data['frame_idx']) ))
+    data = dict(request.form)
+    print('[*] add project n video', data)
     
+    # upload video
+    uploaded_file = request.files['file']
+
+    downloads_dir = os.path.join(dbconnection.base_data_dir,'downloads')
+    if not os.path.isdir(downloads_dir): os.makedirs(downloads_dir)
+
+    if uploaded_file.filename == '':
+        return """<html><body><h1>You have not selected a file for upload! please add a new video again!</h1></body></html>"""
+
+    local_video_file = os.path.join(downloads_dir, uploaded_file.filename)
+    print('[*] file name upload', uploaded_file.filename)
+    uploaded_file.save(local_video_file)
+
     # create project
+    keypoint_names = data['keypoint-names'].replace('\n','').replace(' ','').split(',')
 
+    project_id = project.create_project(data['project-name'], data['your-name'], keypoint_names)
     # create video
-
-    # uplaod video
-    pass
+    fixed_number = data['fixed-number'].replace(' ','')
+    try:
+        fixed_number = int(fixed_number)
+    except:
+        fixed_number = 0
+    video_id = video.add_video_to_project(video.base_dir_default, project_id, local_video_file, fixed_number)
+    
+    os.remove(local_video_file)
+    return redirect('/home')
+    
 
 @app.route('/labeling',methods=["POST"])
 def receive_labeling():
