@@ -358,6 +358,22 @@ def get_labeled_frame(project_id,video_id,frame_idx):
         print(e)
         return json.dumps({'success':False}), 200, {'ContentType':'application/json'} 
 
+@app.route('/home')
+def get_home():
+    return render_template("home.html")
+
+@app.route('/add_video', methods=["POST"])
+def add_video():
+    # read data 
+    data = request.get_json(silent=True,force=True)
+    print('[*] received labeling for frame .', data)#%(int(data['frame_idx']) ))
+    
+    # create project
+
+    # create video
+
+    # uplaod video
+    pass
 
 @app.route('/labeling',methods=["POST"])
 def receive_labeling():

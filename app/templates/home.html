@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en-US" xmlns="http://www.w3.org/1999/xhtml">
+
+<head profile="http://gmpg.org/xfn/11">
+  <title>Multitracker Home</title>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+  <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+  
+  <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.4.1/semantic.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.4.1/semantic.min.js"></script>
+
+  <script src="https://rawgit.com/enyo/dropzone/master/dist/dropzone.js"></script>
+  <link rel="stylesheet" href="https://rawgit.com/enyo/dropzone/master/dist/dropzone.css">
+  
+
+  <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/multitracker.css')}}"  rel="stylesheet"/>
+  <script type='text/javascript' src="{{ url_for('static', filename='js/network.js') }}"></script>
+  <script type='text/javascript' src="{{ url_for('static', filename='js/home.js') }}"></script>
+  
+</head>
+<body>
+
+<div class="ui fixed inverted menu">
+    <div class="ui container">
+        <a href="/home" class="header item">
+        <img class="logo" src="/static/images/logo.png">
+        Multitracker
+        </a>
+        <a href="/home" class="item">Home</a>
+        <a href="#" onclick="show_add_video_modal();" class="item">Add Video</a>
+        <a href="/about" class="item">About</a>
+    </div>
+</div>
+
+
+<div class="ui modal">
+  <i class="close icon"></i>
+  <div class="header">
+    Add Video
+  </div>
+  <div class="image content">
+    <div class="ui medium image">
+      <img src="/static/images/icon-video-add.png">
+    </div>
+    <div class="description">
+        <form class="ui form" action="/add_video"> 
+            <div class="ui header">Let us track another video!</div>
+            <p>We will create a tracking video in simple 3 steps: we setup a new video, label some frames and finally create a tracking for your video</p>
+            <p>Shall we get started?</p>
+            <p>
+                <div class="field">
+                <label>Project Name</label>
+                <input type="text" name="project-name" placeholder="Project Name">
+                </div>
+                <div class="field">
+                <label>Keypoint Names</label>
+                <input type="text" name="keypoint-names" placeholder="Keypoint Names">
+                </div>
+                <div class="field">
+                    <label>Number of animals</label>
+                    <input type="text" name="fixed_number" placeholder="dynamic">
+                </div>  
+                <div class="field">
+                    <label>Your Name</label>
+                    <input type="text" name="your-name" placeholder="Your Name">
+                </div>  
+                <div class="field">
+                    <label>Video File</label>
+                    <input type='file' name='file'>
+                </div> 
+            </p>
+            <div class="actions">    
+                <button class="ui button" type="submit">Add Video</button>
+            </div>
+        </form>
+
+     </div>
+    </div>
+
+</div>
+
+</body>
+</html>

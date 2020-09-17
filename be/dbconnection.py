@@ -12,7 +12,12 @@ class DatabaseConnection(object):
     def __init__(self,file_db = os.path.expanduser("~/data/multitracker/data.db")):
         self.file_db = file_db
         init_db = not os.path.isfile(self.file_db)
-        self.conn = sqlite3.connect(self.file_db,check_same_thread=False)
+        if not os.path.isdir(os.path.split(self.file_db)[0]): os.makedirs(os.path.split(self.file_db)[0])
+        try:
+            self.conn = sqlite3.connect(self.file_db,check_same_thread=False)
+        except:
+            raise Exception("   Error! Can not open db file %s" % self.file_db)
+
         self.cur = self.conn.cursor()
 
         if init_db:
