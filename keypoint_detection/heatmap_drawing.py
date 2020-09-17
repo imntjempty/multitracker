@@ -153,7 +153,7 @@ def style_augment(directory, style_directory = os.path.expanduser("~/data/multit
             subprocess.call(['python3.7',os.path.expanduser('~/github/tensorflow-2-style-transfer/main.py'),'-content_path',"%s" % f, '-style_path',"%s" % fs,'-output_dir',"%s" % directory])
         
 def write_mp(frame_data):
-    filepath = os.path.expanduser("~/data/multitracker/projects/%i/%i/frames/train/%s.png" % (int(frame_data['project_id']), int(frame_data['video_id']), frame_data['frame_idx']))
+    filepath = os.path.join(dbconnection.base_data_dir, "projects/%i/%i/frames/train/%s.png" % (int(frame_data['project_id']), int(frame_data['video_id']), frame_data['frame_idx']))
     #keypoints = [x for x in frame_data['frame_data']]
     mode = 'train' if np.random.uniform() > 0.2 else 'test'
     if os.path.isfile(filepath):

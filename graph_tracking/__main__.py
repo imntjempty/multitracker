@@ -31,6 +31,7 @@ from multitracker import util
 from multitracker.keypoint_detection import heatmap_drawing, model 
 from multitracker.keypoint_detection import predict
 from multitracker.graph_tracking import group_indiv
+from multitracker.be import dbconnection
 
 max_intra_indiv_dist = 250 # max distance a track and a keypoint can have to be considered belonging to the same individuum
 max_dist_keypoint = 75 # max distance a keypoint can travel from one frame to the other
@@ -447,7 +448,7 @@ def draw_tracks(frame, individuals, tracks, config):
 def track(config, model_path, project_id, video_id):
     project_id = int(project_id)
     video_id = int(video_id)
-    output_dir = os.path.expanduser('~/data/multitracker/tracks/%i/%i/%s' % (project_id, video_id, model_path.split('/')[-1].split('.')[0]))
+    output_dir = os.path.join( dbconnection.base_data_dir, 'tracks/%i/%i/%s' % (project_id, video_id, model_path.split('/')[-1].split('.')[0]))
     if not os.path.isdir(output_dir):
         os.makedirs(output_dir)
 

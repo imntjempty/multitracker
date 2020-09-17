@@ -11,6 +11,7 @@ import h5py
 
 from multitracker import util 
 from multitracker.tracking.inference import load_data
+from multitracker.be import dbconnection
 
 max_dist_keypoint = 75 # max distance a keypoint can travel from one frame to the other
 max_num_misses = 100
@@ -196,7 +197,7 @@ def get_tracklets(detections, model_path, config, project_id, video_id, should_v
     ttrackstart = time.time()
     project_id = int(project_id)
     video_id = int(video_id)
-    output_dir = os.path.expanduser('~/data/multitracker/tracks/%i/%i/%s' % (project_id, video_id, model_path.split('/')[-1].split('.')[0]))
+    output_dir = os.path.join(dbconnection.base_data_dir, 'tracks/%i/%i/%s' % (project_id, video_id, model_path.split('/')[-1].split('.')[0]))
     output_file = output_dir + '.avi'
     if should_vis and not os.path.isdir(output_dir):
         os.makedirs(output_dir)

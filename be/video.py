@@ -20,7 +20,7 @@ import subprocess
 #from multitracker import util 
 from multitracker.be import dbconnection
 
-base_dir_default = os.path.expanduser('~/data/multitracker/projects')
+base_dir_default = os.path.join(dbconnection, 'projects')
 
 def get_frames_dir(project_dir, video_id):
     return os.path.join(project_dir,str(video_id),'frames')

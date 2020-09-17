@@ -8,8 +8,10 @@ try:
 except:
     print('[*] not using global context for flask!')
 
+base_data_dir = os.path.expanduser('~/data/multitracker')
+
 class DatabaseConnection(object):
-    def __init__(self,file_db = os.path.expanduser("~/data/multitracker/data.db")):
+    def __init__(self,file_db = os.path.join(base_data_dir, "data.db")):
         self.file_db = file_db
         init_db = not os.path.isfile(self.file_db)
         if not os.path.isdir(os.path.split(self.file_db)[0]): os.makedirs(os.path.split(self.file_db)[0])
@@ -23,7 +25,7 @@ class DatabaseConnection(object):
         if init_db:
             query = """
                 create table if not exists projects (id integer primary key autoincrement, name text, manager text, keypoint_names text, created_at text);
-                create table if not exists videos (id integer primary key autoincrement, name text, project_id integer);
+                create table if not exists videos (id integer primary key autoincrement, name text, project_id integer, fixed_number integer);
                 create table if not exists keypoint_positions (id integer primary key autoincrement, video_id integer, frame_idx text, keypoint_name text, individual_id integer, keypoint_x real, keypoint_y real);
                 create table if not exists bboxes (id integer primary key autoincrement, video_id integer, frame_idx text, x1 real, y1 real, x2 real, y2 real);
                 create table if not exists frame_jobs (id integer primary key autoincrement, project_id integer, video_id integer, time real, frame_name text);
@@ -71,6 +73,11 @@ class DatabaseConnection(object):
         name = name.split('/')[-1]
         return name 
 
+    def get_video_fixednumber(self, video_id):
+        q = """select fixed_number from videos where id = %i;""" % int(video_id)
+        self.execute(q)
+        return [x for x in self.cur.fetchall()][0][0]
+        
     def get_random_project_video(self, project_id):
         q = "select id from videos where project_id = %i;" % int(project_id)
         self.execute(q)

@@ -477,13 +477,13 @@ def get_config(project_id = 3):
     config['selftrain_start_step'] = 10000
     config['n_blocks'] = 5
     config['early_stopping'] = True 
-    
+
     config['max_height'] = 1024
     config['project_id'] = project_id
     config['project_name'] = db.get_project_name(project_id)
 
-    config['data_dir'] = os.path.join(os.path.expanduser('~/data/multitracker/projects/%i/data' % config['project_id']))
-    config['roi_dir'] = os.path.join(os.path.expanduser('~/data/multitracker/projects/%i/data_roi' % config['project_id']))
+    config['data_dir'] = os.path.join(dbconnection.base_data_dir, 'projects/%i/data' % config['project_id'])
+    config['roi_dir'] = os.path.join(dbconnection.base_data_dir, 'projects/%i/data_roi' % config['project_id'])
 
     config['keypoint_names'] = db.get_keypoint_names(config['project_id'])
 

@@ -18,6 +18,8 @@ from tensorflow.keras import backend as K
 
 from datetime import datetime
 
+from multitracker.be import dbconnection
+
 n_latentcode = 256
 
 
@@ -112,7 +114,7 @@ def preprocess(image):
     return image
 
 def load_raw_dataset(config):
-    image_dir = os.path.expanduser('~/data/multitracker/projects/%i/%i/frames/train' % (config['project_id'],config['video_id']))
+    image_dir = os.path.join(dbconnection.base_data_dir, 'projects/%i/%i/frames/train' % (config['project_id'],config['video_id']))
     file_list = tf.data.Dataset.list_files(os.path.join(image_dir,'*.png'))
     data = file_list.map(load_im, num_parallel_calls = tf.data.experimental.AUTOTUNE).repeat().batch(config['batch_size']).prefetch(4*config['batch_size'])#.cache()
     print('[*] loaded images from disk')

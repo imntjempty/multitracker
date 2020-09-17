@@ -23,6 +23,7 @@ from multitracker.tracking.clustering import get_clustlets
 from multitracker.object_detection import finetune
 from multitracker.tracking.deep_sort import deep_sort_app
 from multitracker import autoencoder
+from multitracker.be import dbconnection
 
 def main(args):
     tstart = time.time()
@@ -33,7 +34,7 @@ def main(args):
     config['autoencoder_model'] = args.autoencoder_model 
     config['objectdetection_model'] = args.objectdetection_model
     config['minutes'] = args.minutes
-    config['fixed_number'] = args.fixed_number
+    config['fixed_number'] = db.get_video_fixednumber(args.video_id) #args.fixed_number
     config['n_blocks'] = 4
 
     # <load frames>
@@ -42,7 +43,7 @@ def main(args):
         os.makedirs(output_dir)
     print('[*] writing object detection bounding boxes %f minutes of video %i frames to %s' % (config['minutes'],config['video_id'],output_dir))
 
-    frames_dir = os.path.expanduser('~/data/multitracker/projects/%i/%i/frames/train' % (config['project_id'], config['video_id']))
+    frames_dir = os.path.join(dbconnection.base_data_dir, 'projects/%i/%i/frames/train' % (config['project_id'], config['video_id']))
     frame_files = sorted(glob(os.path.join(frames_dir,'*.png')))
     if len(frame_files) == 0:
         raise Exception("ERROR: no frames found in " + str(frames_dir))
@@ -130,7 +131,7 @@ if __name__ == '__main__':
     parser.add_argument('--video_id',required=True,type=int)
     parser.add_argument('--minutes',required=False,default=0.0,type=float)
     parser.add_argument('--thresh_detection',required=False,default=0.5,type=float)
-    parser.add_argument('--fixed_number',required=False,default=4,type=int)
+    #parser.add_argument('--fixed_number',required=False,default=4,type=int)
     args = parser.parse_args()
     
     #assert args.objectdetection_model is None or (args.objectdetection_model is not None and args.objectdetection_model.endswith('.index'))

@@ -167,7 +167,7 @@ def restore_weights(checkpoint_path = None):
     num_classes = 1
     pipeline_config = get_pipeline_config()
     if checkpoint_path is None:
-        checkpoint_path = os.path.expanduser('~/data/multitracker/object_detection/ssd_resnet50_v1_fpn_640x640_coco17_tpu-8/checkpoint/ckpt-0.index')
+        checkpoint_path = os.path.join(dbconnection.base_data_dir, 'object_detection/ssd_resnet50_v1_fpn_640x640_coco17_tpu-8/checkpoint/ckpt-0.index')
     
     # Load pipeline config and build a detection model.
     #
@@ -214,7 +214,7 @@ def inference_train_video(detection_model,config, steps, minutes = 0):
         os.makedirs(output_dir)
     print('[*] writing object detection bounding boxes %f minutes of video %i frames to %s for step %i' % (minutes,config['video_id'],output_dir,steps))
 
-    frames_dir = os.path.expanduser('~/data/multitracker/projects/%i/%i/frames/train' % (config['project_id'], config['video_id']))
+    frames_dir = os.path.join(dbconnection.base_data_dir 'projects/%i/%i/frames/train' % (config['project_id'], config['video_id']))
     frame_files = sorted(glob(os.path.join(frames_dir,'*.png')))
     if len(frame_files) == 0:
         raise Exception("ERROR: no frames found in " + str(frames_dir))

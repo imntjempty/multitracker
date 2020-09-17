@@ -18,7 +18,7 @@ import h5py
 
 from multitracker import util 
 from multitracker.keypoint_detection import heatmap_drawing, model 
-
+from multitracker.be import dbconnection
 # <network architecture>
 from tensorflow.keras.applications.resnet_v2 import preprocess_input
 
@@ -51,9 +51,9 @@ def get_project_frames(config, project_id = None, video_id = None):
     return frames 
 
 def get_project_frame_test_dir(project_id, video_id):
-    return os.path.expanduser('~/data/multitracker/projects/%i/%i/frames/test' % (project_id,video_id))
+    return os.path.join( dbconnection.base_data_dir, 'projects/%i/%i/frames/test' % (project_id,video_id))
 def get_project_frame_train_dir(project_id, video_id):
-    return os.path.expanduser('~/data/multitracker/projects/%i/%i/frames/train' % (project_id,video_id))
+    return os.path.join(dbconnection.base_data_dir, 'projects/%i/%i/frames/train' % (project_id,video_id))
 
 def extract_frame_candidates(feature_map, thresh = 0.75, pp = 5):
     step = -1
