@@ -20,7 +20,8 @@ def create_project(name, manager, keypoint_names):
     values = (name,manager, keypoint_names_str, util.get_now())
     project_id = conn.insert(query, values)
     print('[*] created project %i: name: %s, manager: %s, keypoint_names: [%s]' % (project_id,name,manager,', '.join(keypoint_names_str.split(conn.list_sep))))
-
+    return project_id 
+    
 if __name__ == "__main__":
     import argparse 
     parser = argparse.ArgumentParser()

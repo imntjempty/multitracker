@@ -24,6 +24,7 @@ from multitracker.object_detection import finetune
 from multitracker.tracking.deep_sort import deep_sort_app
 from multitracker import autoencoder
 from multitracker.be import dbconnection
+db = dbconnection.DatabaseConnection()
 
 def main(args):
     tstart = time.time()

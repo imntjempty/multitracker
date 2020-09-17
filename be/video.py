@@ -20,7 +20,7 @@ import subprocess
 #from multitracker import util 
 from multitracker.be import dbconnection
 
-base_dir_default = os.path.join(dbconnection, 'projects')
+base_dir_default = os.path.join(dbconnection.base_data_dir, 'projects')
 
 def get_frames_dir(project_dir, video_id):
     return os.path.join(project_dir,str(video_id),'frames')
@@ -28,7 +28,7 @@ def get_frames_dir(project_dir, video_id):
 def get_project_dir(base_dir, project_id):
     return os.path.join(base_dir,str(project_id))
 
-def add_video_to_project(base_dir, project_id, source_video_file):
+def add_video_to_project(base_dir, project_id, source_video_file, fixed_number):
     project_dir = get_project_dir(base_dir, project_id)
 
     video_dir = os.path.join(project_dir,"videos")
@@ -37,9 +37,9 @@ def add_video_to_project(base_dir, project_id, source_video_file):
     video_file = os.path.join(video_dir,source_video_file.split('/')[-1])
 
     # save video to db
-    query = "insert into videos (name, project_id) values (?,?)"
+    query = "insert into videos (name, project_id, fixed_number) values (?,?,?)"
     conn = dbconnection.DatabaseConnection()
-    video_id = conn.insert(query, (video_file, int(project_id)) )
+    video_id = conn.insert(query, (video_file, int(project_id),int(fixed_number)) )
 
     frames_dir = get_frames_dir(project_dir, video_id)
     if not os.path.isdir(frames_dir):
@@ -78,7 +78,8 @@ if __name__ == "__main__":
     parser.add_argument('-add_project',type=int,required=True)
     parser.add_argument('-add_video',type=str,required=True)
     parser.add_argument('-base_dir',required=False,default = base_dir_default)
+    parser.add_argument('-fixed_number',type=int,required=False,default = 0)
     parser.add_argument('--half_resolution', default = False, dest='half_resolution', action='store_true')
     args = parser.parse_args()
 
-    add_video_to_project(args.base_dir, args.add_project, args.add_video)
+    add_video_to_project(args.base_dir, args.add_project, args.add_video, args.fixed_number)
