@@ -359,9 +359,9 @@ def train(config):
                     print('[*] stopping keypoint estimation after step %i, because computational budget run out.' % n)
                     finish = True 
                 
-                if 'test_loss' in step_result and config['early_stopping'] and len(test_losses) > 3:
+                if n>20000 and 'test_loss' in step_result and config['early_stopping'] and len(test_losses) > 3:
                     # early stopping        
-                    if step_result['test_loss'] > test_losses[-2] and step_result['test_loss'] > test_losses[-3] and step_result['test_loss'] > test_losses[-4] and min(test_losses[:-1]) < 1.25*test_loss[-1]:
+                    if step_result['test_loss'] > test_losses[-2] and step_result['test_loss'] > test_losses[-3] and step_result['test_loss'] > test_losses[-4] and min(test_losses[:-1]) < 1.5*test_losses[-1]:
                         finish = True 
                         print('[*] stopping keypoint estimation early at step %i, because current test loss %f is higher than previous %f and %f' % (n, test_losses[-1], test_losses[-2], test_losses[-3]))
                 
