@@ -247,16 +247,20 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
 
     if not os.path.isdir('/tmp/vis/'): os.makedirs('/tmp/vis/')
 
-    video_writer = None
+    [Hframe,Wframe,_] = cv.imread(glob(os.path.join(os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'test'),'*.png'))[0]).shape
+    video_file = '/tmp/video_tracking_vid%i.avi' % config['video_id']
+    video_writer = cv.VideoWriter(video_file,cv.VideoWriter_fourcc('D','I','V','X'), 30, (Wframe, Hframe))
+    print('[*] writing video file %s' % video_file)
+
     def frame_callback(vis, frame_idx):
+        
         #print("Processing frame %05d" % frame_idx)
         frame, detections = load_detections(config, detection_model, encoder_model, seq_info, frame_idx)
-        if video_writer is None:
-            video_writer = cv.VideoWriter('/tmp/video_tracking_vid%i.mp4' % config['video_id'],cv.VideoWriter_fourcc('H','E','V','C'), 30, (frame.shape[1],frame.shape[0]))
+            
         #print('frame',frame.dtype,frame.shape)
         #im = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
         frame_kp = unet.preprocess(frame)
-        crop_dim = get_roi_crop_dim(config['project_id'], config['video_id'], frame.shape[0]) 
+        crop_dim = roi_segm.get_roi_crop_dim(config['project_id'], config['video_id'], frame.shape[0]) 
         
         #if detections is None:
         #    return False 
@@ -295,10 +299,10 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
             
             y_kpheatmaps[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:] = yroi
         keypoints = get_heatmaps_keypoints(y_kpheatmaps, thresh_detection=0.5)
-        print('%i keypoints' % len(keypoints),[kp for kp in keypoints])
+        print('%i detections. %i keypoints' % (len(detections), len(keypoints)),[kp for kp in keypoints])
 
         # Update visualization.
-        if display:
+        if len(seq_info["image_filenames"][1])>int(frame_idx):
             image = cv.imread(seq_info["image_filenames"][1][int(frame_idx)], cv.IMREAD_COLOR)
             vis.set_image(image.copy())
             vis.draw_detections(detections)
@@ -322,13 +326,18 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
                 vis_crops.append( im[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:] )    
                 vis_crops[-1] = cv.resize(vis_crops[-1], (im.shape[0]//2,im.shape[0]//2))
             
+            _shape = [im.shape[0]//2,im.shape[1]//2]
+            if len(vis_crops)>0:
+                _shape = vis_crops[0].shape[:2]
             for i in range(4-len(vis_crops)):
-                vis_crops.append( np.zeros((im.shape[0]//2,im.shape[1]//2,3),'uint8'))
+                vis_crops.append( np.zeros((_shape[0],_shape[1],3),'uint8'))
 
             # stack output image together
             # left side: original visualization with boxes and tracks
             # right side: moasics focused on tracks with keypoints
             out = vis.viewer.image
+            #for vc in vis_crops:
+            #    print('viscrop',out.shape,vc.shape)
             out = np.hstack((
                 out,
                 np.vstack((
