@@ -369,7 +369,7 @@ def train(config):
                     ckpt_save_path = ckpt_manager.save()
                     print('[*] saving model to %s'%ckpt_save_path)
                     net.save(os.path.join(checkpoint_path,'trained_model.h5'))
-                    return ckpt_save_path 
+                    return os.path.join(checkpoint_path,'trained_model.h5') 
             
                 n+=1
         except Exception as e:
