@@ -120,9 +120,29 @@ def get_bbox_data(config, vis_input_data=0):
         H, W = image_np.shape[:2]
         frame_bboxes[frame_idx] = frame_bboxes[frame_idx] / np.array([H,W,H,W]) 
         bboxes = frame_bboxes[frame_idx]
+        
         if np.random.uniform() > 0.2:
             train_image_tensors.append(tf.expand_dims(tf.convert_to_tensor(image_np, dtype=tf.float32), axis=0))
             train_gt_box_tensors.append(tf.convert_to_tensor(bboxes, dtype=tf.float32))
+            train_gt_classes_one_hot_tensors.append(tf.one_hot(tf.convert_to_tensor(np.ones(shape=[bboxes.shape[0]], dtype=np.int32) - label_id_offset), num_classes))
+            # add flipped version as well for training data
+            # hflip
+            train_image_tensors.append(tf.expand_dims(tf.convert_to_tensor(image_np[:,::-1,:], dtype=tf.float32), axis=0))
+            bboxes_hflip = np.array(bboxes,copy=True)
+            xmax_hflip = 1. - bboxes[:,0]
+            xmin_hflip = 1. - bboxes[:,2]
+            bboxes_hflip[:,0] = xmin_hflip
+            bboxes_hflip[:,2] = xmax_hflip
+            train_gt_box_tensors.append(tf.convert_to_tensor(bboxes_hflip, dtype=tf.float32))
+            train_gt_classes_one_hot_tensors.append(tf.one_hot(tf.convert_to_tensor(np.ones(shape=[bboxes.shape[0]], dtype=np.int32) - label_id_offset), num_classes))
+            # vflip
+            train_image_tensors.append(tf.expand_dims(tf.convert_to_tensor(image_np[::-1,:,:], dtype=tf.float32), axis=0))
+            bboxes_vflip = np.array(bboxes,copy=True)
+            ymax_vflip = 1. - bboxes[:,1]
+            ymin_vflip = 1. - bboxes[:,3]
+            bboxes_vflip[:,1] = ymin_vflip
+            bboxes_vflip[:,3] = ymax_vflip
+            train_gt_box_tensors.append(tf.convert_to_tensor(bboxes_vflip, dtype=tf.float32))
             train_gt_classes_one_hot_tensors.append(tf.one_hot(tf.convert_to_tensor(np.ones(shape=[bboxes.shape[0]], dtype=np.int32) - label_id_offset), num_classes))
         else:
             test_image_tensors.append(tf.expand_dims(tf.convert_to_tensor(image_np, dtype=tf.float32), axis=0))
@@ -418,8 +438,8 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
                     writer_test.flush()
 
                 # check for early stopping -> stop training if test loss is increasing
-                if config['early_stopping'] and len(test_losses) > 3:
-                    if test_loss > test_losses[-2] and test_loss > test_losses[-3] and test_loss > test_losses[-4]:
+                if idx>40000 and config['early_stopping'] and len(test_losses) > 3:
+                    if test_loss > test_losses[-2] and test_loss > test_losses[-3] and test_loss > test_losses[-4] and min(test_losses[:-1]) < 1.5*test_losses[-1]:
                         early_stopping = True 
                         print('[*] stopping object detection early at step %i, because current test loss %f is higher than previous %f and %f' % (idx, test_loss, test_losses[-2], test_losses[-3]))
 
