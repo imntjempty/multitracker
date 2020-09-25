@@ -88,6 +88,13 @@ class DatabaseConnection(object):
         shuffle(video_ids)
         return video_ids[0][0]
 
+    def get_all_labeled_frames(self):
+        self.execute('''select videos.project_id, frame_idx 
+                            from keypoint_positions 
+                            inner join videos on videos.id = keypoint_positions.video_id;''')
+        return list(set([x for x in self.cur.fetchall()]))
+
+
     def get_labeled_frames(self, project_id):
         self.execute('''select frame_idx 
                             from keypoint_positions 
@@ -98,6 +105,16 @@ class DatabaseConnection(object):
 
     def get_count_labeled_frames(self, project_id):
         return len(self.get_labeled_frames(project_id))
+
+    def get_count_all_labeled_frames(self):
+        dd = self.get_all_labeled_frames()
+        counts = {}
+        for [project_id, frame_idx] in dd:
+            if not project_id in counts:
+                counts[project_id] = 0 
+            counts[project_id] += 1 
+        return counts 
+
 
     def get_labeled_bbox_frames(self, project_id):
         self.execute('''select frame_idx 
@@ -110,7 +127,20 @@ class DatabaseConnection(object):
     def get_count_labeled_bbox_frames(self, project_id):
         return len(self.get_labeled_bbox_frames(project_id))
 
+    def get_all_labeled_bbox_frames(self):
+        self.execute('''select videos.project_id, frame_idx 
+                            from bboxes
+                            inner join videos on videos.id = bboxes.video_id;''')
+        return list(set([x for x in self.cur.fetchall()]))
 
+    def get_count_all_labeled_bbox_frames(self):
+        dd = self.get_all_labeled_bbox_frames()
+        counts = {}
+        for [project_id, frame_idx] in dd:
+            if not project_id in counts:
+                counts[project_id] = 0 
+            counts[project_id] += 1 
+        return counts 
 
     def save_labeling(self, data):
         keypoint_names = self.get_keypoint_names(int(data['project_id']))

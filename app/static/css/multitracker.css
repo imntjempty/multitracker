@@ -1,3 +1,7 @@
 body {
     background-color: light-gray;
 }
+table {
+    top: 40px;
+    position: absolute;
+}

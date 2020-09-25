@@ -137,6 +137,8 @@ def render_labeling(project_id):
                 frame_idx = '.'.join(unlabeled[maxidx].split('/')[-1].split('.')[:-1])
                 print('[*] serving keypoint label job for frame %s with std %f.'%(frame_idx,stds[maxidx]))
             else:
+                if len(unlabeled) ==0:
+                    return "<h1>You have labeled all frames for this video! :)</h1>"
                 shuffle(unlabeled)
                 frame_idx = '.'.join(unlabeled[0].split('/')[-1].split('.')[:-1])
 
@@ -360,6 +362,34 @@ def get_labeled_frame(project_id,video_id,frame_idx):
 @app.route('/home')
 def get_home():
     return render_template("home.html")
+
+@app.route('/get_projects')
+def get_projects():
+    db.execute('''select projects.id as project_id, projects.name as project_name, 
+                                videos.name as video_name, projects.manager, projects.keypoint_names
+                                from projects 
+                                inner join videos on projects.id = videos.project_id 
+                                order by project_id''')
+    datalist = list(set([x for x in db.cur.fetchall()]))
+    data = []
+    counts_bbox = db.get_count_all_labeled_bbox_frames()
+    counts_keypoints = db.get_count_all_labeled_frames()
+    for i in range(len(datalist)):
+        d = {}
+        for ik, k in enumerate(['project_id','project_name','video_name','manager','keypoint_names']):
+            d[k] = datalist[i][ik]
+        d['keypoint_names'] = d['keypoint_names'].split(db.list_sep)
+        d['video_name'] = d['video_name'].split('/')[-1]
+        if d['project_id'] in counts_bbox:
+            d['count_bboxes'] = counts_bbox[d['project_id']]
+        else:
+            d['count_bboxes'] = 0
+        if d['project_id'] in counts_keypoints:
+            d['count_keypoints'] = counts_keypoints[d['project_id']]
+        else:
+            d['count_keypoints'] = 0
+        data.append(d)
+    return json.dumps({'success':True,'data':data}), 200, {'ContentType':'application/json'} 
 
 @app.route('/add_video', methods=["POST"])
 def add_video():

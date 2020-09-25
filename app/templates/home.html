@@ -35,6 +35,26 @@
         <a href="/about" class="item">About</a>
     </div>
 </div>
+<div >
+    <table class="ui striped table" id="table_projects">
+        <thead>
+            <tr>
+            <th>Project</th>
+            <th>Video</th>
+            <th>Manager</th>
+            <th>Limb names</th>
+            <th>Labeled Frames Animal boxes</th>
+            <th>Labeled Frames Limb points</th>
+            <th>Label tool boxes</th>
+            <th>Label tool points</th>
+            <th>Start Tracking</th>
+            <th>Download Tracking Video</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+</div>
+
 
 
 <div class="ui modal">
@@ -83,5 +103,30 @@
 
 </div>
 
+<script type="text/javascript">
+function init_projects_table(){
+    // get projects table data from server and append datas to table
+    get('/get_projects',function(response){
+        let data = JSON.parse(response)['data'];
+        let tbody = document.getElementById('table_projects').tBodies[0];
+        for(let i=0;i<data.length;i++){
+            tbody.innerHTML += "<tr><td>"+data[i]['project_name']
+                            +"</td><td>"+data[i]['video_name']
+                            +"</td><td>"+data[i]['manager']
+                            +"</td><td>"+data[i]['keypoint_names'].join(', ')
+                            +"</td><td>"+data[i]['count_bboxes'].toString()
+                            +"</td><td>"+data[i]['count_keypoints'].toString()
+                            +"</td><td><a href='/get_next_bbox_frame/"+data[i]['project_id'].toString()+"'>Label more boxes</a>"
+                            +"</td><td><a href='/get_next_labeling_frame/"+data[i]['project_id'].toString()+"'>Label more keypoints</a>"
+                            +"</td><td><a href='/start_tracking/"+data[i]['project_id'].toString()+"'>Start Tracking</a>" 
+                            +"</td><td><a href='/download_tracking_video/"+data[i]['project_id'].toString()+"'>Download Tracking Video</a></td></tr>";
+        }   
+    });
+    
+    
+}
+init_projects_table();
+    
+</script>
 </body>
 </html>
