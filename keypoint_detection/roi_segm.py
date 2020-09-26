@@ -8,6 +8,7 @@ import tensorflow_addons as tfa
 import os
 import time
 import matplotlib.pyplot as plt
+from multiprocessing import Pool
 from datetime import datetime 
 from IPython.display import clear_output
 from multitracker.keypoint_detection import model , unet, heatmap_drawing
@@ -46,7 +47,7 @@ def get_roi_crop_dim(project_id, video_id, Htarget):
             print('perc',pp,np.percentile(deltas, pp))
     
     # take 97% percentile with margin of 20%
-    crop_dim = np.percentile(deltas, 97) * 1.2
+    crop_dim = np.percentile(deltas, 97) * 1.1
     
     # scale to target frame height
     crop_dim = int(crop_dim * Htarget/Hframe) 
@@ -55,6 +56,49 @@ def get_roi_crop_dim(project_id, video_id, Htarget):
     crop_dim = min(crop_dim,Htarget)
     return crop_dim
     #return int(Htarget/3.)
+
+def write_crop_to_disk(obj):
+    f = obj['f']
+    crop_dim_extended = obj['crop_dim_extended']
+    config = obj['config']
+    w, Hcomp,Hframe = obj['w'],obj['Hcomp'],obj['Hframe']
+    im = cv.imread( f )
+    _mode = 'train'
+    if im is None:
+        f = f.replace('/train/','/test/')
+        im = cv.imread( f )
+        _mode = 'test'
+    
+    parts = [ im[:,ii*w:(ii+1)*w,:] for ii in range(obj['len_parts'] )]
+    #print(i,frame_idx,'boxes',frame_bboxes[frame_idx])
+    # scale to fit max_height
+    #print('scaling',frame_bboxes[frame_idx][0],'to',(Hcomp/Hframe) * frame_bboxes[frame_idx][0])
+    obj['boxes'] = (Hcomp/Hframe) * obj['boxes']
+    
+    for j, (y1,x1,y2,x2) in enumerate(obj['boxes']):
+        # crop region around center of bounding box
+        center = get_center(x1,y1,x2,y2,im.shape[0], im.shape[1], crop_dim_extended)        
+
+        try:
+            rois = [part[center[0]-crop_dim_extended//2:center[0]+crop_dim_extended//2,center[1]-crop_dim_extended//2:center[1]+crop_dim_extended//2,:] for part in parts]
+            roi_comp = np.hstack(rois)
+            #if min(roi_comp.shape[:2])>1:
+            
+            f_roi = os.path.join(config['roi_dir'],_mode,'%s_%i.png' % (obj['frame_idx'], j))
+            #print(j,'coords',y1,x1,y2,x2,'center',center,roi_comp.shape)
+            #print(f_roi,roi_comp.shape)
+            if np.min(roi_comp.shape)>=3:# and roi_comp.shape[1]==(len_parts * crop_dim):
+                cv.imwrite(f_roi, roi_comp)
+                    
+        except Exception as e:
+            print(e)
+
+def filter_crop_shape(obj):
+    im = cv.imread(obj['f'])
+    if not (im.shape[0] == obj['H'] and im.shape[1] == obj['W']):
+        os.remove(obj['f'])
+        return True 
+    return False 
 
 def load_roi_dataset(config,mode='train'):
     if mode=='train' or mode == 'test':
@@ -69,11 +113,20 @@ def load_roi_dataset(config,mode='train'):
      #config['fov'])
     len_parts = Wcomp // w  
     crop_dim = get_roi_crop_dim(config['project_id'], config['video_id'], Hcomp)
+    crop_dim_extended_ratio = 1.5
+    crop_dim_extended = min(Hcomp, crop_dim * crop_dim_extended_ratio)
+    crop_dim_extended_ratio = crop_dim_extended / crop_dim 
+    print('crop_dim_extended_ratio',crop_dim_extended_ratio,'crop_dim',crop_dim,'crop_dim_extended',crop_dim_extended)
     
     for _mode in ['train','test']:
         if not os.path.isdir(os.path.join(config['roi_dir'],_mode)): os.makedirs(os.path.join(config['roi_dir'],_mode))
         
+    if 0:
+        for ii,ff in enumerate(glob(os.path.join(config['roi_dir'],'train','*.png'))):
+            print(ii,ff.split('/')[-1],cv.imread(ff).shape)
+    
     if len(glob(os.path.join(config['roi_dir'],'train','*.png')))==0:
+        print('[*] creating cropped regions for each animal to train keypoint prediction ...')
         # extract bounding boxes of animals
         # <bboxes>
         frame_bboxes = {}
@@ -86,46 +139,34 @@ def load_roi_dataset(config,mode='train'):
                 frame_bboxes[frame_idx] = [] 
             frame_bboxes[frame_idx].append(np.array([float(z) for z in [y1,x1,y2,x2]]))
         
-        for i, frame_idx in enumerate(frame_bboxes.keys()):
-            frame_bboxes[frame_idx] = np.array(frame_bboxes[frame_idx]) 
-            f = os.path.join(image_directory,'%s.png' % frame_idx) 
-            im = cv.imread( f )
-            _mode = 'train'
-            if im is None:
-                f = f.replace('/train/','/test/')
-                im = cv.imread( f )
-                _mode = 'test'
+        with Pool(processes=os.cpu_count()) as pool:
+            result_objs=[]
+            for i, frame_idx in enumerate(frame_bboxes.keys()):
+                frame_bboxes[frame_idx] = np.array(frame_bboxes[frame_idx]) 
+                f = os.path.join(image_directory,'%s.png' % frame_idx) 
+                result = pool.apply_async(write_crop_to_disk,({'Hframe':Hframe,'Hcomp':Hcomp,'w':w,'f':f,'config':config,'crop_dim_extended':crop_dim_extended,'len_parts':len_parts,'frame_idx':frame_idx,'boxes':frame_bboxes[frame_idx]},))
+                #write_crop_to_disk({'Hframe':Hframe,'Hcomp':Hcomp,'w':w,'f':f,'config':config,'crop_dim_extended':crop_dim_extended,'len_parts':len_parts,'frame_idx':frame_idx,'boxes':frame_bboxes[frame_idx]})
+                result_objs.append(result)
+            results = [result.get() for result in result_objs]
             
-            parts = [ im[:,ii*w:(ii+1)*w,:] for ii in range(len_parts )]
-            
-            # scale to fit max_height
-            #print('scaling',frame_bboxes[frame_idx][0],'to',(Hcomp/Hframe) * frame_bboxes[frame_idx][0])
-            frame_bboxes[frame_idx] = (Hcomp/Hframe) * frame_bboxes[frame_idx]
-            
-            for j, (y1,x1,y2,x2) in enumerate(frame_bboxes[frame_idx]):
-                # crop region around center of bounding box
-                center = get_center(x1,y1,x2,y2,im.shape[0], im.shape[1], crop_dim)        
-
-                try:
-                    rois = [part[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:] for part in parts]
-                    roi_comp = np.hstack(rois)
-                    #if min(roi_comp.shape[:2])>1:
-                    
-                    f_roi = os.path.join(config['roi_dir'],_mode,'%s_%i.png' % (frame_idx, j))
-                    #print(j,'coords',y1,x1,y2,x2,'center',center,roi_comp.shape)
-                    #print(f_roi,roi_comp.shape)
-                    if np.min(roi_comp.shape)>=3 and roi_comp.shape[1]==(len_parts * crop_dim):
-                        cv.imwrite(f_roi, roi_comp)
-                            
-                except Exception as e:
-                    print(e)
+            # check homogenous image sizes
+            results_shapefilter = []
+            sampled_shapes = []
+            _roicrops = glob(os.path.join(config['roi_dir'],'train','*.png'))
+            for ii in range(min(100,len(_roicrops))):
+                sampled_shapes.append(cv.imread(_roicrops[int(np.random.uniform() * len(_roicrops))]).shape[:2])
+            sampled_H, sampled_W = np.median(np.array(sampled_shapes)[:,0]), np.median(np.array(sampled_shapes)[:,1])
+            for ii,ff in enumerate(glob(os.path.join(config['roi_dir'],mode,'*.png'))): 
+                results_shapefilter.append( pool.apply_async(filter_crop_shape,({'f':ff,'H':sampled_H, 'W':sampled_W},)) )
+            results_shapefilter = [result.get() for result in results_shapefilter]
         # </bboxes>
+
     
     #mean_rgb = calc_mean_rgb(config)
     hroi,wroicomp = cv.imread(glob(os.path.join(config['roi_dir'],'train','*.png'))[0]).shape[:2]
     wroi = hroi#wroicomp // (1+len(config['keypoint_names'])//3)
     print('wroi',hroi,wroicomp,wroi,'->',wroicomp//wroi)
-    h = int(hroi * 0.98)
+    h = hroi #int(hroi * 0.98)
     config['img_height'] = 224
     config['img_width'] = 224
 
@@ -143,8 +184,8 @@ def load_roi_dataset(config,mode='train'):
         hh = h 
         if mode == 'train':
             # random scale augmentation
-            if tf.random.uniform([]) > 0.3:
-                hh = h + int(tf.random.uniform([],-h/10,h/10)) #h += int(tf.random.uniform([],-h/7,h/7))
+            #if tf.random.uniform([]) > 0.3:
+            #    hh = h + int(tf.random.uniform([],-h/10,h/10)) #h += int(tf.random.uniform([],-h/7,h/7))
 
             # apply augmentations
             # random rotation
@@ -156,11 +197,15 @@ def load_roi_dataset(config,mode='train'):
         background = 255 - tf.reduce_sum(comp[:,:,3:],axis=2)
         comp = tf.concat((comp,tf.expand_dims(background,axis=2)),axis=2)
 
+        # scale down a bit bigger than need before random cropping
+        comp = tf.image.resize(comp,[int(config['img_height']*crop_dim_extended_ratio),int(config['img_width']*crop_dim_extended_ratio)])
+        crop = tf.image.random_crop( comp, [config['img_height'],config['img_width'],1+3+len(config['keypoint_names'])])
+    
         # crop
         #crop = tf.image.random_crop( comp, [hh,hh,1+3+len(config['keypoint_names'])])
         #crop = tf.image.resize(crop,[config['img_height'],config['img_width']])
-        comp = tf.image.resize(comp,[int(tf.random.uniform([],0,10))+config['img_height'],int(tf.random.uniform([],0,10))+config['img_width']])
-        crop = tf.image.random_crop( comp, [config['img_height'],config['img_width'],1+3+len(config['keypoint_names'])])
+        #comp = tf.image.resize(comp,[int(tf.random.uniform([],0,10))+config['img_height'],int(tf.random.uniform([],0,10))+config['img_width']])
+        #crop = tf.image.random_crop( comp, [config['img_height'],config['img_width'],1+3+len(config['keypoint_names'])])
         # split stack into images and heatmaps
         image = crop[:,:,:3]
         
@@ -220,7 +265,8 @@ def inference_heatmap(config, trained_model, frame, bounding_boxes):
     
 def train(config):
     config['lr'] = 1e-4
-    config['cutmix'] = True
+    config['cutmix'] = False
+    config['mixup'] = True
     print('[*] config', config)
     
     
@@ -327,7 +373,7 @@ def train(config):
         epoch_steps = 0
         epoch_loss = 0.0
 
-        try:
+        if 1:#try:
             for x,y in dataset_train:
                 if 1:
                     if np.random.random() < 0.5:
@@ -342,6 +388,8 @@ def train(config):
                         else:
                             if config['cutmix'] and np.random.random() > 0.5:
                                 x, y = model.cutmix(x,y)
+                            if config['mixup'] and np.random.random() > 0.5:
+                                x, y = model.mixup(x,y)
                     
                 should_summarize=n%100==0
                 step_result = train_step(x, y, writer_train, writer_test, n, should_summarize=should_summarize)
@@ -372,8 +420,8 @@ def train(config):
                     return os.path.join(checkpoint_path,'trained_model.h5') 
             
                 n+=1
-        except Exception as e:
-            print('step',n,'\n',e)
+        #except Exception as e:
+        #    print('step',n,'\n',e)
                 
 def main(args):
     config = model.get_config(args.project_id)
