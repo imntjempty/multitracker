@@ -116,6 +116,7 @@ def get_bbox_data(config, vis_input_data=0):
     for i, frame_idx in enumerate(frame_bboxes.keys()):
         f = os.path.join(frames_dir, '%s.png' % frame_idx)
         image_np = cv.imread(f)
+        image_np = cv.resize(image_np,(640,640))
         
         H, W = image_np.shape[:2]
         frame_bboxes[frame_idx] = frame_bboxes[frame_idx] / np.array([H,W,H,W]) 
