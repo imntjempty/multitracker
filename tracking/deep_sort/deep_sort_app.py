@@ -156,7 +156,10 @@ def detect_bounding_boxes(detection_model, input_tensor):
     #    input_tensor = tf.expand_dims(input_tensor, 0)
     input_tensor = tf.cast(input_tensor,tf.float32)
     #print('SHAPES',input_tensor.shape)
+    shapes = tf.constant(1 * [[640, 640, 3]], dtype=tf.int32)
+    #input_tensor = tf.expand_dims(input_tensor,axis=0)
     preprocessed_image, shapes = detection_model.preprocess(input_tensor)
+    #preprocessed_image = tf.image.resize(preprocessed_image,(640,640))
     #print('preprocessed_image',preprocessed_image.shape,'shapes',shapes)
     prediction_dict = detection_model.predict(preprocessed_image, shapes)
     detections = detection_model.postprocess(prediction_dict, shapes)
@@ -164,13 +167,13 @@ def detect_bounding_boxes(detection_model, input_tensor):
     detections['detection_scores'] = detections['detection_scores'][0]
     return detections
 
-act_detection_part_file = None
-act_detection_part_data = None 
-def load_detections(config, detection_model, encoder_model, seq_info, frame_idx, thresh_detection = 0.8):
+
+def detect_frame_boundingboxes(config, detection_model, encoder_model, seq_info, frame_idx, thresh_detection = 0.3):
     frame_directory = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'train')
     frame_file = os.path.join(frame_directory, '%05d.png' % frame_idx)
     
     inp_tensor = cv.imread(frame_file)
+    inp_tensor = cv.resize(inp_tensor,(640,640))
     inp_tensor = tf.expand_dims(inp_tensor,0)
     features, _ = encoder_model(autoencoder.preprocess(inp_tensor),training=False)
     
@@ -202,6 +205,30 @@ def load_detections(config, detection_model, encoder_model, seq_info, frame_idx,
             results.append(detection)        
 
     return inp_tensor[0,:,:,:], results        
+
+global count_failed
+global count_ok
+count_ok, count_failed =0,0
+
+def append_crop_mosaic(frame, vis_crops):
+    if len(vis_crops) == 0:
+        return np.hstack((frame,np.zeros((frame.shape[0],frame.shape[0],3),'uint8')))
+
+    n = int(np.sqrt(len(vis_crops)))
+    if not len(vis_crops) == int(n+0.5) ** 2: # is not square root?
+        n += 1 
+    n = max(2,n)
+
+    d = int(frame.shape[0]/n)
+    mosaic = np.zeros((frame.shape[0],frame.shape[0],3),'uint8')
+    for i in range(len(vis_crops)):
+        vis_crops[i] = cv.resize(vis_crops[i],(d,d))
+        cx = int(i/n)
+        cy = i//n 
+        mosaic[n*cy:n*cy+d,n*cx:n*cx+d,:] = vis_crops[i]
+
+    out = np.hstack((frame, mosaic))
+    return out
 
 #def run(config, detection_file, output_file, min_confidence,
 #        nms_max_overlap, max_cosine_distance,
@@ -248,14 +275,24 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
     if not os.path.isdir('/tmp/vis/'): os.makedirs('/tmp/vis/')
 
     [Hframe,Wframe,_] = cv.imread(glob(os.path.join(os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'test'),'*.png'))[0]).shape
-    video_file = '/tmp/video_tracking_vid%i.avi' % config['video_id']
-    video_writer = cv.VideoWriter(video_file,cv.VideoWriter_fourcc('D','I','V','X'), 30, (Wframe, Hframe))
+    video_file = '/tmp/video_tracking_%s_vis%i.avi' % (config['project_name'],config['video_id'])
+    if os.path.isfile(video_file): os.remove(video_file)
+    #video_writer = cv.VideoWriter(video_file,cv.VideoWriter_fourcc('D','I','V','X'), 30, (Wframe, Hframe))
+    import skvideo.io
+    video_writer = skvideo.io.FFmpegWriter(video_file, outputdict={
+        '-vcodec': 'libx264',  #use the h.264 codec
+        '-crf': '0',           #set the constant rate factor to 0, which is lossless
+        '-preset':'veryslow'   #the slower the better compression, in princple, try 
+                                #other options see https://trac.ffmpeg.org/wiki/Encode/H.264
+    }) 
     print('[*] writing video file %s' % video_file)
+    
 
     def frame_callback(vis, frame_idx):
-        
+        global count_failed
+        global count_ok
         #print("Processing frame %05d" % frame_idx)
-        frame, detections = load_detections(config, detection_model, encoder_model, seq_info, frame_idx)
+        frame, detections = detect_frame_boundingboxes(config, detection_model, encoder_model, seq_info, frame_idx)
             
         #print('frame',frame.dtype,frame.shape)
         #im = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
@@ -324,13 +361,14 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
                 x1,y1,x2,y2 = track.to_tlbr()
                 center = roi_segm.get_center(x1,y1,x2,y2, image.shape[0],image.shape[1], crop_dim)
                 vis_crops.append( im[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:] )    
-                vis_crops[-1] = cv.resize(vis_crops[-1], (im.shape[0]//2,im.shape[0]//2))
+                #vis_crops[-1] = cv.resize(vis_crops[-1], (im.shape[0]//2,im.shape[0]//2))
             
             _shape = [im.shape[0]//2,im.shape[1]//2]
             if len(vis_crops)>0:
                 _shape = vis_crops[0].shape[:2]
-            for i in range(4-len(vis_crops)):
-                vis_crops.append( np.zeros((_shape[0],_shape[1],3),'uint8'))
+            #for i in range(4-len(vis_crops)):
+            #    #vis_crops.append( np.zeros((_shape[0],_shape[1],3),'uint8'))
+            #   vis_crops.append( np.zeros((im.shape[0]//2,im.shape[0]//2),'uint8'))
 
             # stack output image together
             # left side: original visualization with boxes and tracks
@@ -338,17 +376,8 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
             out = vis.viewer.image
             #for vc in vis_crops:
             #    print('viscrop',out.shape,vc.shape)
-            out = np.hstack((
-                out,
-                np.vstack((
-                    vis_crops[0],
-                    vis_crops[2]
-                )),
-                np.vstack((
-                    vis_crops[1],
-                    vis_crops[3]
-                ))
-            ))
+            #print('OUT',out.shape,[v.shape for v in vis_crops])
+            out = append_crop_mosaic(out,vis_crops)
             vis.set_image(out.copy())
 
             if 0 :
@@ -365,7 +394,16 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
                 fo = '/tmp/vis/%s.png'  %frame_idx
                 cv.imwrite(fo,out)
                 print('[*] wrote %s' % fo )
-            video_writer.write(out)
+            #video_writer.write(out )
+            print('ok',count_ok,'failed',count_failed,'out',out.shape,out.dtype,out.min(),out.max())
+            
+            try:
+                video_writer.writeFrame(cv.cvtColor(out, cv.COLOR_BGR2RGB)) #out[:,:,::-1])
+                count_ok += 1
+            except Exception as e:
+                count_failed += 1 
+                print('[*] Video Writing for frame_idx %s failed. image shape'%frame_idx,out.shape)
+                print(e)
 
         # Store results.
         for track in tracker.tracks:
@@ -402,7 +440,7 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
         subprocess.call(['ffmpeg','-framerate','30','-i','/tmp/vis/%d.png', '-vf', 'format=yuv420p','-vcodec','libx265', file_video])
         subprocess.call(['rm','/tmp/vis/*.png'])
         print('[*] wrote video to %s' % file_video)
-    video_writer.release() 
+    #video_writer.release() 
 
 def bool_string(input_string):
     if input_string not in {"True","False"}:
