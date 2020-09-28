@@ -93,8 +93,69 @@ def plot_detections(image_np,
   return image_np_with_annotations
 
 def get_bbox_data(config, vis_input_data=0):
+    train_image_tensors = []
+    train_gt_classes_one_hot_tensors = []
+    train_gt_box_tensors = []
+    test_image_tensors = []
+    test_gt_classes_one_hot_tensors = []
+    test_gt_box_tensors = []
     
+    frames_dir = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'train')
+    frame_bboxes = {}
+    db.execute("select * from bboxes where video_id=%i;" % config['video_id'])
+    db_boxxes = [x for x in db.cur.fetchall()]
+    shuffle(db_boxxes)
+    for dbbox in db_boxxes:
+        _, _, frame_idx, x1, y1, x2, y2 = dbbox 
+        if not frame_idx in frame_bboxes:
+            frame_bboxes[frame_idx] = [] 
+        frame_bboxes[frame_idx].append(np.array([float(z) for z in [y1,x1,y2,x2]]))
     
+    for i, frame_idx in enumerate(frame_bboxes.keys()):
+        frame_bboxes[frame_idx] = np.array(frame_bboxes[frame_idx]) 
+    
+    H,W,_ = cv.imread( os.path.join(frames_dir, '%s.png' % list(frame_bboxes.keys())[0]) ).shape
+    for i, frame_idx in enumerate(frame_bboxes.keys()):
+        #print(i,frame_idx)
+        f = os.path.join(frames_dir, '%s.png' % frame_idx)
+
+        frame_bboxes[frame_idx] = frame_bboxes[frame_idx] / np.array([H,W,H,W]) 
+        bboxes = frame_bboxes[frame_idx]
+        
+        if np.random.uniform() > 0.2:
+            #train_image_tensors.append(tf.expand_dims(tf.convert_to_tensor(image_np, dtype=tf.float32), axis=0))
+            train_image_tensors.append(frame_idx)
+            train_gt_box_tensors.append(tf.convert_to_tensor(bboxes, dtype=tf.float32))
+            train_gt_classes_one_hot_tensors.append(tf.one_hot(tf.convert_to_tensor(np.ones(shape=[bboxes.shape[0]], dtype=np.int32) - label_id_offset), num_classes))
+        else:
+            #test_image_tensors.append(tf.expand_dims(tf.convert_to_tensor(image_np, dtype=tf.float32), axis=0))
+            test_image_tensors.append(frame_idx)
+            test_gt_box_tensors.append(tf.convert_to_tensor(bboxes, dtype=tf.float32))
+            test_gt_classes_one_hot_tensors.append(tf.one_hot(tf.convert_to_tensor(np.ones(shape=[bboxes.shape[0]], dtype=np.int32) - label_id_offset), num_classes))
+    
+    ddata_train, ddata_test = [], []
+    for i in range(len(train_image_tensors)):
+        ddata_train.append([train_image_tensors[i], train_gt_box_tensors[i], train_gt_classes_one_hot_tensors[i]])
+    for i in range(len(test_image_tensors)):
+        ddata_test.append([test_image_tensors[i], test_gt_box_tensors[i], test_gt_classes_one_hot_tensors[i]])
+    labeling_list_train = tf.data.Dataset.from_tensor_slices(train_image_tensors)
+    labeling_list_test = tf.data.Dataset.from_tensor_slices(test_image_tensors)
+    
+    @tf.function
+    def load_im(frame_idx):
+        image_file = tf.strings.join([frames_dir, '/',tf.cast(frame_idx,tf.string),'.png'])
+        image = tf.io.read_file(image_file)
+        image = tf.image.decode_png(image,channels=3)
+        image = tf.cast(image,tf.float32)
+        return frame_idx, image
+
+    data_train = labeling_list_train.map(load_im, num_parallel_calls = tf.data.experimental.AUTOTUNE).batch(config['batch_size']).prefetch(4*config['batch_size'])#.cache()
+    data_test = labeling_list_test.map(load_im, num_parallel_calls = tf.data.experimental.AUTOTUNE).batch(config['batch_size']).prefetch(4*config['batch_size'])#.cache()
+    data_train = data_train.shuffle(512)
+    return frame_bboxes, data_train, data_test  
+    
+
+def get_bbox_data_ram(config, vis_input_data=0):
     train_image_tensors = []
     train_gt_classes_one_hot_tensors = []
     train_gt_box_tensors = []
@@ -231,6 +292,7 @@ def restore_weights(checkpoint_path = None):
     _ = detection_model.postprocess(prediction_dict, shapes)
     print('[*] object detection weights restored from %s' % checkpoint_path)
 
+    #detection_model.run_eagerly = True
     return ckpt, model_config, detection_model
 
 def inference_train_video(detection_model,config, steps, minutes = 0):
@@ -311,7 +373,8 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
         config['finetune'] = False 
 
     # load and prepare data 
-    train_image_tensors, train_gt_box_tensors, train_gt_classes_one_hot_tensors, test_image_tensors, test_gt_box_tensors, test_gt_classes_one_hot_tensors = get_bbox_data(config)
+    #train_image_tensors, train_gt_box_tensors, train_gt_classes_one_hot_tensors, test_image_tensors, test_gt_box_tensors, test_gt_classes_one_hot_tensors = get_bbox_data(config)
+    frame_bboxes, data_train, data_test = get_bbox_data(config)
     ckpt, model_config, detection_model = restore_weights(checkpoint_restore)
     if checkpoint_restore is None:
         tf.keras.backend.set_learning_phase(True)
@@ -397,108 +460,90 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
         print('Start fine-tuning!', flush=True)
         early_stopping = False 
         idx = 0
+        epoch = 0
         test_losses = []
-        #from tensorflow_models.research.object_detection.utils import visualization_utils
-        while idx < config['objectdetection_max_steps'] and not early_stopping:
-            # Grab keys for a random subset of examples
-            all_keys = list(range(len(train_image_tensors)))
-            random.shuffle(all_keys)
-            example_keys = all_keys[:batch_size]
+        for epoch in range(int(1e6)):
+            for frame_idx, image_tensors in data_train:
+                gt_boxes, gt_classes = [],[]
+                for ii in range(len(frame_idx)):
+                    gt_boxes.append(tf.convert_to_tensor(frame_bboxes[str(frame_idx[ii].numpy().decode("utf-8") )], dtype=tf.float32))
+                    gt_classes.append(tf.one_hot(tf.convert_to_tensor(np.ones(shape=[frame_bboxes[str(frame_idx[ii].numpy().decode("utf-8") )].shape[0]], dtype=np.int32) - label_id_offset), num_classes))
+                
+                if 0 and np.random.uniform() > 0.5:
+                    # hflip
+                    image_tensors = image_tensors[:,:,::-1,:]
+                    for ii in range(image_tensors.shape[0]):
+                        bb = tf.identity(gt_boxes[ii][0])
+                        gt_boxes[ii] = tf.concat([1.-bb[2],bb[1],1.-bb[0],bb[3]],axis=0)
+                        
+                if 0 and np.random.uniform() > 0.5:
+                    # vflip
+                    image_tensors = image_tensors[:,::-1,:,:]
+                    for ii in range(image_tensors.shape[0]):
+                        bb = tf.identity(gt_boxes[ii])
+                        gt_boxes[ii] = tf.concat([bb[0],1.-bb[3],bb[2],1.-bb[1]],axis=0)
+                        
+                # Training step (forward pass + backwards pass)
+                total_loss = train_step_fn(image_tensors, gt_boxes, gt_classes, update_weights = True)
 
-            gt_boxes_list = [train_gt_box_tensors[key] for key in example_keys]
-            #print('gt_boxes_list',gt_boxes_list)
-            gt_classes_list = [train_gt_classes_one_hot_tensors[key] for key in example_keys]
-            image_tensors = [train_image_tensors[key] for key in example_keys]
-            #image_tensors = np.array(image_tensors)
-            # Training step (forward pass + backwards pass)
-            total_loss = train_step_fn(image_tensors, gt_boxes_list, gt_classes_list, update_weights = True)
+                if idx % 100 == 0:
+                    # write tensorboard summary
+                    with writer_train.as_default():
+                        tf.summary.scalar("loss",total_loss,step=idx)
+                        
+                        preprocessed_image, shapes = detection_model.preprocess(tf.concat(image_tensors,axis=0))
+                        prediction_dict = detection_model.predict(preprocessed_image, shapes)
+                        prediction_dict = detection_model.postprocess(prediction_dict, shapes)
+                        vis = viz_utils.draw_bounding_boxes_on_image_tensors(tf.cast(tf.concat(image_tensors,axis=0),tf.uint8),
+                                            prediction_dict['detection_boxes'],
+                                            prediction_dict['detection_classes'].numpy().astype(np.uint32) + label_id_offset,#prediction_dict['detection_classes'],#prediction_dict['detection_classes'].astype(tf.int32) + label_id_offset,
+                                            prediction_dict['detection_scores'],
+                                            category_index)
+                        vis = tf.cast(vis,tf.float32)
+                        tf.summary.image('prediction',vis/255.,step=idx)
+                        writer_train.flush()
 
-            #if idx % 100 == 0:
-            #    print('batch ' + str(idx) + ' of ' + str(config['objectdetection_max_steps']) + ', loss=' +  str(total_loss.numpy()), flush=True)
-            
-            if idx % 100 == 0:
-                # write tensorboard summary
-                with writer_train.as_default():
-                    tf.summary.scalar("loss",total_loss,step=idx)
-                    
-                    preprocessed_image, shapes = detection_model.preprocess(tf.concat(image_tensors,axis=0))
-                    prediction_dict = detection_model.predict(preprocessed_image, shapes)
-                    prediction_dict = detection_model.postprocess(prediction_dict, shapes)
-                    vis = viz_utils.draw_bounding_boxes_on_image_tensors(tf.cast(tf.concat(image_tensors,axis=0),tf.uint8),
-                                         prediction_dict['detection_boxes'],
-                                         prediction_dict['detection_classes'].numpy().astype(np.uint32) + label_id_offset,#prediction_dict['detection_classes'],#prediction_dict['detection_classes'].astype(tf.int32) + label_id_offset,
-                                         prediction_dict['detection_scores'],
-                                         category_index)
-                    #print('vis',vis.shape,vis.dtype,tf.reduce_min(vis),tf.reduce_max(vis))
-                    vis = tf.cast(vis,tf.float32)
+                ## Test images
+                if idx % 250 == 0:
+                    num_test_batches = 8
+                    test_loss = 0.
+                    for frame_idx, image_tensors in data_test:
+                        gt_boxes, gt_classes = [],[]
+                        for ii in range(len(frame_idx)):
+                            gt_boxes.append(tf.convert_to_tensor(frame_bboxes[str(frame_idx[ii].numpy().decode("utf-8") )], dtype=tf.float32))
+                            gt_classes.append(tf.one_hot(tf.convert_to_tensor(np.ones(shape=[frame_bboxes[str(frame_idx[ii].numpy().decode("utf-8") )].shape[0]], dtype=np.int32) - label_id_offset), num_classes))
+                        # Test step (forward pass only)
+                        test_loss = test_loss + train_step_fn(image_tensors, gt_boxes, gt_classes, update_weights = False)/num_test_batches
+                    test_losses.append(test_loss)
 
-                    tf.summary.image('prediction',vis/255.,step=idx)
+                    # write tensorboard summary
+                    with writer_test.as_default():
+                        tf.summary.scalar("loss",test_loss,step=idx)
 
-                    # draw image with bounding box
-                    if 0:
-                        box = np.array([0, 0, 1, 1])
-                        boxes = box.reshape([1, 1, 4])
-                        # alternate between red and blue
-                        colors = np.array([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
-                        vis_bbox = tf.image.draw_bounding_boxes(img, boxes, colors)
-                    
+                        preprocessed_image, shapes = detection_model.preprocess(tf.concat(image_tensors,axis=0))
+                        prediction_dict = detection_model.predict(preprocessed_image, shapes)
+                        prediction_dict = detection_model.postprocess(prediction_dict, shapes)
+                        vis = viz_utils.draw_bounding_boxes_on_image_tensors(tf.cast(tf.concat(image_tensors,axis=0),tf.uint8),
+                                            prediction_dict['detection_boxes'],
+                                            prediction_dict['detection_classes'].numpy().astype(np.uint32) + label_id_offset,#prediction_dict['detection_classes'],#prediction_dict['detection_classes'].astype(tf.int32) + label_id_offset,
+                                            prediction_dict['detection_scores'],
+                                            category_index)
+                        vis = tf.cast(vis,tf.float32)
+                        tf.summary.image('prediction',vis/255.,step=idx)
+                        writer_test.flush()
 
-                    writer_train.flush()
+                    # check for early stopping -> stop training if test loss is increasing
+                    if idx>20000 and config['early_stopping'] and len(test_losses) > 3:
+                        if test_loss > test_losses[-2] and test_loss > test_losses[-3] and test_loss > test_losses[-4] and min(test_losses[:-1]) < 1.5*test_losses[-1]:
+                            early_stopping = True 
+                            print('[*] stopping object detection early at step %i, epoch %i, because current test loss %f is higher than previous %f and %f' % (idx, epoch, test_loss, test_losses[-2], test_losses[-3]))
+                            ckpt_saver = tf.compat.v2.train.Checkpoint(detection_model=detection_model)
+                            ckpt_manager = tf.train.CheckpointManager(ckpt_saver, checkpoint_directory, max_to_keep=5)
+                            saved_path = ckpt_manager.save()
+                            print('[*] saved object detection model to',checkpoint_directory,'->',saved_path)
+                            return detection_model
+                idx += 1 
 
-            ## Test images
-            if idx % 250 == 0:
-                num_test_batches = 8
-                test_loss = 0.
-                for itest in range(num_test_batches):
-                    all_keys = list(range(len(test_image_tensors)))
-                    random.shuffle(all_keys)
-                    example_keys = all_keys[:batch_size]
-
-                    gt_boxes_list = [test_gt_box_tensors[key] for key in example_keys]
-                    gt_classes_list = [test_gt_classes_one_hot_tensors[key] for key in example_keys]
-                    image_tensors = [test_image_tensors[key] for key in example_keys]
-
-                    # Test step (forward pass only)
-                    test_loss = test_loss + train_step_fn(image_tensors, gt_boxes_list, gt_classes_list, update_weights = False)/num_test_batches
-                test_losses.append(test_loss)
-
-                # write tensorboard summary
-                with writer_test.as_default():
-                    tf.summary.scalar("loss",test_loss,step=idx)
-
-                    preprocessed_image, shapes = detection_model.preprocess(tf.concat(image_tensors,axis=0))
-                    prediction_dict = detection_model.predict(preprocessed_image, shapes)
-                    prediction_dict = detection_model.postprocess(prediction_dict, shapes)
-                    vis = viz_utils.draw_bounding_boxes_on_image_tensors(tf.cast(tf.concat(image_tensors,axis=0),tf.uint8),
-                                         prediction_dict['detection_boxes'],
-                                         prediction_dict['detection_classes'].numpy().astype(np.uint32) + label_id_offset,#prediction_dict['detection_classes'],#prediction_dict['detection_classes'].astype(tf.int32) + label_id_offset,
-                                         prediction_dict['detection_scores'],
-                                         category_index)
-                    #print('vis',vis.shape,vis.dtype,tf.reduce_min(vis),tf.reduce_max(vis))
-                    vis = tf.cast(vis,tf.float32)
-
-                    tf.summary.image('prediction',vis/255.,step=idx)
-                    writer_test.flush()
-
-                # check for early stopping -> stop training if test loss is increasing
-                if idx>40000 and config['early_stopping'] and len(test_losses) > 3:
-                    if test_loss > test_losses[-2] and test_loss > test_losses[-3] and test_loss > test_losses[-4] and min(test_losses[:-1]) < 1.5*test_losses[-1]:
-                        early_stopping = True 
-                        print('[*] stopping object detection early at step %i, because current test loss %f is higher than previous %f and %f' % (idx, test_loss, test_losses[-2], test_losses[-3]))
-
-            idx += 1 
-
-        # save model for later use
-        ckpt_saver = tf.compat.v2.train.Checkpoint(detection_model=detection_model)
-        ckpt_manager = tf.train.CheckpointManager(ckpt_saver, checkpoint_directory, max_to_keep=5)
-        saved_path = ckpt_manager.save()
-        
-        print('[*] saved object detection model to',checkpoint_directory,'->',saved_path)
-        #print('[*] Done fine-tuning object detection! inferencing all frames ...')    
-        
-    #inference_train_video(detection_model,config,config['objectdetection_max_steps']-1,config['minutes'])
-    return detection_model
-    
 
 if __name__ == '__main__':
     import argparse 
