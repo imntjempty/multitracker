@@ -85,8 +85,6 @@ def write_crop_to_disk(obj):
             #if min(roi_comp.shape[:2])>1:
             
             f_roi = os.path.join(config['roi_dir'],_mode,'%s_%i.png' % (obj['frame_idx'], j))
-            #print(j,'coords',y1,x1,y2,x2,'center',center,roi_comp.shape)
-            #print(f_roi,roi_comp.shape)
             if np.min(roi_comp.shape)>=3:# and roi_comp.shape[1]==(len_parts * crop_dim):
                 cv.imwrite(f_roi, roi_comp)
                     
@@ -109,13 +107,13 @@ def load_roi_dataset(config,mode='train'):
     H = Hcomp 
     w = int(Wframe*Hcomp/Hframe)
 
-    #w = H#int(W*Hcomp/H)
-     #config['fov'])
     len_parts = Wcomp // w  
     crop_dim = get_roi_crop_dim(config['project_id'], config['video_id'], Hcomp)
     crop_dim_extended_ratio = 1.5
     crop_dim_extended = min(Hcomp, crop_dim * crop_dim_extended_ratio)
+    crop_dim_extended = int(crop_dim_extended)
     crop_dim_extended_ratio = crop_dim_extended / crop_dim 
+
     print('crop_dim_extended_ratio',crop_dim_extended_ratio,'crop_dim',crop_dim,'crop_dim_extended',crop_dim_extended)
     
     for _mode in ['train','test']:
@@ -144,9 +142,10 @@ def load_roi_dataset(config,mode='train'):
             for i, frame_idx in enumerate(frame_bboxes.keys()):
                 frame_bboxes[frame_idx] = np.array(frame_bboxes[frame_idx]) 
                 f = os.path.join(image_directory,'%s.png' % frame_idx) 
-                result = pool.apply_async(write_crop_to_disk,({'Hframe':Hframe,'Hcomp':Hcomp,'w':w,'f':f,'config':config,'crop_dim_extended':crop_dim_extended,'len_parts':len_parts,'frame_idx':frame_idx,'boxes':frame_bboxes[frame_idx]},))
-                #write_crop_to_disk({'Hframe':Hframe,'Hcomp':Hcomp,'w':w,'f':f,'config':config,'crop_dim_extended':crop_dim_extended,'len_parts':len_parts,'frame_idx':frame_idx,'boxes':frame_bboxes[frame_idx]})
-                result_objs.append(result)
+                obj = {'Hframe':Hframe,'Hcomp':Hcomp,'w':w,'f':f,'config':config,'crop_dim_extended':crop_dim_extended,'len_parts':len_parts,'frame_idx':frame_idx,'boxes':frame_bboxes[frame_idx]}
+                result_objs.append(pool.apply_async(write_crop_to_disk,(obj,)))
+                #write_crop_to_disk(obj)
+                
             results = [result.get() for result in result_objs]
             
             # check homogenous image sizes
@@ -165,7 +164,7 @@ def load_roi_dataset(config,mode='train'):
     #mean_rgb = calc_mean_rgb(config)
     hroi,wroicomp = cv.imread(glob(os.path.join(config['roi_dir'],'train','*.png'))[0]).shape[:2]
     wroi = hroi#wroicomp // (1+len(config['keypoint_names'])//3)
-    print('wroi',hroi,wroicomp,wroi,'->',wroicomp//wroi)
+    #print('wroi',hroi,wroicomp,wroi,'->',wroicomp//wroi)
     h = hroi #int(hroi * 0.98)
     config['img_height'] = 224
     config['img_width'] = 224
@@ -199,13 +198,9 @@ def load_roi_dataset(config,mode='train'):
 
         # scale down a bit bigger than need before random cropping
         comp = tf.image.resize(comp,[int(config['img_height']*crop_dim_extended_ratio),int(config['img_width']*crop_dim_extended_ratio)])
+        # random crop to counteract imperfect bounding box centers
         crop = tf.image.random_crop( comp, [config['img_height'],config['img_width'],1+3+len(config['keypoint_names'])])
     
-        # crop
-        #crop = tf.image.random_crop( comp, [hh,hh,1+3+len(config['keypoint_names'])])
-        #crop = tf.image.resize(crop,[config['img_height'],config['img_width']])
-        #comp = tf.image.resize(comp,[int(tf.random.uniform([],0,10))+config['img_height'],int(tf.random.uniform([],0,10))+config['img_width']])
-        #crop = tf.image.random_crop( comp, [config['img_height'],config['img_width'],1+3+len(config['keypoint_names'])])
         # split stack into images and heatmaps
         image = crop[:,:,:3]
         
