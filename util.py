@@ -25,6 +25,8 @@ def get_colors():
         color_dicts[ccc] = tuple(np.int32(256*np.array(mcolors.to_rgba(color_dicts[ccc])[:3])))
         colors.append(color_dicts[ccc])
     shuffle(colors)
+
+    colors = [ color_dicts[k] for k in ['red','blue','yellow','green','magenta','cyan','lightblue','pink','lightgreen','orange']]
     return colors 
 
 if __name__ == '__main__':
