@@ -24,6 +24,7 @@ from multitracker.tracking.deep_sort.deep_sort.tracker import Tracker
 from multitracker import autoencoder
 from multitracker.keypoint_detection import roi_segm, unet
 from multitracker.tracking.inference import get_heatmaps_keypoints
+from multitracker.tracking.keypoint_tracking import tracker as keypoint_tracking
 from multitracker.be import video
 from multitracker import util 
 
@@ -281,13 +282,14 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
     #video_writer = cv.VideoWriter(video_file,cv.VideoWriter_fourcc('D','I','V','X'), 30, (Wframe, Hframe))
     import skvideo.io
     video_writer = skvideo.io.FFmpegWriter(video_file, outputdict={
-        '-vcodec': 'libx264',  #use the h.264 codec
+        '-vcodec': 'libx265',  #use the h.264 codec
         '-crf': '0',           #set the constant rate factor to 0, which is lossless
         '-preset':'veryslow'   #the slower the better compression, in princple, try 
                                 #other options see https://trac.ffmpeg.org/wiki/Encode/H.264
     }) 
     print('[*] writing video file %s' % video_file)
     
+    keypoint_tracker = keypoint_tracking.KeypointTracker()
 
     def frame_callback(vis, frame_idx):
         global count_failed
@@ -342,20 +344,42 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
         keypoints = get_heatmaps_keypoints(y_kpheatmaps, thresh_detection=0.5)
         print('%i detections. %i keypoints' % (len(detections), len(keypoints)),[kp for kp in keypoints])
 
+        # update tracked keypoints with new detections
+        tracked_keypoints = keypoint_tracker.update(keypoints)
+
         # Update visualization.
         if len(seq_info["image_filenames"][1])>int(frame_idx):
             image = cv.imread(seq_info["image_filenames"][1][int(frame_idx)], cv.IMREAD_COLOR)
             
-            # draw keypoints 
+            # draw keypoint detections 'whitish'
             im = np.array(image, copy=True)
             
             color_offset = 10
-            radius_keypoint = 10
+            radius_keypoint = 5
             for [x,y,c] in keypoints:
                 x, y = [int(round(x)),int(round(y))]
-                color_keypoint = [int(ss) for ss in colors[c]]
-                im = cv.circle(im, (x,y), radius_keypoint, color_keypoint, -1)
+                color_keypoint = [int(ss) for ss in colors[c%len(colors)]]
+                color_keypoint = [c//2 + 64 for c in color_keypoint]
+                im = cv.circle(im, (x,y), radius_keypoint, color_keypoint, 3)
             
+            # draw history of track 
+            for i in range( len(tracked_keypoints) ):
+                color_keypoint = [int(ss) for ss in colors[tracked_keypoints[i].history_class[-1]%len(colors)]]
+                for j in range( 1, len(tracked_keypoints[i].history_estimated)):
+                    p1 = tuple(np.int32(np.around(tracked_keypoints[i].history_estimated[j])))
+                    p2 = tuple(np.int32(np.around(tracked_keypoints[i].history_estimated[j-1])))
+                    im = cv.line(im, p1, p2, color_keypoint, 2)
+                
+            # draw keypoint tracks in full color
+            for keypoint_track in keypoint_tracker.get_deadnalive_tracks():
+                x, y = [ int(round(c)) for c in keypoint_track.position]
+                if keypoint_track.alive:
+                    color_keypoint = [int(ss) for ss in colors[keypoint_track.history_class[-1]%len(colors)]]
+                else:
+                    color_keypoint = [int(ss)//2+128 for ss in colors[keypoint_track.history_class[-1]%len(colors)]]
+                im = cv.circle(im, (x,y), radius_keypoint, color_keypoint, -1)
+
+
             # crop keypointed vis 
             vis_crops = [  ]
             for i, track in enumerate(tracker.tracks):
