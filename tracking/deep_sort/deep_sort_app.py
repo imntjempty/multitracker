@@ -168,11 +168,12 @@ def detect_bounding_boxes(detection_model, input_tensor):
     return detections
 
 
-def detect_frame_boundingboxes(config, detection_model, encoder_model, seq_info, frame_idx, thresh_detection = 0.3):
-    frame_directory = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'train')
-    frame_file = os.path.join(frame_directory, '%05d.png' % frame_idx)
+def detect_frame_boundingboxes(config, detection_model, encoder_model, seq_info, frame, frame_idx, thresh_detection = 0.3):
+    #frame_directory = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'train')
+    #frame_file = os.path.join(frame_directory, '%05d.png' % frame_idx)
     
-    inp_tensor = cv.imread(frame_file)
+    inp_tensor = frame #cv.imread(frame_file)
+    H,W = inp_tensor.shape[:2]
     inp_tensor = cv.resize(inp_tensor,(640,640))
     inp_tensor = tf.expand_dims(inp_tensor,0)
     features, _ = encoder_model(autoencoder.preprocess(inp_tensor),training=False)
@@ -194,7 +195,7 @@ def detect_frame_boundingboxes(config, detection_model, encoder_model, seq_info,
             height = height - top  
             width = width - left
 
-            _scale = inp_tensor.shape[2]/1920
+            _scale = inp_tensor.shape[2]/seq_info['image_size'][1]
             features_crop = features[:,int(_scale*top/8.):int(_scale*(top+height)/8.),int(_scale*left/8.):int(_scale*(left+width)/8.),:] 
             #print('[*] cropped',int(_scale*top/8.),int(_scale*(top+height)/8.),int(_scale*left/8.),int(_scale*(left+width)/8.),'->',features_crop.shape)
             features_crop = tf.keras.layers.GlobalAveragePooling2D()(features_crop)
@@ -223,9 +224,9 @@ def append_crop_mosaic(frame, vis_crops):
     mosaic = np.zeros((frame.shape[0],frame.shape[0],3),'uint8')
     for i in range(len(vis_crops)):
         vis_crops[i] = cv.resize(vis_crops[i],(d,d))
-        cx = int(i/n)
+        cx = i%n
         cy = i//n 
-        mosaic[n*cy:n*cy+d,n*cx:n*cx+d,:] = vis_crops[i]
+        mosaic[d*cy:d*cy+d,d*cx:d*cx+d,:] = vis_crops[i]
 
     out = np.hstack((frame, mosaic))
     return out
@@ -292,13 +293,16 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
         global count_failed
         global count_ok
         #print("Processing frame %05d" % frame_idx)
-        frame, detections = detect_frame_boundingboxes(config, detection_model, encoder_model, seq_info, frame_idx)
+        frame_directory = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'train')
+        frame_file = os.path.join(frame_directory, '%05d.png' % frame_idx)
+        frame = cv.imread(frame_file)
+        frame_, detections = detect_frame_boundingboxes(config, detection_model, encoder_model, seq_info, frame, frame_idx)
             
         #print('frame',frame.dtype,frame.shape)
         #im = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
         frame_kp = unet.preprocess(frame)
         crop_dim = roi_segm.get_roi_crop_dim(config['project_id'], config['video_id'], frame.shape[0]) 
-        
+        #print('crop_dim',crop_dim)
         #if detections is None:
         #    return False 
 
@@ -341,12 +345,9 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
         # Update visualization.
         if len(seq_info["image_filenames"][1])>int(frame_idx):
             image = cv.imread(seq_info["image_filenames"][1][int(frame_idx)], cv.IMREAD_COLOR)
-            vis.set_image(image.copy())
-            vis.draw_detections(detections)
-            vis.draw_trackers(tracker.tracks)
             
             # draw keypoints 
-            im = np.array(vis.viewer.image, copy=True)
+            im = np.array(image, copy=True)
             
             color_offset = 10
             radius_keypoint = 10
@@ -373,12 +374,18 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
             # stack output image together
             # left side: original visualization with boxes and tracks
             # right side: moasics focused on tracks with keypoints
-            out = vis.viewer.image
+            
             #for vc in vis_crops:
             #    print('viscrop',out.shape,vc.shape)
             #print('OUT',out.shape,[v.shape for v in vis_crops])
-            out = append_crop_mosaic(out,vis_crops)
-            vis.set_image(out.copy())
+            
+            vis.set_image(image.copy())
+            vis.draw_detections(detections)
+            vis.draw_trackers(tracker.tracks)
+            
+            out = append_crop_mosaic(vis.viewer.image,vis_crops)
+        
+            #vis.set_image(out.copy())
 
             if 0 :
                 # write drawn keypoint image
@@ -389,14 +396,16 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
                     channel = np.int32(255.*(channel-channel.min())/(channel.max() - channel.min()))
                     vis_keypoints[:,:,ii%3] = channel 
                 out = np.hstack((vis_keypoints,out))
-            if 0:
+            if int(frame_idx)<1000:
                 # write image to disk
                 fo = '/tmp/vis/%s.png'  %frame_idx
                 cv.imwrite(fo,out)
-                print('[*] wrote %s' % fo )
+                #print('[*] wrote %s' % fo )
             #video_writer.write(out )
             print('ok',count_ok,'failed',count_failed,'out',out.shape,out.dtype,out.min(),out.max())
-            
+
+
+
             try:
                 video_writer.writeFrame(cv.cvtColor(out, cv.COLOR_BGR2RGB)) #out[:,:,::-1])
                 count_ok += 1
