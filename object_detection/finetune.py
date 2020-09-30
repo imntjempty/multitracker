@@ -382,7 +382,6 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
         # These parameters can be tuned; since our training set has 5 images
         # it doesn't make sense to have a much larger batch size, though we could
         # fit more examples in memory if we wanted to.
-        batch_size = 4
         learning_rate = 0.001 
         num_batches = int(1e7) # was 100 with 5 examples
 
@@ -469,19 +468,17 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
                     gt_boxes.append(tf.convert_to_tensor(frame_bboxes[str(frame_idx[ii].numpy().decode("utf-8") )], dtype=tf.float32))
                     gt_classes.append(tf.one_hot(tf.convert_to_tensor(np.ones(shape=[frame_bboxes[str(frame_idx[ii].numpy().decode("utf-8") )].shape[0]], dtype=np.int32) - label_id_offset), num_classes))
                 
-                if 0 and np.random.uniform() > 0.5:
+                if np.random.uniform() > 0.5:
                     # hflip
                     image_tensors = image_tensors[:,:,::-1,:]
-                    for ii in range(image_tensors.shape[0]):
-                        bb = tf.identity(gt_boxes[ii][0])
-                        gt_boxes[ii] = tf.concat([1.-bb[2],bb[1],1.-bb[0],bb[3]],axis=0)
-                        
-                if 0 and np.random.uniform() > 0.5:
+                    for ii in range(len(gt_boxes)):
+                        gt_boxes[ii] = tf.stack([1.-gt_boxes[ii][:,2],gt_boxes[ii][:,1],1.-gt_boxes[ii][:,0],gt_boxes[ii][:,3]],axis=1)
+                    
+                if np.random.uniform() > 0.5:
                     # vflip
                     image_tensors = image_tensors[:,::-1,:,:]
-                    for ii in range(image_tensors.shape[0]):
-                        bb = tf.identity(gt_boxes[ii])
-                        gt_boxes[ii] = tf.concat([bb[0],1.-bb[3],bb[2],1.-bb[1]],axis=0)
+                    for ii in range(len(gt_boxes)):
+                        gt_boxes[ii] = tf.stack([gt_boxes[ii][:,0],1.-gt_boxes[ii][:,3],gt_boxes[ii][:,2],1.-gt_boxes[ii][:,1]],axis=1)
                         
                 # Training step (forward pass + backwards pass)
                 total_loss = train_step_fn(image_tensors, gt_boxes, gt_classes, update_weights = True)
