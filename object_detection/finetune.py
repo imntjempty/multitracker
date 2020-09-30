@@ -149,8 +149,8 @@ def get_bbox_data(config, vis_input_data=0):
         image = tf.cast(image,tf.float32)
         return frame_idx, image
 
-    data_train = labeling_list_train.map(load_im, num_parallel_calls = tf.data.experimental.AUTOTUNE).batch(config['batch_size']).prefetch(4*config['batch_size'])#.cache()
-    data_test = labeling_list_test.map(load_im, num_parallel_calls = tf.data.experimental.AUTOTUNE).batch(config['batch_size']).prefetch(4*config['batch_size'])#.cache()
+    data_train = labeling_list_train.map(load_im, num_parallel_calls = tf.data.experimental.AUTOTUNE).batch(config['object_detection_batch_size']).prefetch(4*config['object_detection_batch_size'])#.cache()
+    data_test = labeling_list_test.map(load_im, num_parallel_calls = tf.data.experimental.AUTOTUNE).batch(config['object_detection_batch_size']).prefetch(4*config['object_detection_batch_size'])#.cache()
     data_train = data_train.shuffle(512)
     return frame_bboxes, data_train, data_test  
     
@@ -191,26 +191,6 @@ def get_bbox_data_ram(config, vis_input_data=0):
             train_image_tensors.append(tf.expand_dims(tf.convert_to_tensor(image_np, dtype=tf.float32), axis=0))
             train_gt_box_tensors.append(tf.convert_to_tensor(bboxes, dtype=tf.float32))
             train_gt_classes_one_hot_tensors.append(tf.one_hot(tf.convert_to_tensor(np.ones(shape=[bboxes.shape[0]], dtype=np.int32) - label_id_offset), num_classes))
-            # add flipped version as well for training data
-            if 0:
-                # hflip
-                train_image_tensors.append(tf.expand_dims(tf.convert_to_tensor(image_np[:,::-1,:], dtype=tf.float32), axis=0))
-                bboxes_hflip = np.array(bboxes,copy=True)
-                xmax_hflip = 1. - bboxes[:,0]
-                xmin_hflip = 1. - bboxes[:,2]
-                bboxes_hflip[:,0] = xmin_hflip
-                bboxes_hflip[:,2] = xmax_hflip
-                train_gt_box_tensors.append(tf.convert_to_tensor(bboxes_hflip, dtype=tf.float32))
-                train_gt_classes_one_hot_tensors.append(tf.one_hot(tf.convert_to_tensor(np.ones(shape=[bboxes.shape[0]], dtype=np.int32) - label_id_offset), num_classes))
-                # vflip
-                train_image_tensors.append(tf.expand_dims(tf.convert_to_tensor(image_np[::-1,:,:], dtype=tf.float32), axis=0))
-                bboxes_vflip = np.array(bboxes,copy=True)
-                ymax_vflip = 1. - bboxes[:,1]
-                ymin_vflip = 1. - bboxes[:,3]
-                bboxes_vflip[:,1] = ymin_vflip
-                bboxes_vflip[:,3] = ymax_vflip
-                train_gt_box_tensors.append(tf.convert_to_tensor(bboxes_vflip, dtype=tf.float32))
-                train_gt_classes_one_hot_tensors.append(tf.one_hot(tf.convert_to_tensor(np.ones(shape=[bboxes.shape[0]], dtype=np.int32) - label_id_offset), num_classes))
         else:
             test_image_tensors.append(tf.expand_dims(tf.convert_to_tensor(image_np, dtype=tf.float32), axis=0))
             test_gt_box_tensors.append(tf.convert_to_tensor(bboxes, dtype=tf.float32))
@@ -244,17 +224,31 @@ def get_bbox_data_ram(config, vis_input_data=0):
     
     return train_image_tensors, train_gt_box_tensors, train_gt_classes_one_hot_tensors, test_image_tensors, test_gt_box_tensors, test_gt_classes_one_hot_tensors
 
-def get_pipeline_config():
-    return  os.path.expanduser('~/github/models/research/object_detection/configs/tf2/ssd_resnet50_v1_fpn_640x640_coco17_tpu-8.config')
-
-def restore_weights(checkpoint_path = None):
+#def get_pipeline_config(config, pipeline_dir = os.path.expanduser('~/github/models/research/object_detection/configs/tf2')):
+#    return  os.path.join(pipeline_dir, config['object_detection_backbonepath'])
+def get_pipeline_config(config, pipeline_dir = os.path.join(dbconnection.base_data_dir, 'object_detection')):
+    return  os.path.join(pipeline_dir, config['object_detection_backbonepath'], 'pipeline.config')
+    
+    
+def restore_weights(config, checkpoint_path = None, gt_boxes = None, gt_classes =None):
     tf.keras.backend.clear_session()
 
     print('Building model and restoring weights for fine-tuning...', flush=True)
     num_classes = 1
-    pipeline_config = get_pipeline_config()
+    pipeline_config = get_pipeline_config(config)
+    if not os.path.isfile(pipeline_config):
+        # download pretrained model 
+        url = 'http://download.tensorflow.org/models/object_detection/tf2/20200711/%s.tar.gz'%config['object_detection_backbonepath']
+        print('[*] downloading pretrained model from',url)
+        import subprocess 
+        if not os.path.isdir(os.path.join(dbconnection.base_data_dir, 'object_detection')):
+            os.makedirs(os.path.join(dbconnection.base_data_dir, 'object_detection'))
+        zipped_file = os.path.join(dbconnection.base_data_dir, 'object_detection','%s.tar.gz'%config['object_detection_backbonepath'])
+        subprocess.call(['wget','-O', zipped_file,url])
+        subprocess.call(['tar','-xyf',zipped_file,'--directory',os.path.join(dbconnection.base_data_dir, 'object_detection')])
+
     if checkpoint_path is None:
-        checkpoint_path = os.path.join(dbconnection.base_data_dir, 'object_detection/ssd_resnet50_v1_fpn_640x640_coco17_tpu-8/checkpoint/ckpt-0.index')
+        checkpoint_path = os.path.join(dbconnection.base_data_dir, 'object_detection/%s/checkpoint/ckpt-0.index' % config['object_detection_backbonepath'] )
     
     # Load pipeline config and build a detection model.
     #
@@ -263,36 +257,52 @@ def restore_weights(checkpoint_path = None):
     # one (for our new rubber ducky class).
     configs = config_util.get_configs_from_pipeline_file(pipeline_config)
     model_config = configs['model']
-    model_config.ssd.num_classes = num_classes
-    model_config.ssd.freeze_batchnorm = True
+    if config['object_detection_backbone'] == 'ssd':
+        model_config.ssd.num_classes = num_classes
+        model_config.ssd.freeze_batchnorm = True
+    elif config['object_detection_backbone'] == 'fasterrcnn':
+        model_config.faster_rcnn.num_classes = num_classes
+        #model_config.faster_rcnn.freeze_batchnorm = True
+
     detection_model = model_builder.build(
         model_config=model_config, is_training=True)
 
-    # Set up object-based checkpoint restore --- RetinaNet has two prediction
-    # `heads` --- one for classification, the other for box regression.  We will
-    # restore the box regression head but initialize the classification head
-    # from scratch (we show the omission below by commenting out the line that
-    # we would add if we wanted to restore both heads)
-    fake_box_predictor = tf.compat.v2.train.Checkpoint(
-        _base_tower_layers_for_heads=detection_model._box_predictor._base_tower_layers_for_heads,
-        # _prediction_heads=detection_model._box_predictor._prediction_heads,
-        #    (i.e., the classification head that we *will not* restore)
-        _box_prediction_head=detection_model._box_predictor._box_prediction_head,
-    )
+    if config['object_detection_backbone'] == 'ssd':
+        # Set up object-based checkpoint restore --- RetinaNet has two prediction
+        # `heads` --- one for classification, the other for box regression.  We will
+        # restore the box regression head but initialize the classification head
+        # from scratch (we show the omission below by commenting out the line that
+        # we would add if we wanted to restore both heads)
+        fake_box_predictor = tf.compat.v2.train.Checkpoint(
+            _base_tower_layers_for_heads=detection_model._box_predictor._base_tower_layers_for_heads,
+            # _prediction_heads=detection_model._box_predictor._prediction_heads,
+            #    (i.e., the classification head that we *will not* restore)
+            _box_prediction_head=detection_model._box_predictor._box_prediction_head,
+        )
+        
+        fake_model = tf.compat.v2.train.Checkpoint(
+                _feature_extractor=detection_model._feature_extractor,
+                _box_predictor=fake_box_predictor)
+        ckpt = tf.compat.v2.train.Checkpoint(model=fake_model)
+        ckpt.restore(checkpoint_path).expect_partial()
     
-    fake_model = tf.compat.v2.train.Checkpoint(
-            _feature_extractor=detection_model._feature_extractor,
-            _box_predictor=fake_box_predictor)
-    ckpt = tf.compat.v2.train.Checkpoint(model=fake_model)
-    ckpt.restore(checkpoint_path).expect_partial()
+    elif config['object_detection_backbone'] == 'fasterrcnn':
+    
+        detection_model._extract_proposal_features(detection_model.preprocess(tf.zeros([2, 640, 640, 3]))[0])
+        detection_model._extract_box_classifier_features(tf.zeros((2,4,4,1088)))
+        fake_model = detection_model.restore_from_objects('detection')['model']
+        ckpt = tf.train.Checkpoint(model=fake_model)
+        ckpt.restore(checkpoint_path).expect_partial()
+
+    detection_model.provide_groundtruth(
+                    groundtruth_boxes_list=[tf.zeros((7,4))],
+                    groundtruth_classes_list=[tf.zeros((7,1))])
 
     # Run model through a dummy image so that variables are created
     image, shapes = detection_model.preprocess(tf.zeros([1, 640, 640, 3]))
     prediction_dict = detection_model.predict(image, shapes)
     _ = detection_model.postprocess(prediction_dict, shapes)
     print('[*] object detection weights restored from %s' % checkpoint_path)
-
-    #detection_model.run_eagerly = True
     return ckpt, model_config, detection_model
 
 def inference_train_video(detection_model,config, steps, minutes = 0):
@@ -375,7 +385,13 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
     # load and prepare data 
     #train_image_tensors, train_gt_box_tensors, train_gt_classes_one_hot_tensors, test_image_tensors, test_gt_box_tensors, test_gt_classes_one_hot_tensors = get_bbox_data(config)
     frame_bboxes, data_train, data_test = get_bbox_data(config)
-    ckpt, model_config, detection_model = restore_weights(checkpoint_restore)
+    frame_idx, _ = next(iter(data_train))
+    gt_boxes, gt_classes = [],[]
+    for ii in range(len(frame_idx)):
+        gt_boxes.append(tf.convert_to_tensor(frame_bboxes[str(frame_idx[ii].numpy().decode("utf-8") )], dtype=tf.float32))
+        gt_classes.append(tf.one_hot(tf.convert_to_tensor(np.ones(shape=[frame_bboxes[str(frame_idx[ii].numpy().decode("utf-8") )].shape[0]], dtype=np.int32) - label_id_offset), num_classes))
+    #print('gt_boxes',gt_boxes,'gt_classes',gt_classes)
+    ckpt, model_config, detection_model = restore_weights(config, checkpoint_restore, gt_boxes, gt_classes)
     if checkpoint_restore is None:
         tf.keras.backend.set_learning_phase(True)
 
@@ -426,28 +442,28 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
                 Returns:
                     A scalar tensor representing the total loss for the input batch.
                 """
-                #shapes = tf.constant(batch_size * [[640, 640, 3]], dtype=tf.int32)
                 model.provide_groundtruth(
                     groundtruth_boxes_list=groundtruth_boxes_list,
                     groundtruth_classes_list=groundtruth_classes_list)
                 image_tensors = tf.concat(image_tensors,axis=0)
-                #preprocessed_images = tf.concat(
-                #                [detection_model.preprocess(image_tensor)[0]
-                #                for image_tensor in image_tensors], axis=0)
                 preprocessed_images, shapes = detection_model.preprocess(image_tensors) 
 
                 if update_weights:
                     with tf.GradientTape() as tape:
                         prediction_dict = model.predict(preprocessed_images, shapes)
                         losses_dict = model.loss(prediction_dict, shapes)
-                        total_loss = losses_dict['Loss/localization_loss'] + losses_dict['Loss/classification_loss']
+                        total_loss = 0.0
+                        for v in losses_dict.values():
+                            total_loss += v 
                         gradients = tape.gradient(total_loss, vars_to_fine_tune)
                         optimizer.apply_gradients(zip(gradients, vars_to_fine_tune))
                 else:
                     prediction_dict = model.predict(preprocessed_images, shapes)
                     losses_dict = model.loss(prediction_dict, shapes)
-                    total_loss = losses_dict['Loss/localization_loss'] + losses_dict['Loss/classification_loss']
-                return total_loss
+                    total_loss = 0.0
+                    for v in losses_dict.values():
+                        total_loss += v 
+                return prediction_dict, shapes, total_loss
 
             return train_step_fn
 
@@ -468,6 +484,7 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
                     gt_boxes.append(tf.convert_to_tensor(frame_bboxes[str(frame_idx[ii].numpy().decode("utf-8") )], dtype=tf.float32))
                     gt_classes.append(tf.one_hot(tf.convert_to_tensor(np.ones(shape=[frame_bboxes[str(frame_idx[ii].numpy().decode("utf-8") )].shape[0]], dtype=np.int32) - label_id_offset), num_classes))
                 
+                # <augmentation>
                 if np.random.uniform() > 0.5:
                     # hflip
                     image_tensors = image_tensors[:,:,::-1,:]
@@ -479,17 +496,16 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
                     image_tensors = image_tensors[:,::-1,:,:]
                     for ii in range(len(gt_boxes)):
                         gt_boxes[ii] = tf.stack([gt_boxes[ii][:,0],1.-gt_boxes[ii][:,3],gt_boxes[ii][:,2],1.-gt_boxes[ii][:,1]],axis=1)
-                        
+                # </augmentation>
+
                 # Training step (forward pass + backwards pass)
-                total_loss = train_step_fn(image_tensors, gt_boxes, gt_classes, update_weights = True)
+                prediction_dict, shapes, total_loss = train_step_fn(image_tensors, gt_boxes, gt_classes, update_weights = True)
 
                 if idx % 100 == 0:
                     # write tensorboard summary
                     with writer_train.as_default():
                         tf.summary.scalar("loss",total_loss,step=idx)
                         
-                        preprocessed_image, shapes = detection_model.preprocess(tf.concat(image_tensors,axis=0))
-                        prediction_dict = detection_model.predict(preprocessed_image, shapes)
                         prediction_dict = detection_model.postprocess(prediction_dict, shapes)
                         vis = viz_utils.draw_bounding_boxes_on_image_tensors(tf.cast(tf.concat(image_tensors,axis=0),tf.uint8),
                                             prediction_dict['detection_boxes'],
@@ -504,23 +520,22 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
                 if idx % 250 == 0:
                     num_test_batches = 8
                     test_loss = 0.
-                    for frame_idx, image_tensors in data_test:
-                        gt_boxes, gt_classes = [],[]
+                    for frame_idx, image_tensors_test in data_test:
+                        gt_boxes_test, gt_classes_test = [],[]
                         for ii in range(len(frame_idx)):
-                            gt_boxes.append(tf.convert_to_tensor(frame_bboxes[str(frame_idx[ii].numpy().decode("utf-8") )], dtype=tf.float32))
-                            gt_classes.append(tf.one_hot(tf.convert_to_tensor(np.ones(shape=[frame_bboxes[str(frame_idx[ii].numpy().decode("utf-8") )].shape[0]], dtype=np.int32) - label_id_offset), num_classes))
+                            gt_boxes_test.append(tf.convert_to_tensor(frame_bboxes[str(frame_idx[ii].numpy().decode("utf-8") )], dtype=tf.float32))
+                            gt_classes_test.append(tf.one_hot(tf.convert_to_tensor(np.ones(shape=[frame_bboxes[str(frame_idx[ii].numpy().decode("utf-8") )].shape[0]], dtype=np.int32) - label_id_offset), num_classes))
                         # Test step (forward pass only)
-                        test_loss = test_loss + train_step_fn(image_tensors, gt_boxes, gt_classes, update_weights = False)/num_test_batches
+                        prediction_dict, shapes, _loss_test = train_step_fn(image_tensors_test, gt_boxes_test, gt_classes_test, update_weights = False)
+                        test_loss = test_loss + _loss_test/num_test_batches
                     test_losses.append(test_loss)
 
                     # write tensorboard summary
                     with writer_test.as_default():
                         tf.summary.scalar("loss",test_loss,step=idx)
 
-                        preprocessed_image, shapes = detection_model.preprocess(tf.concat(image_tensors,axis=0))
-                        prediction_dict = detection_model.predict(preprocessed_image, shapes)
                         prediction_dict = detection_model.postprocess(prediction_dict, shapes)
-                        vis = viz_utils.draw_bounding_boxes_on_image_tensors(tf.cast(tf.concat(image_tensors,axis=0),tf.uint8),
+                        vis = viz_utils.draw_bounding_boxes_on_image_tensors(tf.cast(tf.concat(image_tensors_test,axis=0),tf.uint8),
                                             prediction_dict['detection_boxes'],
                                             prediction_dict['detection_classes'].numpy().astype(np.uint32) + label_id_offset,#prediction_dict['detection_classes'],#prediction_dict['detection_classes'].astype(tf.int32) + label_id_offset,
                                             prediction_dict['detection_scores'],
