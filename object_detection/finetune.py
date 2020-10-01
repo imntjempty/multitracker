@@ -485,17 +485,18 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
                     gt_classes.append(tf.one_hot(tf.convert_to_tensor(np.ones(shape=[frame_bboxes[str(frame_idx[ii].numpy().decode("utf-8") )].shape[0]], dtype=np.int32) - label_id_offset), num_classes))
                 
                 # <augmentation>
-                if np.random.uniform() > 0.5:
-                    # hflip
-                    image_tensors = image_tensors[:,:,::-1,:]
-                    for ii in range(len(gt_boxes)):
-                        gt_boxes[ii] = tf.stack([1.-gt_boxes[ii][:,2],gt_boxes[ii][:,1],1.-gt_boxes[ii][:,0],gt_boxes[ii][:,3]],axis=1)
-                    
-                if np.random.uniform() > 0.5:
-                    # vflip
-                    image_tensors = image_tensors[:,::-1,:,:]
-                    for ii in range(len(gt_boxes)):
-                        gt_boxes[ii] = tf.stack([gt_boxes[ii][:,0],1.-gt_boxes[ii][:,3],gt_boxes[ii][:,2],1.-gt_boxes[ii][:,1]],axis=1)
+                if 0:
+                    if np.random.uniform() > 0.5:
+                        # hflip
+                        image_tensors = image_tensors[:,:,::-1,:]
+                        for ii in range(len(gt_boxes)):
+                            gt_boxes[ii] = tf.stack([1.-gt_boxes[ii][:,2],gt_boxes[ii][:,1],1.-gt_boxes[ii][:,0],gt_boxes[ii][:,3]],axis=1)
+                        
+                    if np.random.uniform() > 0.5:
+                        # vflip
+                        image_tensors = image_tensors[:,::-1,:,:]
+                        for ii in range(len(gt_boxes)):
+                            gt_boxes[ii] = tf.stack([gt_boxes[ii][:,0],1.-gt_boxes[ii][:,3],gt_boxes[ii][:,2],1.-gt_boxes[ii][:,1]],axis=1)
                 # </augmentation>
 
                 # Training step (forward pass + backwards pass)
