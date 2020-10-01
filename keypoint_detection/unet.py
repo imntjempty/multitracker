@@ -56,21 +56,43 @@ def get_vanilla_model(config):
     model.summary()
     return model 
 
-def preprocess(x):
+def preprocess(config, x):
     #return x 
-    return tf.keras.applications.efficientnet.preprocess_input(x)
+    if config['backbone'] == 'efficientnet':
+        return tf.keras.applications.efficientnet.preprocess_input(x)
+    elif config['backbone'] == 'vgg16':
+        return tf.keras.applications.vgg16.preprocess_input(x)
+
+IMG_SIZE = 224
+
+def get_vgg16_model(config):
+    from tensorflow.keras.applications import VGG16 
+    inputs = tf.keras.layers.Input(shape=(IMG_SIZE, IMG_SIZE, 3))
+    encoder = VGG16(include_top=False, weights='imagenet', input_tensor=inputs)
+    #encoder.summary()
+    encoder.trainable = True 
+        
+    encoded_layer_names = [
+        'block2_conv2', # (112,112,128)
+        'block3_conv3', # ( 56, 56,256)
+        'block4_conv3', # ( 28, 28,512)
+        'block5_conv3', # ( 14, 14,512)
+    ]
+    outputs = [get_decoded(config, encoder, encoded_layer_names)]
+    model = tf.keras.Model(inputs=encoder.inputs, outputs=[outputs], name="VGG16Unet")
+    model.summary()
+    return model 
 
 def get_efficient_model(config):
     # https://keras.io/examples/vision/image_classification_efficientnet_fine_tuning/
     
-    IMG_SIZE = 224
+    
     size = (IMG_SIZE, IMG_SIZE)
     inputs = tf.keras.layers.Input(shape=(IMG_SIZE, IMG_SIZE, 3))
     #x = tf.keras.layers.GaussianNoise(20)(inputs)
     x = inputs 
     from tensorflow.keras.applications import EfficientNetB0
     weights='imagenet'
-    #weights = None
     
     encoder = EfficientNetB0(include_top=False, weights=weights, drop_connect_rate=0.2,input_tensor=x)
     encoder.trainable = True 
@@ -83,29 +105,19 @@ def get_efficient_model(config):
         #'block6a_activation' # (7,7,1152)
     ]
 
+    outputs = [get_decoded(config, encoder, encoded_layer_names)]
+    model = tf.keras.Model(inputs=encoder.inputs, outputs=[outputs], name="EfficientUnet")
+    model.summary()
+    return model 
+
+def get_decoded(config, encoder, encoded_layer_names):
     encoded_layers = []
     for i , l in enumerate(encoder.layers):
         l.trainable = True
         if l.name in encoded_layer_names:
-            x = l.output
-            #if l.output.shape[3] > 256:
-            #    x = upsample(256,1,strides=1)(x)
-            encoded_layers.append(x)
-            print('efficient',i, l.output.shape, l.name )
-        try:
-            #print('efficient',i, [w.shape for w in l.weights], l.name )
+            encoded_layers.append(l.output)
             #print('efficient',i, l.output.shape, l.name )
-            ''
-        except Exception as e :
-            print(e)
-
-
-
-
-    #down1 = upsample(256,3,strides=-2)(encoded_layers[-1])
-    #down2 = upsample(256,3,strides=-2)(encoded_layers[-1])
-    #encoded_layers.append( down1 )
-
+    
     bf = 64
     x = encoded_layers[-1]
     for _ in range(2):
@@ -136,12 +148,11 @@ def get_efficient_model(config):
 
     # final classification layer
     x = upsample(1+len(config['keypoint_names']),1,1,norm_type=None,act=tf.keras.layers.Activation('softmax'))(x)     
-    
-    model = tf.keras.Model(inputs=encoder.inputs, outputs=[[x]], name="EfficientUnet")
-    model.summary()
-    return model 
-
+    return x    
 
 def get_model(config):
-    return get_efficient_model(config)
+    if config['backbone'] == 'efficientnet':
+        return get_efficient_model(config)
+    elif config['backbone'] == 'vgg16':
+        return get_vgg16_model(config)
     #return get_vanilla_model(config)

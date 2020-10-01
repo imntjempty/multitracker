@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from multiprocessing import Pool
 from datetime import datetime 
 from IPython.display import clear_output
-from multitracker.keypoint_detection import model , unet, heatmap_drawing
+from multitracker.keypoint_detection import model , unet, heatmap_drawing, focus_augmentation
 from multitracker.be import video 
 import cv2 as cv 
 from glob import glob 
@@ -177,7 +177,7 @@ def load_roi_dataset(config,mode='train'):
         
         comp = [ image[:,ii*wroi:(ii+1)*wroi,:] for ii in range(wroicomp//wroi)] # from hstacked to depth stacked
         # preprocess rgb image 
-        comp[0] = unet.preprocess(comp[0])
+        comp[0] = unet.preprocess(config, comp[0])
         comp = tf.concat(comp,axis=2)
         comp = comp[:,:,:(3+len(config['keypoint_names']))]
         hh = h 
@@ -377,7 +377,7 @@ def train(config):
                         x,y = model.vflip(swaps,x,y)
                 if 1:        
                     # mixup augmentation
-                    if np.random.random() < 0.9:
+                    if np.random.random() < 0.5:
                         if config['mixup'] and np.random.random() > 0.5:
                             x, y = model.mixup(x,y) 
                         else:
@@ -385,7 +385,8 @@ def train(config):
                                 x, y = model.cutmix(x,y)
                             if config['mixup'] and np.random.random() > 0.5:
                                 x, y = model.mixup(x,y)
-                    
+                    #x = focus_augmentation.out_of_focus_augment(x, proba = 0.5)
+
                 should_summarize=n%100==0
                 step_result = train_step(x, y, writer_train, writer_test, n, should_summarize=should_summarize)
                 
