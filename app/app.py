@@ -65,6 +65,12 @@ else:
 
 count_active_steps = 0 
 
+def get_frame_time(frame_idx):
+    frame_idx = int(frame_idx)
+    tmin = int(frame_idx/(30.*60.))
+    tsec = int(frame_idx/30.-tmin*60.)
+    return '%i:%imin'%(tmin,tsec)
+
 @app.route('/get_next_labeling_frame/<project_id>')
 def render_labeling(project_id):
     config = model.get_config(int(project_id))
@@ -108,7 +114,7 @@ def render_labeling(project_id):
                     frame_idx = '.'.join(frame_idx.split('/')[-1].split('.')[:-1])
                     unlabeled_frame_found = not (frame_idx in labeled_frame_idxs)
 
-            print('[*] serving keypoint label job for frame %s.'%(frame_idx))
+            print('[*] serving keypoint label job for frame %s %s.'%(frame_idx,get_frame_time(frame_idx)))
         else:
             shuffle(frames)
             nn = 1#32
@@ -116,7 +122,7 @@ def render_labeling(project_id):
             while len(unlabeled) < nn:
                 frame_f = frames[int(len(frames)*np.random.random())]
                 frame_idx = '.'.join(frame_f.split('/')[-1].split('.')[:-1])
-                if frame_f not in unlabeled and frame_idx not in labeled_frame_idxs:
+                if frame_f not in unlabeled and frame_idx not in labeled_frame_idxs and int(frame_idx)<3000:
                     unlabeled.append(frame_f)
             if training_model is not None:
                 '' # active learning: load some unlabeled frames, inference multiple time, take one with biggest std variation
@@ -135,7 +141,7 @@ def render_labeling(project_id):
                 stds = np.std(pred,axis=(0,2,3,4))
                 maxidx = np.argmax(stds)
                 frame_idx = '.'.join(unlabeled[maxidx].split('/')[-1].split('.')[:-1])
-                print('[*] serving keypoint label job for frame %s with std %f.'%(frame_idx,stds[maxidx]))
+                print('[*] serving keypoint label job for frame %s with std %f %s.'%(frame_idx,stds[maxidx],get_frame_time(frame_idx)))
             else:
                 if len(unlabeled) ==0:
                     return "<h1>You have labeled all frames for this video! :)</h1>"
@@ -153,7 +159,7 @@ def render_labeling(project_id):
             frame_candidates.append(predict.extract_frame_candidates(imp[:,:,c],0.1))
         print('frame_candidates',frame_candidates)
         
-    print('[*] serving keypoint label job for frame %s.'%(frame_idx))       
+    print('[*] serving keypoint label job for frame %s %s.'%(frame_idx,get_frame_time(frame_idx)))       
     
     if args.open_gallery:
         p = subprocess.Popen(['eog',unlabeled[maxidx]])
