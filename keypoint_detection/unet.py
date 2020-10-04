@@ -58,7 +58,7 @@ def get_vanilla_model(config):
 
 def preprocess(config, x):
     #return x 
-    if config['backbone'] == 'efficientnet':
+    if 'efficientnet' in config['backbone']:
         return tf.keras.applications.efficientnet.preprocess_input(x)
     elif config['backbone'] == 'vgg16':
         return tf.keras.applications.vgg16.preprocess_input(x)
@@ -83,9 +83,8 @@ def get_vgg16_model(config):
     model.summary()
     return model 
 
-def get_efficient_model(config):
+def get_efficientB0_model(config):
     # https://keras.io/examples/vision/image_classification_efficientnet_fine_tuning/
-    
     
     size = (IMG_SIZE, IMG_SIZE)
     inputs = tf.keras.layers.Input(shape=(IMG_SIZE, IMG_SIZE, 3))
@@ -107,6 +106,33 @@ def get_efficient_model(config):
 
     outputs = [get_decoded(config, encoder, encoded_layer_names)]
     model = tf.keras.Model(inputs=encoder.inputs, outputs=[outputs], name="EfficientUnet")
+    model.summary()
+    return model 
+
+def get_efficientB6_model(config):
+    # https://keras.io/examples/vision/image_classification_efficientnet_fine_tuning/
+    
+    size = (IMG_SIZE, IMG_SIZE)
+    inputs = tf.keras.layers.Input(shape=(IMG_SIZE, IMG_SIZE, 3))
+    #x = tf.keras.layers.GaussianNoise(20)(inputs)
+    x = inputs 
+    from tensorflow.keras.applications import EfficientNetB6
+    weights='imagenet'
+    
+    encoder = EfficientNetB6(include_top=False, weights=weights, drop_connect_rate=0.2,input_tensor=x)
+    encoder.trainable = True 
+    encoder.summary() 
+
+    encoded_layer_names = [
+        'block1a_activation', # (112,112,32)
+        'block3a_expand_activation', # (56,56,144)
+        'block4a_expand_activation', # (28,28,240)
+        'block5a_expand_activation'#, # (14,14,672)
+        #'block6a_activation' # (7,7,1152)
+    ]
+
+    outputs = [get_decoded(config, encoder, encoded_layer_names)]
+    model = tf.keras.Model(inputs=encoder.inputs, outputs=[outputs], name="LargeEfficientUnet")
     model.summary()
     return model 
 
@@ -152,7 +178,9 @@ def get_decoded(config, encoder, encoded_layer_names):
 
 def get_model(config):
     if config['backbone'] == 'efficientnet':
-        return get_efficient_model(config)
+        return get_efficientB0_model(config)
+    elif config['backbone'] == 'efficientnetLarge':
+        return get_efficientB6_model(config)
     elif config['backbone'] == 'vgg16':
         return get_vgg16_model(config)
     #return get_vanilla_model(config)

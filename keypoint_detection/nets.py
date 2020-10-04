@@ -70,7 +70,7 @@ def EncoderPretrained(config,inputs):
         
     if config['backbone'] == "resnet":
         from tensorflow.keras.applications.resnet_v2 import preprocess_input
-    elif config['backbone'] == "efficientnet":
+    elif "efficientnet" in config['backbone']:
         from tensorflow.keras.applications.efficientnet import preprocess_input
         
     if config['backbone'] == "resnet":

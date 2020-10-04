@@ -169,7 +169,6 @@ def load_roi_dataset(config,mode='train'):
     config['img_height'] = 224
     config['img_width'] = 224
 
-    from tensorflow.keras.applications.efficientnet import preprocess_input
     def load_im(image_file):
         image = tf.io.read_file(image_file)
         image = tf.image.decode_png(image,channels=3)
