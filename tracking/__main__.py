@@ -96,7 +96,7 @@ def main(args):
         #ckpt_detect, model_config_detect, detection_model = finetune.restore_weights(config['objectdetection_model'])
         from object_detection.utils import config_util
         from object_detection.builders import model_builder
-        configs = config_util.get_configs_from_pipeline_file(finetune.get_pipeline_config())
+        configs = config_util.get_configs_from_pipeline_file(finetune.get_pipeline_config(config))
         model_config = configs['model']
         model_config.ssd.num_classes = 1
         detection_model = model_builder.build(model_config=model_config, is_training=False)
@@ -120,7 +120,14 @@ def main(args):
     deep_sort_app.run(config, detection_model, encoder_model, keypoint_model, output_dir, 
             min_confidence, nms_max_overlap, max_cosine_distance, nn_budget, display)
     
+    video_file = os.path.join(video.get_project_dir(video.base_dir_default, config['project_id']),'tracking_%s_vis%i.mp4' % (config['project_name'],config['video_id']))
+    
+    convert_video_h265(video_file.replace('.mp4','.avi'), video_file)
     print('[*] done tracking')
+    
+def convert_video_h265(video_in, video_out):
+    import subprocess 
+    subprocess.call(['ffmpeg','-i',video_in, '-c:v','libx265','-preset','ultrafast',video_out])
 
 if __name__ == '__main__':
     import argparse
@@ -135,7 +142,4 @@ if __name__ == '__main__':
     #parser.add_argument('--fixed_number',required=False,default=4,type=int)
     args = parser.parse_args()
     
-    #assert args.objectdetection_model is None or (args.objectdetection_model is not None and args.objectdetection_model.endswith('.index'))
-    assert args.keypoint_model is None or (args.keypoint_model is not None and args.keypoint_model.endswith('.h5'))
-
     main(args)

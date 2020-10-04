@@ -277,12 +277,12 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
     if not os.path.isdir('/tmp/vis/'): os.makedirs('/tmp/vis/')
 
     [Hframe,Wframe,_] = cv.imread(glob(os.path.join(os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'test'),'*.png'))[0]).shape
-    video_file = '/tmp/video_tracking_%s_vis%i.avi' % (config['project_name'],config['video_id'])
+    video_file = os.path.join(video.get_project_dir(video.base_dir_default, config['project_id']),'tracking_%s_vis%i.avi' % (config['project_name'],config['video_id']))
     if os.path.isfile(video_file): os.remove(video_file)
     #video_writer = cv.VideoWriter(video_file,cv.VideoWriter_fourcc('D','I','V','X'), 30, (Wframe, Hframe))
     import skvideo.io
     video_writer = skvideo.io.FFmpegWriter(video_file, outputdict={
-        '-vcodec': 'libx265',  #use the h.264 codec
+        '-vcodec': 'libx264',  #use the h.264 codec
         '-crf': '0',           #set the constant rate factor to 0, which is lossless
         '-preset':'veryslow'   #the slower the better compression, in princple, try 
                                 #other options see https://trac.ffmpeg.org/wiki/Encode/H.264
@@ -302,7 +302,7 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
             
         #print('frame',frame.dtype,frame.shape)
         #im = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
-        frame_kp = unet.preprocess(frame)
+        frame_kp = unet.preprocess(config, frame)
         crop_dim = roi_segm.get_roi_crop_dim(config['project_id'], config['video_id'], frame.shape[0]) 
         #print('crop_dim',crop_dim)
         #if detections is None:
