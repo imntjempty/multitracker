@@ -54,13 +54,6 @@ if args.model is not None and os.path.isfile(args.model):
     config = model.get_config(int(args.project_id))
 else:
     training_model = None 
-    '''if args.model is None:
-        args.model = '/tmp/active_model_%i.h5' % int(args.project_id)
-    from multitracker.keypoint_detection import nets
-    inputs = tf.keras.layers.Input(shape=[config['img_height'], config['img_width'], 3])
-    encoder = nets.Encoder(config,inputs)
-    training_model = nets.Decoder(config,encoder)
-    print('[*] creating new model %s from scratch' % args.model)'''
     
 
 count_active_steps = 0 

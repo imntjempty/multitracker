@@ -18,13 +18,19 @@ from glob import glob
 from random import shuffle
 import numpy as np 
 from datetime import datetime 
+import json 
 
 from multitracker.be import dbconnection
 db = dbconnection.DatabaseConnection()
 
 focal_loss = tfa.losses.SigmoidFocalCrossEntropy(False)
-def loss_func(ytrue,ypred):
-    return tf.reduce_mean( focal_loss(ytrue,ypred))
+cce_loss = tf.keras.losses.CategoricalCrossentropy(False)
+
+def calc_focal_loss(ytrue,ypred):
+    return tf.reduce_mean( focal_loss(ytrue, ypred))
+
+def calc_cce_loss(ytrue, pred):
+    return tf.reduce_mean( cce_loss(ytrue, ypred) )
 
 def get_roi_crop_dim(project_id, video_id, Htarget):
     """
@@ -158,7 +164,8 @@ def load_roi_dataset(config,mode='train'):
             for ii,ff in enumerate(glob(os.path.join(config['roi_dir'],mode,'*.png'))): 
                 results_shapefilter.append( pool.apply_async(filter_crop_shape,({'f':ff,'H':sampled_H, 'W':sampled_W},)) )
             results_shapefilter = [result.get() for result in results_shapefilter]
-        # </bboxes>
+        # </bboxes>weights='imagenet'
+    
 
     
     #mean_rgb = calc_mean_rgb(config)
@@ -207,8 +214,14 @@ def load_roi_dataset(config,mode='train'):
         heatmaps = crop[:,:,3:] / 255.
         return image, heatmaps
 
-
-    file_list = sorted(glob(os.path.join(config['roi_dir'],mode,'*.png')))
+    if mode == 'train' and 'experiment' in config and config['experiment']=='A':
+        file_list = glob(os.path.join(config['roi_dir'],mode,'*.png'))
+        shuffle(file_list)
+        file_list = file_list[:int(len(file_list) * config['data_ratio'])]
+        file_list = sorted(file_list)
+    else:
+        file_list = sorted(glob(os.path.join(config['roi_dir'],mode,'*.png')))
+    
     file_list_tf = tf.data.Dataset.from_tensor_slices(file_list)
     data = file_list_tf.map(load_im, num_parallel_calls = tf.data.experimental.AUTOTUNE).batch(config['batch_size']).prefetch(4*config['batch_size'])#.cache()
     if mode == 'train':
@@ -276,11 +289,30 @@ def train(config):
 
     # checkpoints and tensorboard summary writer
     now = str(datetime.now()).replace(' ','_').replace(':','-').split('.')[0]
-    checkpoint_path = os.path.expanduser("~/checkpoints/roi_keypoint/%s-%s" % (config['project_name'],now))
+    if not 'experiment' in config:
+        checkpoint_path = os.path.expanduser("~/checkpoints/roi_keypoint/%s-%s" % (config['project_name'],now))
+    elif config['experiment'] == 'A':
+        checkpoint_path = os.path.expanduser("~/checkpoints/experiments/%s/A/%i-%s" % (config['project_name'], int(100. * config['data_ratio']) , now))
+    elif config['experiment'] == 'B':
+        checkpoint_path = os.path.expanduser("~/checkpoints/experiments/%s/B/%s-%s" % (config['project_name'], ['random','imagenet'][int(config['should_init_pretrained'])] , now))
+    elif config['experiment'] == 'C':
+        checkpoint_path = os.path.expanduser("~/checkpoints/experiments/%s/C/%s-%s" % (config['project_name'], config['backbone'] , now))
+    elif config['experiment'] == 'D':
+        checkpoint_path = os.path.expanduser("~/checkpoints/experiments/%s/D/%s-%s" % (config['project_name'], config['train_loss'] , now))
+        
+    if not os.path.isdir(checkpoint_path):
+        os.makedirs(checkpoint_path)
 
+    # write config as JSON
+    file_json = os.path.join(checkpoint_path,'config.json')
+    with open(file_json, 'w') as f:
+        json.dump(config, f, indent=4)
+    
     writer_train = tf.summary.create_file_writer(checkpoint_path+'/train')
     writer_test = tf.summary.create_file_writer(checkpoint_path+'/test')
-      
+    csv_train = os.path.join(checkpoint_path,'train_log.csv')
+    csv_test = os.path.join(checkpoint_path,'test_log.csv')
+
     ckpt = tf.train.Checkpoint(net = net, optimizer = optimizer)
     
     ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
@@ -293,8 +325,11 @@ def train(config):
     def train_step(inp, y, writer_train, writer_test, global_step, should_summarize = False):
         with tf.GradientTape(persistent=True) as tape:
             predicted_heatmaps = net(inp,training=True)[0]
-            loss = loss_func(y,predicted_heatmaps)
-        
+            if config['train_loss'] == 'focal':
+                loss = calc_focal_loss(y,predicted_heatmaps)
+            elif config['train_loss'] == 'cce':
+                loss = calc_cce_loss(y,predicted_heatmaps)
+
         # clipped gradients
         gradients = tape.gradient(loss,net.trainable_variables)
         gradients = [tf.clip_by_value(grad, -1, 1) for grad in gradients]
@@ -302,9 +337,8 @@ def train(config):
         # update weights
         optimizer.apply_gradients(zip(gradients,net.trainable_variables))
 
-
         should_test = global_step % 250 == 0
-        test_loss = 0.0
+        test_losses = {'focal':0.0,'cce':0.0}
         if should_test:
             # test data
             nt = 0
@@ -313,9 +347,15 @@ def train(config):
                 if not predicted_test.shape[1] == y.shape[1]:
                     predicted_test = tf.image.resize(predicted_test, x.shape[1:3]) 
 
-                test_loss += loss_func(predicted_test, yt)
+                if 'focal' in config['test_losses']:
+                    test_losses['focal'] += calc_focal_loss(y,predicted_heatmaps)
+                if 'cce' in config['test_losses']:
+                    test_losses['cce'] += calc_cce_loss(y,predicted_heatmaps)
+                
                 nt += 1 
-            test_loss = test_loss / nt 
+            test_losses['focal'] = test_losses['focal'] / nt
+            test_losses['cce'] = test_losses['cce'] / nt
+
 
         # write summary
         if should_summarize:
@@ -323,7 +363,7 @@ def train(config):
                 def im_summary(name,data):
                     tf.summary.image(name,data,step=global_step)
                 with writer_train.as_default():
-                    tf.summary.scalar("loss %s" % config['loss'],loss,step=global_step)
+                    tf.summary.scalar("loss %s" % config['train_loss'],loss,step=global_step)
                     tf.summary.scalar('min',tf.reduce_min(predicted_heatmaps[:,:,:,:-1]),step=global_step)
                     tf.summary.scalar('max',tf.reduce_max(predicted_heatmaps[:,:,:,:-1]),step=global_step)
                     im_summary('image',inp/256.)
@@ -334,9 +374,13 @@ def train(config):
                     tf.summary.scalar("learning rate", lr(global_step), step = global_step)
                     writer_train.flush()    
 
+                with open(csv_train,'a+') as ftrain:
+                    ftrain.write('%i,%f\n' % (global_step, loss))
+
                 if should_test:            
                     with writer_test.as_default():
-                        tf.summary.scalar("loss %s" % config['loss'],test_loss,step=global_step)
+                        for k,v in test_losses.items():
+                            tf.summary.scalar("loss %s" % k,v,step=global_step)
                         im_summary('image',xt/256.)
                         
                         for kk, keypoint_name in enumerate(config['keypoint_names']):
@@ -346,10 +390,12 @@ def train(config):
                             
                         writer_test.flush()
 
+                    with open(csv_test,'a+') as ftest:
+                        ftest.write('%i,%f,%f\n' % (global_step, test_losses['focal'],test_losses['cce']))
         
         result = {'train_loss':loss}
         if should_test:
-            result['test_loss'] = test_loss 
+            result['test_loss'] = tf.reduce_sum([v for v in test_losses.values()])
         return result 
 
     n = 0

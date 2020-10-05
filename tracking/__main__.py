@@ -127,6 +127,8 @@ def main(args):
     
 def convert_video_h265(video_in, video_out):
     import subprocess 
+    if os.path.isfile(video_out):
+        os.remove(video_out)
     subprocess.call(['ffmpeg','-i',video_in, '-c:v','libx265','-preset','ultrafast',video_out])
 
 if __name__ == '__main__':

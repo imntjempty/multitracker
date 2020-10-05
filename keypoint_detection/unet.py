@@ -68,7 +68,10 @@ IMG_SIZE = 224
 def get_vgg16_model(config):
     from tensorflow.keras.applications import VGG16 
     inputs = tf.keras.layers.Input(shape=(IMG_SIZE, IMG_SIZE, 3))
-    encoder = VGG16(include_top=False, weights='imagenet', input_tensor=inputs)
+    weights = 'imagenet'
+    if 'experiment' in config and config['experiment'] == 'B' and config['should_init_pretrained']==False:
+        weights = None 
+    encoder = VGG16(include_top=False, weights=weights, input_tensor=inputs)
     #encoder.summary()
     encoder.trainable = True 
         
@@ -91,7 +94,9 @@ def get_efficientB0_model(config):
     #x = tf.keras.layers.GaussianNoise(20)(inputs)
     x = inputs 
     from tensorflow.keras.applications import EfficientNetB0
-    weights='imagenet'
+    weights = 'imagenet'
+    if 'experiment' in config and config['experiment'] == 'B' and config['should_init_pretrained']==False:
+        weights = None 
     
     encoder = EfficientNetB0(include_top=False, weights=weights, drop_connect_rate=0.2,input_tensor=x)
     encoder.trainable = True 
@@ -117,7 +122,9 @@ def get_efficientB6_model(config):
     #x = tf.keras.layers.GaussianNoise(20)(inputs)
     x = inputs 
     from tensorflow.keras.applications import EfficientNetB6
-    weights='imagenet'
+    weights = 'imagenet'
+    if 'experiment' in config and config['experiment'] == 'B' and config['should_init_pretrained']==False:
+        weights = None 
     
     encoder = EfficientNetB6(include_top=False, weights=weights, drop_connect_rate=0.2,input_tensor=x)
     encoder.trainable = True 

@@ -17,7 +17,6 @@ from multitracker.be import dbconnection
 
 db = dbconnection.DatabaseConnection()
 from multitracker.keypoint_detection import heatmap_drawing, stacked_hourglass, unet
-from multitracker.keypoint_detection.nets import Encoder, Decoder
 from multitracker.be import video 
 
 def calc_ssim_loss(x, y):
@@ -73,10 +72,6 @@ def get_loss(predicted_heatmaps, y, config, mode = "train"):
 
 def get_model(config):
     if config['num_hourglass'] == 1:
-        inputs = tf.keras.layers.Input(shape=[None, None, 3])
-        #encoder = Encoder(config,inputs)
-        #print('[*] hidden representation',encoder.outputs[0].get_shape().as_list())
-        #model = Decoder(config,encoder)
         model = unet.get_model(config)
         return model
     else:
@@ -465,9 +460,9 @@ def get_config(project_id = 3):
     config['max_hours'] = 30.
     config['lr'] = 2e-5 * 5   *5 *2.
     config['lr_scratch'] = 1e-4
-    config['loss'] = ['l1','dice','focal','normed_l1','l2'][2]
-    if config['loss'] == 'l2':
-        config['lr'] = 2e-4
+    #config['loss'] = ['l1','dice','focal','normed_l1','l2'][2]
+    #if config['loss'] == 'l2':
+    #    config['lr'] = 2e-4
     config['autoencoding'] = [False, True][0]
     config['pretrained_encoder'] = [False,True][1]
     config['mixup'] = [False, True][0]
@@ -487,13 +482,17 @@ def get_config(project_id = 3):
 
     config['keypoint_names'] = db.get_keypoint_names(config['project_id'])
 
-    config['backbone'] = ["vgg16","efficientnet"][1]
+    config['backbone'] = ["vgg16","efficientnet","efficientnetLarge"][2]
     config['object_detection_backbone'] = ['ssd','fasterrcnn'][0]
     config['object_detection_backbonepath'] = {
         'ssd': 'ssd_resnet50_v1_fpn_640x640_coco17_tpu-8',
         'fasterrcnn': 'faster_rcnn_inception_resnet_v2_640x640_coco17_tpu-8'
     }[config['object_detection_backbone']]
     config['object_detection_batch_size'] = {'ssd': 16, 'fasterrcnn': 4}[config['object_detection_backbone']]
+
+    config['train_loss'] = ['cce','focal'][1]
+    config['test_losses'] = ['focal'] #['cce','focal']
+
     return config 
 
 def main(args):
