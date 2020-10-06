@@ -272,8 +272,8 @@ def inference_heatmap(config, trained_model, frame, bounding_boxes):
     
 def train(config):
     config['lr'] = 1e-4
-    config['cutmix'] = False
-    config['mixup'] = True
+    #config['cutmix'] = False
+    #config['mixup'] = True
     print('[*] config', config)
     
     
