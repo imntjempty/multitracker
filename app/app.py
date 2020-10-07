@@ -40,7 +40,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser() 
     parser.add_argument('--model',default=None)
     parser.add_argument('--project_id',type=int,default=None)
-    parser.add_argument('--num_labeling_base',type=int,default=50)
+    parser.add_argument('--num_labeling_base',type=int,default=250)
     parser.add_argument('--open_gallery', dest='open_gallery', action='store_true')
     args = parser.parse_args()
 
@@ -64,18 +64,20 @@ def get_frame_time(frame_idx):
     tsec = int(frame_idx/30.-tmin*60.)
     return '%i:%imin'%(tmin,tsec)
 
-@app.route('/get_next_labeling_frame/<project_id>')
-def render_labeling(project_id):
+@app.route('/get_next_labeling_frame/<project_id>/<video_id>')
+def render_labeling(project_id,video_id):
     config = model.get_config(int(project_id))
+    video_id = int(video_id) 
+    config['video_id'] = video_id
     
     # load labeled frame idxs
-    labeled_frame_idxs = db.get_labeled_frames(project_id)
+    labeled_frame_idxs = db.get_labeled_frames(video_id)
     num_db_frames = len(labeled_frame_idxs)
     
     # load frame files from disk
     frames = []
     while len(frames) == 0:
-        video_id = db.get_random_project_video(project_id)
+        #video_id = db.get_random_project_video(project_id)
         frames_dir = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, project_id), video_id),'train')
         frames = sorted(glob(os.path.join(frames_dir, '*.png')))
     #print('[E] no frames found in directory %s.'%frames_dir)
@@ -159,18 +161,20 @@ def render_labeling(project_id):
     return render_template('labeling.html',project_id = int(project_id), video_id = int(video_id), frame_idx = frame_idx, keypoint_names = db.list_sep.join(config['keypoint_names']), sep = db.list_sep, num_db_frames = num_db_frames, frame_candidates = frame_candidates, labeling_mode = 'keypoint')
 
 
-@app.route('/get_next_bbox_frame/<project_id>')
-def get_next_bbox_frame(project_id):
+@app.route('/get_next_bbox_frame/<project_id>/<video_id>')
+def get_next_bbox_frame(project_id, video_id):
     project_id = int(project_id)
     config = model.get_config(project_id)
-    
+    #video_id = db.get_random_project_video(project_id)
+    video_id = int(video_id)
+    config['video_id'] = video_id
+
     # load labeled frame idxs
-    labeled_frames_keypoints = db.get_labeled_frames(project_id)
-    labeled_frame_idxs = db.get_labeled_bbox_frames(project_id)
+    labeled_frames_keypoints = db.get_labeled_frames(video_id)
+    labeled_frame_idxs = db.get_labeled_bbox_frames(video_id)
     num_db_frames = len(labeled_frame_idxs)
     
     # load frame files from disk
-    video_id = db.get_random_project_video(project_id)
     frames_dir = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, project_id), video_id),'train')
     frames = [os.path.join(frames_dir, '%s.png' % ff) for ff in labeled_frames_keypoints]
     shuffle(frames)
@@ -191,7 +195,7 @@ def get_next_bbox_frame(project_id):
         return render_template('labeling.html',project_id = int(project_id), video_id = int(video_id), frame_idx = frame_idx, num_db_frames = num_db_frames, keypoint_names = db.list_sep.join(config['keypoint_names']), sep = db.list_sep, labeling_mode = 'bbox')
     else:
         print('[*] redirecting to keypoint labeling')
-        return render_labeling(project_id)
+        return render_labeling(project_id, video_id)
 
 @app.route('/get_frame/<project_id>/<video_id>/<frame_idx>')
 def get_frame(project_id,video_id,frame_idx):
@@ -362,32 +366,33 @@ def get_labeled_frame(project_id,video_id,frame_idx):
 def get_home():
     return render_template("home.html")
 
-@app.route('/get_projects')
-def get_projects():
+@app.route('/get_videos')
+def get_videos():
     db.execute('''select projects.id as project_id, projects.name as project_name, 
-                                videos.name as video_name, projects.manager, projects.keypoint_names
+                                videos.name as video_name, videos.id as video_id, projects.manager, projects.keypoint_names
                                 from projects 
-                                inner join videos on projects.id = videos.project_id 
-                                order by project_id''')
+                                inner join videos on projects.id = videos.project_id''')
     datalist = list(set([x for x in db.cur.fetchall()]))
     data = []
     counts_bbox = db.get_count_all_labeled_bbox_frames()
     counts_keypoints = db.get_count_all_labeled_frames()
     for i in range(len(datalist)):
         d = {}
-        for ik, k in enumerate(['project_id','project_name','video_name','manager','keypoint_names']):
+        for ik, k in enumerate(['project_id','project_name','video_name','video_id','manager','keypoint_names']):
             d[k] = datalist[i][ik]
         d['keypoint_names'] = d['keypoint_names'].split(db.list_sep)
         d['video_name'] = d['video_name'].split('/')[-1]
-        if d['project_id'] in counts_bbox:
-            d['count_bboxes'] = counts_bbox[d['project_id']]
+        if d['video_id'] in counts_bbox:
+            d['count_bboxes'] = counts_bbox[d['video_id']]
         else:
             d['count_bboxes'] = 0
-        if d['project_id'] in counts_keypoints:
-            d['count_keypoints'] = counts_keypoints[d['project_id']]
+        if d['video_id'] in counts_keypoints:
+            d['count_keypoints'] = counts_keypoints[d['video_id']]
         else:
             d['count_keypoints'] = 0
         data.append(d)
+    
+    data = sorted(data, key = lambda x: (x['project_name'],x['video_name']))
     return json.dumps({'success':True,'data':data}), 200, {'ContentType':'application/json'} 
 
 @app.route('/add_video', methods=["POST"])

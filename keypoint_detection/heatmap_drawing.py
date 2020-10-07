@@ -174,7 +174,7 @@ def write_mp(frame_data):
         cv.imwrite(vis_path, vis)
     return True 
 
-def randomly_drop_visualiztions(project_id, dst_dir = '/tmp/keypoint_heatmap_vis', num = -1, horistack=True,max_height=None, random_maps=False ):
+def randomly_drop_visualiztions(project_id, video_id, dst_dir = '/tmp/keypoint_heatmap_vis', num = -1, horistack=True,max_height=None, random_maps=False ):
     # take random frames from the db and show their labeling as gaussian heatmaps
     if not os.path.isdir(dst_dir):
         os.makedirs(dst_dir)
@@ -184,7 +184,7 @@ def randomly_drop_visualiztions(project_id, dst_dir = '/tmp/keypoint_heatmap_vis
     keypoint_names = db.get_keypoint_names(project_id)
     frame_idxs = []
     while len(frame_idxs) == 0:
-        video_id = db.get_random_project_video(project_id)
+        #video_id = db.get_random_project_video(project_id)
         if video_id is None:
             raise Exception("[ERROR] no video found for project!")
 
@@ -230,5 +230,5 @@ def randomly_drop_visualiztions(project_id, dst_dir = '/tmp/keypoint_heatmap_vis
         results = [result.get() for result in result_objs]
 
 if __name__ == '__main__':
-    project_id = 1
-    randomly_drop_visualiztions(project_id, horistack = False)
+    project_id, video_id = 1, 1
+    randomly_drop_visualiztions(project_id, video_id, horistack = False)

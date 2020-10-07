@@ -270,10 +270,10 @@ document.addEventListener('keyup', function(event){
 
 function redirect_next_task(){
     // make request to server to get new random task and redirect to that page
-    let url = "/get_next_labeling_frame/" + project_id.toString();
+    let url = "/get_next_labeling_frame/" + project_id.toString() + "/"+ video_id.toString();
     if(labeling_mode=='bbox')
-        url = "/get_next_bbox_frame/" + project_id.toString();
-        
+        url = "/get_next_bbox_frame/" + project_id.toString() + "/"+ video_id.toString();
+
     document.location.href = url;
 }
 

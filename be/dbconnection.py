@@ -89,57 +89,49 @@ class DatabaseConnection(object):
         return video_ids[0][0]
 
     def get_all_labeled_frames(self):
-        self.execute('''select videos.project_id, frame_idx 
-                            from keypoint_positions 
-                            inner join videos on videos.id = keypoint_positions.video_id;''')
+        self.execute('''select video_id, frame_idx from keypoint_positions ''')
         return list(set([x for x in self.cur.fetchall()]))
 
 
-    def get_labeled_frames(self, project_id):
+    def get_labeled_frames(self, video_id):
         self.execute('''select frame_idx 
                             from keypoint_positions 
-                            inner join videos on videos.id = keypoint_positions.video_id
-                            where videos.project_id = %i;
-        ''' % int(project_id))
+                            where video_id = %i;''' % int(video_id))
         return list(set([x[0] for x in self.cur.fetchall()]))
 
-    def get_count_labeled_frames(self, project_id):
-        return len(self.get_labeled_frames(project_id))
+    def get_count_labeled_frames(self, video_id):
+        return len(self.get_labeled_frames(video_id))
 
     def get_count_all_labeled_frames(self):
         dd = self.get_all_labeled_frames()
         counts = {}
-        for [project_id, frame_idx] in dd:
-            if not project_id in counts:
-                counts[project_id] = 0 
-            counts[project_id] += 1 
+        for [video_id, frame_idx] in dd:
+            if not video_id in counts:
+                counts[video_id] = 0 
+            counts[video_id] += 1 
         return counts 
 
 
-    def get_labeled_bbox_frames(self, project_id):
+    def get_labeled_bbox_frames(self, video_id):
         self.execute('''select frame_idx 
                             from bboxes
-                            inner join videos on videos.id = bboxes.video_id
-                            where videos.project_id = %i;
-        ''' % int(project_id))
+                            where video_id = %i''' % int(video_id))
         return list(set([x[0] for x in self.cur.fetchall()]))
 
-    def get_count_labeled_bbox_frames(self, project_id):
-        return len(self.get_labeled_bbox_frames(project_id))
+    def get_count_labeled_bbox_frames(self, video_id):
+        return len(self.get_labeled_bbox_frames(video_id))
 
     def get_all_labeled_bbox_frames(self):
-        self.execute('''select videos.project_id, frame_idx 
-                            from bboxes
-                            inner join videos on videos.id = bboxes.video_id;''')
+        self.execute('''select video_id, frame_idx from bboxes''')
         return list(set([x for x in self.cur.fetchall()]))
 
     def get_count_all_labeled_bbox_frames(self):
         dd = self.get_all_labeled_bbox_frames()
         counts = {}
-        for [project_id, frame_idx] in dd:
-            if not project_id in counts:
-                counts[project_id] = 0 
-            counts[project_id] += 1 
+        for [video_id, frame_idx] in dd:
+            if not video_id in counts:
+                counts[video_id] = 0 
+            counts[video_id] += 1 
         return counts 
 
     def save_labeling(self, data):
