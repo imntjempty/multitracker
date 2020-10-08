@@ -192,7 +192,7 @@ def create_train_dataset(config):
         max_height = None 
         if 'max_height' in config:
             max_height = config['max_height']
-        heatmap_drawing.randomly_drop_visualiztions(config['project_id'], dst_dir=config['data_dir'],max_height=max_height)
+        heatmap_drawing.randomly_drop_visualiztions(config['project_id'], config['video_id'], dst_dir=config['data_dir'],max_height=max_height)
         
 
         if 0:
@@ -453,20 +453,25 @@ def train(config):
 # </train>
 def get_config(project_id = 3):
     config = {'batch_size': 16}
-    config.update({'img_height': 256,'img_width': 256})
+    config.update({'img_height': 224,'img_width': 224})
     #config.update({'img_height': 512,'img_width': 512})
     config['epochs'] = 1000000
     config['max_steps'] = 40000
     config['max_hours'] = 30.
     config['lr'] = 2e-5 * 5   *5 *2.
-    config['lr_scratch'] = 1e-4
+    config['lr'] = 2e-5
+    #config['lr_scratch'] = 1e-4
     #config['loss'] = ['l1','dice','focal','normed_l1','l2'][2]
     #if config['loss'] == 'l2':
     #    config['lr'] = 2e-4
     config['autoencoding'] = [False, True][0]
     config['pretrained_encoder'] = [False,True][1]
+
     config['mixup'] = [False, True][1]
     config['cutmix'] = [False, True][0]
+    config['hflips'] = [False,True][1]
+    config['vflips'] = [False,True][1]
+    config['rotation_augmentation'] = bool(1)
     config['num_hourglass'] = 1 #8
     config['fov'] = 0.75 # default 0.5
     config['selftrain_start_step'] = 10000

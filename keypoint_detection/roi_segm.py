@@ -29,8 +29,14 @@ cce_loss = tf.keras.losses.CategoricalCrossentropy(False)
 def calc_focal_loss(ytrue,ypred):
     return tf.reduce_mean( focal_loss(ytrue, ypred))
 
-def calc_cce_loss(ytrue, pred):
+def calc_cce_loss(ytrue, ypred):
     return tf.reduce_mean( cce_loss(ytrue, ypred) )
+
+def calc_accuracy(ytrue, ypred):
+    correct_prediction = tf.equal(tf.argmax(ytrue,3),tf.argmax(ypred,3))
+    acc = tf.reduce_mean(tf.cast(correct_prediction, "float"))
+    return acc 
+
 
 def get_roi_crop_dim(project_id, video_id, Htarget):
     """
@@ -173,8 +179,8 @@ def load_roi_dataset(config,mode='train'):
     wroi = hroi#wroicomp // (1+len(config['keypoint_names'])//3)
     #print('wroi',hroi,wroicomp,wroi,'->',wroicomp//wroi)
     h = hroi #int(hroi * 0.98)
-    config['img_height'] = 224
-    config['img_width'] = 224
+    #config['img_height'] = 224
+    #config['img_width'] = 224
 
     def load_im(image_file):
         image = tf.io.read_file(image_file)
@@ -187,7 +193,7 @@ def load_roi_dataset(config,mode='train'):
         comp = tf.concat(comp,axis=2)
         comp = comp[:,:,:(3+len(config['keypoint_names']))]
         hh = h 
-        if mode == 'train':
+        if mode == 'train' and config['rotation_augmentation']:
             # random scale augmentation
             #if tf.random.uniform([]) > 0.3:
             #    hh = h + int(tf.random.uniform([],-h/10,h/10)) #h += int(tf.random.uniform([],-h/7,h/7))
@@ -217,15 +223,19 @@ def load_roi_dataset(config,mode='train'):
     if mode == 'train' and 'experiment' in config and config['experiment']=='A':
         file_list = glob(os.path.join(config['roi_dir'],mode,'*.png'))
         shuffle(file_list)
+        oldlen = len(file_list)
         file_list = file_list[:int(len(file_list) * config['data_ratio'])]
         file_list = sorted(file_list)
+        print('[*] cutting training data from %i samples to %i samples' % (oldlen, len(file_list)))
     else:
         file_list = sorted(glob(os.path.join(config['roi_dir'],mode,'*.png')))
     
+    print('[*] loaded %i samples for mode %s' % (len(file_list),mode))
+
     file_list_tf = tf.data.Dataset.from_tensor_slices(file_list)
     data = file_list_tf.map(load_im, num_parallel_calls = tf.data.experimental.AUTOTUNE).batch(config['batch_size']).prefetch(4*config['batch_size'])#.cache()
-    if mode == 'train':
-        data = data.shuffle(512)
+    #if mode == 'train':
+    data = data.shuffle(512)
     return data 
 
 def get_center(x1,y1,x2,y2,H,W,crop_dim):
@@ -271,7 +281,6 @@ def inference_heatmap(config, trained_model, frame, bounding_boxes):
     return y 
     
 def train(config):
-    config['lr'] = 1e-4
     #config['cutmix'] = False
     #config['mixup'] = True
     print('[*] config', config)
@@ -339,6 +348,7 @@ def train(config):
 
         should_test = global_step % 250 == 0
         test_losses = {'focal':0.0,'cce':0.0}
+        test_accuracy = 0.0
         if should_test:
             # test data
             nt = 0
@@ -348,13 +358,14 @@ def train(config):
                     predicted_test = tf.image.resize(predicted_test, x.shape[1:3]) 
 
                 if 'focal' in config['test_losses']:
-                    test_losses['focal'] += calc_focal_loss(y,predicted_heatmaps)
+                    test_losses['focal'] += calc_focal_loss(yt,predicted_test)
                 if 'cce' in config['test_losses']:
-                    test_losses['cce'] += calc_cce_loss(y,predicted_heatmaps)
-                
+                    test_losses['cce'] += calc_cce_loss(yt,predicted_test)
+                test_accuracy += calc_accuracy(yt,predicted_test)
                 nt += 1 
             test_losses['focal'] = test_losses['focal'] / nt
             test_losses['cce'] = test_losses['cce'] / nt
+            test_accuracy = test_accuracy / nt 
 
 
         # write summary
@@ -366,6 +377,7 @@ def train(config):
                     tf.summary.scalar("loss %s" % config['train_loss'],loss,step=global_step)
                     tf.summary.scalar('min',tf.reduce_min(predicted_heatmaps[:,:,:,:-1]),step=global_step)
                     tf.summary.scalar('max',tf.reduce_max(predicted_heatmaps[:,:,:,:-1]),step=global_step)
+                    tf.summary.scalar('accuracy', calc_accuracy(y,predicted_heatmaps))
                     im_summary('image',inp/256.)
                     for kk, keypoint_name in enumerate(config['keypoint_names']):
                         im_summary('heatmap_%s' % keypoint_name, tf.concat((tf.expand_dims(y[:,:,:,kk],axis=3), tf.expand_dims(predicted_heatmaps[:,:,:,kk],axis=3)),axis=2))
@@ -381,6 +393,7 @@ def train(config):
                     with writer_test.as_default():
                         for k,v in test_losses.items():
                             tf.summary.scalar("loss %s" % k,v,step=global_step)
+                        tf.summary.scalar('accuracy', test_accuracy,step=global_step)
                         im_summary('image',xt/256.)
                         
                         for kk, keypoint_name in enumerate(config['keypoint_names']):
@@ -415,11 +428,11 @@ def train(config):
 
         if 1:#try:
             for x,y in dataset_train:
-                if 1:
-                    if np.random.random() < 0.5:
-                        x,y = model.hflip(swaps,x,y)
-                    if np.random.random() < 0.5:
-                        x,y = model.vflip(swaps,x,y)
+            
+                if np.random.random() < 0.5 and config['hflips']:
+                    x,y = model.hflip(swaps,x,y)
+                if np.random.random() < 0.5 and config['vflips']:
+                    x,y = model.vflip(swaps,x,y)
                 if 1:        
                     # mixup augmentation
                     if np.random.random() < 0.5:

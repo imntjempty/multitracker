@@ -99,8 +99,8 @@ def get_efficientB0_model(config):
         weights = None 
     
     encoder = EfficientNetB0(include_top=False, weights=weights, drop_connect_rate=0.2,input_tensor=x)
-    encoder.trainable = True 
-
+    encoder.trainable = bool(0)#True 
+    encoder.summary()
     encoded_layer_names = [
         'block1a_activation', # (112,112,32)
         'block3a_expand_activation', # (56,56,144)
@@ -111,6 +111,9 @@ def get_efficientB0_model(config):
 
     outputs = [get_decoded(config, encoder, encoded_layer_names)]
     model = tf.keras.Model(inputs=encoder.inputs, outputs=[outputs], name="EfficientUnet")
+    for l in model.layers:
+        if 'block' in l.name:
+            l.trainable=False
     model.summary()
     return model 
 
@@ -140,6 +143,11 @@ def get_efficientB6_model(config):
 
     outputs = [get_decoded(config, encoder, encoded_layer_names)]
     model = tf.keras.Model(inputs=encoder.inputs, outputs=[outputs], name="LargeEfficientUnet")
+    for l in model.layers:
+        if 'block' in l.name:
+            l.trainable=False
+            #print('[*] not training layer %s' % l.name)
+    
     model.summary()
     return model 
 
@@ -153,29 +161,33 @@ def get_decoded(config, encoder, encoded_layer_names):
     
     bf = 64
     x = encoded_layers[-1]
-    for _ in range(2):
-        x = upsample(512,3,strides=1)(x)
-        #x = tf.keras.layers.Dropout(0.5)(x)
+    if 0:
+        for _ in range(2):
+            x = upsample(512,3,strides=1)(x)
+            #x = tf.keras.layers.Dropout(0.5)(x)
 
     for i_block in range(len(encoded_layers)-1,-1,-1):
-        nf = min(512, bf * 2**i_block)
+        nf = min(256, bf * 2**i_block)
         #print('decoder',i_block,nf)
         ne = encoded_layers[i_block].shape[3]
         # append encoder layer
         e = encoded_layers[i_block]
-        f = upsample(ne,3,strides=1)(e)
-        f = tf.keras.layers.Dropout(0.5)(f)
-        f = upsample(ne,3,strides=1)(f)
-        e = e + f
+        if 0:
+            f = upsample(ne,3,strides=1)(e)
+            f = tf.keras.layers.Dropout(0.5)(f)
+            f = upsample(ne,3,strides=1)(f)
+            e = e + f
+        
         #new_size = [inputs.shape[0]/2**i_block,inputs.shape[1]/2**(1+i_block)]
         #e = tf.image.resize(e,new_size)
         x = tf.concat([x,e],axis=3)
-        
+        x = upsample(nf,1,strides=1)(x)
         x = upsample(nf,3,strides=2)(x)
-        y = upsample(nf,3,strides=1)(x)
-        y = tf.keras.layers.Dropout(0.5)(y)
-        y = upsample(nf,3,strides=1)(y)
-        x = x + y
+        if 1:
+            y = upsample(nf,3,strides=1)(x)
+            #y = tf.keras.layers.Dropout(0.5)(y)
+            y = upsample(nf,3,strides=1)(y)
+            x = x + y
     x = upsample(32,3,strides=1)(x)    
     #x = upsample(64,3,strides=1)(x)
 

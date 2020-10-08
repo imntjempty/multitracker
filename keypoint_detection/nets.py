@@ -15,7 +15,7 @@ def upsample(nfilters, kernel_size, strides=2, dilation = (1,1), norm_type='batc
         func(nfilters, kernel_size, strides=strides,
             dilation_rate=dilation,
             padding='same',
-            kernel_regularizer=tf.keras.regularizers.l2(0.01),
+            kernel_regularizer=tf.keras.regularizers.l2(0.0001),
             kernel_initializer=initializer))
 
     if norm_type is not None:
