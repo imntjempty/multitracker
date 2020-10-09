@@ -32,8 +32,9 @@ def calc_focal_loss(ytrue,ypred):
 def calc_cce_loss(ytrue, ypred):
     return tf.reduce_mean( cce_loss(ytrue, ypred) )
 
-def calc_accuracy(ytrue, ypred):
+def calc_accuracy(config, ytrue, ypred):
     correct_prediction = tf.equal(tf.argmax(ytrue,3),tf.argmax(ypred,3))
+    correct_prediction = tf.cast(correct_prediction, "float")
     acc = tf.reduce_mean(tf.cast(correct_prediction, "float"))
     return acc 
 
@@ -354,14 +355,14 @@ def train(config):
             nt = 0
             for xt,yt in dataset_test:
                 predicted_test = net(xt,training=False)[0]
-                if not predicted_test.shape[1] == y.shape[1]:
+                if not predicted_test.shape[1] == yt.shape[1]:
                     predicted_test = tf.image.resize(predicted_test, x.shape[1:3]) 
 
                 if 'focal' in config['test_losses']:
                     test_losses['focal'] += calc_focal_loss(yt,predicted_test)
                 if 'cce' in config['test_losses']:
                     test_losses['cce'] += calc_cce_loss(yt,predicted_test)
-                test_accuracy += calc_accuracy(yt,predicted_test)
+                test_accuracy += calc_accuracy(config, yt,predicted_test)
                 nt += 1 
             test_losses['focal'] = test_losses['focal'] / nt
             test_losses['cce'] = test_losses['cce'] / nt
@@ -377,7 +378,7 @@ def train(config):
                     tf.summary.scalar("loss %s" % config['train_loss'],loss,step=global_step)
                     tf.summary.scalar('min',tf.reduce_min(predicted_heatmaps[:,:,:,:-1]),step=global_step)
                     tf.summary.scalar('max',tf.reduce_max(predicted_heatmaps[:,:,:,:-1]),step=global_step)
-                    tf.summary.scalar('accuracy', calc_accuracy(y,predicted_heatmaps))
+                    tf.summary.scalar('accuracy', calc_accuracy(config, y,predicted_heatmaps),step=global_step)
                     im_summary('image',inp/256.)
                     for kk, keypoint_name in enumerate(config['keypoint_names']):
                         im_summary('heatmap_%s' % keypoint_name, tf.concat((tf.expand_dims(y[:,:,:,kk],axis=3), tf.expand_dims(predicted_heatmaps[:,:,:,kk],axis=3)),axis=2))
