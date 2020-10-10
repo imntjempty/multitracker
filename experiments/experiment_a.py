@@ -17,12 +17,15 @@ def experiment_a(args):
     config['train_loss'] = 'focal'
     config['test_losses'] = ['focal'] #['cce','focal']
     config['max_steps'] = 50000
-    #config['max_steps'] = 15000
     config['early_stopping'] = False
     config['rotation_augmentation'] = bool(0)
     config['lr'] = 1e-4
+    config['batch_size'] = 8
+    #config['lr'] = 2e-5
 
-    for data_ratio in [0.01,0.1,0.5,1.0]:
+    #for data_ratio in [0.01,0.1,0.5,1.0]:
+    #for data_ratio in [0.01,0.1,0.5,1.0][::-1]:
+    for data_ratio in [0.01,0.1]:
         print('[*] starting sub experiment with %i/100 of data used' % int( 100. * data_ratio ))
         config['data_ratio'] = data_ratio
         print(config,'\n')

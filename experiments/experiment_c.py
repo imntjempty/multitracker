@@ -10,9 +10,20 @@ def experiment_c():
     model.create_train_dataset(config)
     config['video_id'] = int(args.video_id)
 
+    config['experiment'] = 'C'
+    config['mixup']=False
+    config['hflips']=False 
+    config['vflips']=False 
+    config['train_loss'] = 'focal'
+    config['test_losses'] = ['focal'] #['cce','focal']
+    config['max_steps'] = 50000
+    #config['max_steps'] = 15000
+    config['early_stopping'] = False
+    config['rotation_augmentation'] = bool(0)
+    config['lr'] = 1e-4
+
     for backbone in ['efficientnetLarge','vgg16']:
         print('[*] starting sub experiment backbone %s' % backbone)
-        config['experiment'] = 'C'
         config['backbone'] = backbone
         print(config,'\n')
         checkpoint_path = roi_segm.train(config)
