@@ -111,7 +111,7 @@ def filter_crop_shape(obj):
         return True 
     return False 
 
-def load_roi_dataset(config,mode='train'):
+def load_roi_dataset(config,mode='train',batch_size=None):
     if mode=='train' or mode == 'test':
         image_directory = os.path.join(config['data_dir'],'%s' % mode)
     [Hframe,Wframe,_] = cv.imread(glob(os.path.join(os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'test'),'*.png'))[0]).shape
@@ -126,9 +126,11 @@ def load_roi_dataset(config,mode='train'):
     crop_dim_extended = min(Hcomp, crop_dim * crop_dim_extended_ratio)
     crop_dim_extended = int(crop_dim_extended)
     crop_dim_extended_ratio = crop_dim_extended / crop_dim 
-
-    print('crop_dim_extended_ratio',crop_dim_extended_ratio,'crop_dim',crop_dim,'crop_dim_extended',crop_dim_extended)
+    #print('crop_dim_extended_ratio',crop_dim_extended_ratio,'crop_dim',crop_dim,'crop_dim_extended',crop_dim_extended)
     
+    if batch_size is None:
+        batch_size = config['batch_size']
+
     for _mode in ['train','test']:
         if not os.path.isdir(os.path.join(config['roi_dir'],_mode)): os.makedirs(os.path.join(config['roi_dir'],_mode))
         
@@ -234,7 +236,7 @@ def load_roi_dataset(config,mode='train'):
     print('[*] loaded %i samples for mode %s' % (len(file_list),mode))
 
     file_list_tf = tf.data.Dataset.from_tensor_slices(file_list)
-    data = file_list_tf.map(load_im, num_parallel_calls = tf.data.experimental.AUTOTUNE).batch(config['batch_size']).prefetch(4*config['batch_size'])#.cache()
+    data = file_list_tf.map(load_im, num_parallel_calls = tf.data.experimental.AUTOTUNE).batch(batch_size).prefetch(4*batch_size)#.cache()
     #if mode == 'train':
     data = data.shuffle(512)
     return data 
@@ -378,7 +380,8 @@ def train(config):
                     tf.summary.scalar("loss %s" % config['train_loss'],loss,step=global_step)
                     tf.summary.scalar('min',tf.reduce_min(predicted_heatmaps[:,:,:,:-1]),step=global_step)
                     tf.summary.scalar('max',tf.reduce_max(predicted_heatmaps[:,:,:,:-1]),step=global_step)
-                    tf.summary.scalar('accuracy', calc_accuracy(config, y,predicted_heatmaps),step=global_step)
+                    accuracy = calc_accuracy(config, y,predicted_heatmaps)
+                    tf.summary.scalar('accuracy', accuracy,step=global_step)
                     im_summary('image',inp/256.)
                     for kk, keypoint_name in enumerate(config['keypoint_names']):
                         im_summary('heatmap_%s' % keypoint_name, tf.concat((tf.expand_dims(y[:,:,:,kk],axis=3), tf.expand_dims(predicted_heatmaps[:,:,:,kk],axis=3)),axis=2))
@@ -388,7 +391,7 @@ def train(config):
                     writer_train.flush()    
 
                 with open(csv_train,'a+') as ftrain:
-                    ftrain.write('%i,%f\n' % (global_step, loss))
+                    ftrain.write('%i,%f,%f\n' % (global_step, loss, accuracy))
 
                 if should_test:            
                     with writer_test.as_default():
@@ -405,7 +408,7 @@ def train(config):
                         writer_test.flush()
 
                     with open(csv_test,'a+') as ftest:
-                        ftest.write('%i,%f,%f\n' % (global_step, test_losses['focal'],test_losses['cce']))
+                        ftest.write('%i,%f,%f,%f\n' % (global_step, test_losses['focal'],test_losses['cce'],test_accuracy))
         
         result = {'train_loss':loss}
         if should_test:
