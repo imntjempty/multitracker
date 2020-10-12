@@ -1,11 +1,12 @@
 import numpy as np 
 import os 
 import time 
+import json
 import tensorflow as tf 
 from tensorflow.keras.backend import clear_session
-from multitracker.keypoint_detection import model, roi_segm
+from multitracker.keypoint_detection import model, roi_segm, unet
 
-def experiment_c_speed():
+def experiment_c_speed(args):
     print('[*] starting experiment C: keypoint estimation inference speed: EfficientNetB6 vs VGG16')
     config = model.get_config(args.project_id)
     model.create_train_dataset(config)
@@ -28,7 +29,7 @@ def experiment_c_speed():
     for backbone in ['efficientnetLarge','vgg16']:
         checkpoint_path = {
             'efficientnetLarge':'/home/alex/checkpoints/experiments/MiceTop/A/100-2020-10-10_10-14-17',
-            'vgg16':''
+            'vgg16':'/home/alex/checkpoints/experiments/MiceTop/C/vgg16-2020-10-11_18-26-15'
         }[backbone]
         print('[*] starting sub experiment backbone %s' % backbone)
         config['backbone'] = backbone
@@ -66,4 +67,4 @@ if __name__ == '__main__':
     parser.add_argument('--project_id',required=True,type=int)
     parser.add_argument('--video_id',required=True,type=int)
     args = parser.parse_args()
-    experiment_c(args)
+    experiment_c_speed(args)

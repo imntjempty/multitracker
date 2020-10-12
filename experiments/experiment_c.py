@@ -4,7 +4,7 @@ import tensorflow as tf
 from tensorflow.keras.backend import clear_session
 from multitracker.keypoint_detection import model, roi_segm
 
-def experiment_c():
+def experiment_c(args):
     print('[*] starting experiment C: keypoint estimation test loss/inference speed: EfficientNet vs VGG16')
     config = model.get_config(args.project_id)
     model.create_train_dataset(config)
@@ -22,7 +22,8 @@ def experiment_c():
     config['rotation_augmentation'] = bool(0)
     config['lr'] = 1e-4
 
-    for backbone in ['efficientnetLarge','vgg16']:
+    #for backbone in ['vgg16','efficientnetLarge']:
+    for backbone in ['vgg16']:
         print('[*] starting sub experiment backbone %s' % backbone)
         config['backbone'] = backbone
         print(config,'\n')

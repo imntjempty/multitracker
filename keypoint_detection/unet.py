@@ -73,7 +73,7 @@ def get_vgg16_model(config):
         weights = None 
     encoder = VGG16(include_top=False, weights=weights, input_tensor=inputs)
     #encoder.summary()
-    encoder.trainable = True 
+    encoder.trainable = False 
         
     encoded_layer_names = [
         'block2_conv2', # (112,112,128)
@@ -83,6 +83,10 @@ def get_vgg16_model(config):
     ]
     outputs = [get_decoded(config, encoder, encoded_layer_names)]
     model = tf.keras.Model(inputs=encoder.inputs, outputs=[outputs], name="VGG16Unet")
+    for l in model.layers:
+        if 'block' in l.name:
+            l.trainable=False
+    
     model.summary()
     return model 
 
