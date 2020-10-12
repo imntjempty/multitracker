@@ -15,6 +15,7 @@ from datetime import datetime
 import cv2 as cv 
 import h5py
 import tqdm
+import json 
 
 import matplotlib.pyplot as plt
 import random 
@@ -115,7 +116,9 @@ def get_bbox_data(config, vis_input_data=0):
         frame_bboxes[frame_idx] = np.array(frame_bboxes[frame_idx]) 
     
     H,W,_ = cv.imread( os.path.join(frames_dir, '%s.png' % list(frame_bboxes.keys())[0]) ).shape
-    for i, frame_idx in enumerate(frame_bboxes.keys()):
+    frames = list(frame_bboxes.keys())
+    shuffle(frames)
+    for i, frame_idx in enumerate(frames):
         #print(i,frame_idx)
         f = os.path.join(frames_dir, '%s.png' % frame_idx)
 
@@ -135,9 +138,15 @@ def get_bbox_data(config, vis_input_data=0):
     
     ddata_train, ddata_test = [], []
     for i in range(len(train_image_tensors)):
-        ddata_train.append([train_image_tensors[i], train_gt_box_tensors[i], train_gt_classes_one_hot_tensors[i]])
+        add = True 
+        if 'data_ratio' in config:
+            if np.random.uniform() > config['data_ratio']:
+                add = False 
+        if add:
+            ddata_train.append([train_image_tensors[i], train_gt_box_tensors[i], train_gt_classes_one_hot_tensors[i]])
     for i in range(len(test_image_tensors)):
         ddata_test.append([test_image_tensors[i], test_gt_box_tensors[i], test_gt_classes_one_hot_tensors[i]])
+    print('[*] training on %i samples, testing on %i samples' % ( len(ddata_train),len(ddata_test)))
     labeling_list_train = tf.data.Dataset.from_tensor_slices(train_image_tensors)
     labeling_list_test = tf.data.Dataset.from_tensor_slices(test_image_tensors)
     
@@ -382,8 +391,14 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
     if not 'finetune' in config:
         config['finetune'] = False 
 
+    if not os.path.isdir(checkpoint_directory): os.makedirs(checkpoint_directory)
+
+    # write config as JSON
+    file_json = os.path.join(checkpoint_directory,'config.json')
+    with open(file_json, 'w') as f:
+        json.dump(config, f, indent=4)
+
     # load and prepare data 
-    #train_image_tensors, train_gt_box_tensors, train_gt_classes_one_hot_tensors, test_image_tensors, test_gt_box_tensors, test_gt_classes_one_hot_tensors = get_bbox_data(config)
     frame_bboxes, data_train, data_test = get_bbox_data(config)
     frame_idx, _ = next(iter(data_train))
     gt_boxes, gt_classes = [],[]
@@ -471,7 +486,9 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
         train_step_fn = get_model_train_step_function(detection_model, optimizer, to_fine_tune)
         writer_train = tf.summary.create_file_writer(checkpoint_directory+'/train')
         writer_test = tf.summary.create_file_writer(checkpoint_directory+'/test')
-    
+        csv_train = os.path.join(checkpoint_directory,'train_log.csv')
+        csv_test = os.path.join(checkpoint_directory,'test_log.csv')
+
         print('Start fine-tuning!', flush=True)
         early_stopping = False 
         idx = 0
@@ -516,6 +533,8 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
                         vis = tf.cast(vis,tf.float32)
                         tf.summary.image('prediction',vis/255.,step=idx)
                         writer_train.flush()
+                        with open(csv_train,'a+') as ftrain:
+                            ftrain.write('%i,%f\n' % (idx, total_loss))
 
                 ## Test images
                 if idx % 250 == 0:
@@ -529,6 +548,9 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
                         # Test step (forward pass only)
                         prediction_dict, shapes, _loss_test = train_step_fn(image_tensors_test, gt_boxes_test, gt_classes_test, update_weights = False)
                         test_loss = test_loss + _loss_test/num_test_batches
+                    with open(csv_test,'a+') as ftest:
+                        ftest.write('%i,%f\n' % (idx, test_loss))
+
                     test_losses.append(test_loss)
 
                     # write tensorboard summary
@@ -556,7 +578,11 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
                             print('[*] saved object detection model to',checkpoint_directory,'->',saved_path)
                             return detection_model
                 idx += 1 
-
+        ckpt_saver = tf.compat.v2.train.Checkpoint(detection_model=detection_model)
+        ckpt_manager = tf.train.CheckpointManager(ckpt_saver, checkpoint_directory, max_to_keep=5)
+        saved_path = ckpt_manager.save()
+        print('[*] saved object detection model to',checkpoint_directory,'->',saved_path)
+        return detection_model
 
 if __name__ == '__main__':
     import argparse 
