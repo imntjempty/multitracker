@@ -127,12 +127,12 @@ def get_bbox_data(config, vis_input_data=0):
         
         if np.random.uniform() > 0.2:
             #train_image_tensors.append(tf.expand_dims(tf.convert_to_tensor(image_np, dtype=tf.float32), axis=0))
-            train_image_tensors.append(frame_idx)
+            train_image_tensors.append(str(frame_idx).zfill(5))
             train_gt_box_tensors.append(tf.convert_to_tensor(bboxes, dtype=tf.float32))
             train_gt_classes_one_hot_tensors.append(tf.one_hot(tf.convert_to_tensor(np.ones(shape=[bboxes.shape[0]], dtype=np.int32) - label_id_offset), num_classes))
         else:
             #test_image_tensors.append(tf.expand_dims(tf.convert_to_tensor(image_np, dtype=tf.float32), axis=0))
-            test_image_tensors.append(frame_idx)
+            test_image_tensors.append(str(frame_idx).zfill(5))
             test_gt_box_tensors.append(tf.convert_to_tensor(bboxes, dtype=tf.float32))
             test_gt_classes_one_hot_tensors.append(tf.one_hot(tf.convert_to_tensor(np.ones(shape=[bboxes.shape[0]], dtype=np.int32) - label_id_offset), num_classes))
     
@@ -143,16 +143,17 @@ def get_bbox_data(config, vis_input_data=0):
             if np.random.uniform() > config['data_ratio']:
                 add = False 
         if add:
-            ddata_train.append([train_image_tensors[i], train_gt_box_tensors[i], train_gt_classes_one_hot_tensors[i]])
+            ddata_train.append(train_image_tensors[i])
     for i in range(len(test_image_tensors)):
-        ddata_test.append([test_image_tensors[i], test_gt_box_tensors[i], test_gt_classes_one_hot_tensors[i]])
+        #ddata_test.append([test_image_tensors[i], test_gt_box_tensors[i], test_gt_classes_one_hot_tensors[i]])
+        ddata_test.append(test_image_tensors[i])
     print('[*] training on %i samples, testing on %i samples' % ( len(ddata_train),len(ddata_test)))
-    labeling_list_train = tf.data.Dataset.from_tensor_slices(train_image_tensors)
-    labeling_list_test = tf.data.Dataset.from_tensor_slices(test_image_tensors)
+    labeling_list_train = tf.data.Dataset.from_tensor_slices(ddata_train)
+    labeling_list_test = tf.data.Dataset.from_tensor_slices(ddata_test)
     
     @tf.function
     def load_im(frame_idx):
-        image_file = tf.strings.join([frames_dir, '/',tf.cast(frame_idx,tf.string),'.png'])
+        image_file = tf.strings.join([frames_dir, '/',frame_idx,'.png'])
         image = tf.io.read_file(image_file)
         image = tf.image.decode_png(image,channels=3)
         image = tf.cast(image,tf.float32)
