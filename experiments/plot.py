@@ -10,7 +10,12 @@ import json
 from multitracker.keypoint_detection import model 
 from multitracker.experiments import bg_accuracy
 
+from multitracker.be import dbconnection
+db = dbconnection.DatabaseConnection()
+
 config = model.get_config(project_id=7)
+video_id = 9
+
 config['max_steps'] = 50000
 dpi=300
 figsize = (12,8)
@@ -54,7 +59,7 @@ def plot_experiment_a(args, plot=True):
             except Exception as e:
                 print(e)
                 print()    
-    axs[0].set_title('Experiment A - using fractions of training data ({0} samples total)'.format(num_train_samples))
+    axs[0].set_title('Experiment A - Keypoint Estimation: using fractions of training data ({0} samples total)'.format(num_train_samples))
     axs[0].set_xlabel('steps')
     axs[0].set_ylabel('focal loss')
     axs[0].hlines(bg_accuracy.mice_bg_focal_loss, 0, config['max_steps'], colors='k', linestyles='solid', label='baseline - no keypoints')
@@ -73,7 +78,7 @@ def plot_experiment_a(args, plot=True):
             except Exception as e:
                 print(e)
                 print()  
-    axs[1].set_title('Experiment A - using fractions of training data ({0} samples total)'.format(num_train_samples))
+    axs[1].set_title('Experiment A - Keypoint Estimation: using fractions of training data ({0} samples total)'.format(num_train_samples))
     axs[1].set_xlabel('steps')
     axs[1].set_ylabel('pixel accuracy')
     
@@ -98,7 +103,7 @@ def plot_experiment_b(args):
     colors = {1: 'tab:brown', 10: 'tab:blue',20: 'tab:orange', 50: 'tab:green', 100: 'tab:red'}
     fig, axs = plt.subplots(2)
     fig.set_size_inches(figsize[0],figsize[1])
-    axs[0].set_title('Experiment B - ImageNet pretrained backbone vs random initialised network')
+    axs[0].set_title('Experiment B - Keypoint Estimation: ImageNet pretrained backbone vs random initialised network')
     axs[0].set_xlabel('steps')
     axs[0].set_ylabel('focal loss')
     axs[0].hlines(bg_accuracy.mice_bg_focal_loss, 0, config['max_steps'], colors='k', linestyles='solid', label='baseline - no keypoints')
@@ -128,7 +133,7 @@ def plot_experiment_b(args):
     axs[0].legend()
 
     ## accuracy
-    axs[1].set_title('Experiment B - ImageNet pretrained backbone vs random initialised network'    )
+    axs[1].set_title('Experiment B - Keypoint Estimation: ImageNet pretrained backbone vs random initialised network'    )
     axs[1].set_xlabel('steps')
     axs[1].set_ylabel('pixel accuracy')
     axs[1].plot([c[0] for c in train_dataset[100]],[c[2] for c in train_dataset[100]],color=colors[100],linestyle='--',label='train fixed pretrained backbone')
@@ -153,7 +158,7 @@ def plot_experiment_c(args):
     colors = {1: 'tab:brown', 10: 'tab:blue',20: 'tab:orange', 50: 'tab:green', 100: 'tab:red'}
     fig, axs = plt.subplots(2)
     fig.set_size_inches(figsize[0],figsize[1])
-    axs[0].set_title('Experiment C - inference loss using test data ({0} samples total)'.format(num_test_samples))
+    axs[0].set_title('Experiment C - Keypoint Estimation: inference loss using test data ({0} samples total)'.format(num_test_samples))
     axs[0].set_xlabel('steps')
     axs[0].set_ylabel('focal loss')
     axs[0].set_ylim([0.0,0.01+bg_accuracy.mice_bg_focal_loss])
@@ -186,6 +191,36 @@ def plot_experiment_c(args):
     fig.tight_layout()
     plt.savefig(os.path.join(output_dir,'C_loss.png'), dpi=dpi)
 
+def plot_experiment_e(args):
+    #num_test_samples = len(glob(os.path.join(config['roi_dir'],'test','*.png')))
+    base_dir = os.path.expanduser('~/checkpoints/experiments/MiceTop/E')
+    num_train_samples = len(db.get_labeled_bbox_frames(video_id))
+    ## plot losses
+    colors = {1: 'tab:brown', 10: 'tab:blue',20: 'tab:orange', 50: 'tab:green', 100: 'tab:red'}
+    fig, axs = plt.subplots(1)
+    axs = [axs]
+    fig.set_size_inches(figsize[0],figsize[1])
+    axs[0].set_title('Experiment E - object detection: using fractions of training data ({0} samples total)'.format(num_train_samples))
+    axs[0].set_xlabel('steps')
+    axs[0].set_ylabel('loss')
+    axs[0].set_ylim([0.0,2.])
+    #axs[0].hlines(bg_accuracy.mice_bg_focal_loss, 0, config['max_steps'], colors='k', linestyles='solid', label='baseline - no keypoints')
+    axs[0].grid(True)
+    
+    for perc_used in [1,10,50,100]:
+        exp_dir = glob(base_dir+'/%i-*/'%perc_used)[0]
+        with open(os.path.join(exp_dir,'train_log.csv'),'r') as f:
+            train_data = [[int(l.replace('\n','').split(',')[0]),float(l.replace('\n','').split(',')[1])] for l in f.readlines()]
+        with open(os.path.join(exp_dir,'test_log.csv'),'r') as f:
+            test_data = [[int(l.replace('\n','').split(',')[0]),float(l.replace('\n','').split(',')[1])] for l in f.readlines()]
+        
+        axs[0].plot([c[0] for c in train_data],[c[1] for c in train_data],color=colors[perc_used],linestyle='--',label='train {0}% used'.format(perc_used))
+        axs[0].plot([c[0] for c in test_data],[c[1] for c in test_data],color=colors[perc_used],linestyle='-',label='test  {0}% used'.format(perc_used))
+    
+    axs[0].legend()
+    fig.tight_layout()
+    plt.savefig(os.path.join(output_dir,'E.png'), dpi=dpi)
+
 def reset_figures():
     try:
         plt.close() 
@@ -201,9 +236,17 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     #parser.add_argument('--durationsC')
     args = parser.parse_args()
-    plot_experiment_a(args)
-    reset_figures()
-    plot_experiment_b(args)
-    reset_figures()
-    plot_experiment_c(args)
+    if 0:
+        plot_experiment_a(args)
+        reset_figures()
+    if 0:
+        plot_experiment_b(args)
+        reset_figures()
+    if 0:
+        plot_experiment_c(args)
+        reset_figures()
+    if 1:
+        plot_experiment_e(args)
+        reset_figures()
+    
     print('[*] wrote plots to %s' % output_dir)

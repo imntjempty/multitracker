@@ -414,7 +414,7 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
         # These parameters can be tuned; since our training set has 5 images
         # it doesn't make sense to have a much larger batch size, though we could
         # fit more examples in memory if we wanted to.
-        learning_rate = 0.001 
+        learning_rate = config['lr_objectdetection']
         num_batches = int(1e7) # was 100 with 5 examples
 
         # Select variables in top layers to fine-tune.
@@ -569,21 +569,17 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
                         writer_test.flush()
 
                     # check for early stopping -> stop training if test loss is increasing
-                    if idx>20000 and config['early_stopping'] and len(test_losses) > 3:
-                        if test_loss > test_losses[-2] and test_loss > test_losses[-3] and test_loss > test_losses[-4] and min(test_losses[:-1]) < 1.5*test_losses[-1]:
-                            early_stopping = True 
-                            print('[*] stopping object detection early at step %i, epoch %i, because current test loss %f is higher than previous %f and %f' % (idx, epoch, test_loss, test_losses[-2], test_losses[-3]))
-                            ckpt_saver = tf.compat.v2.train.Checkpoint(detection_model=detection_model)
-                            ckpt_manager = tf.train.CheckpointManager(ckpt_saver, checkpoint_directory, max_to_keep=5)
-                            saved_path = ckpt_manager.save()
-                            print('[*] saved object detection model to',checkpoint_directory,'->',saved_path)
-                            return detection_model
+                    if idx==config['maxsteps_objectdetection'] or (config['early_stopping'] and len(test_losses) > 3 and test_loss > test_losses[-2] and test_loss > test_losses[-3] and test_loss > test_losses[-4] and min(test_losses[:-1]) < 1.5*test_losses[-1]):
+                        early_stopping = True 
+                        print('[*] stopping object detection early at step %i, epoch %i, because current test loss %f is higher than previous %f and %f' % (idx, epoch, test_loss, test_losses[-2], test_losses[-3]))
+                        ckpt_saver = tf.compat.v2.train.Checkpoint(detection_model=detection_model)
+                        ckpt_manager = tf.train.CheckpointManager(ckpt_saver, checkpoint_directory, max_to_keep=5)
+                        saved_path = ckpt_manager.save()
+                        print('[*] saved object detection model to',checkpoint_directory,'->',saved_path)
+                        return detection_model
+                    
                 idx += 1 
-        ckpt_saver = tf.compat.v2.train.Checkpoint(detection_model=detection_model)
-        ckpt_manager = tf.train.CheckpointManager(ckpt_saver, checkpoint_directory, max_to_keep=5)
-        saved_path = ckpt_manager.save()
-        print('[*] saved object detection model to',checkpoint_directory,'->',saved_path)
-        return detection_model
+        
 
 if __name__ == '__main__':
     import argparse 

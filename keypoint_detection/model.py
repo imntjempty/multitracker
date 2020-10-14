@@ -494,6 +494,7 @@ def get_config(project_id = 3):
         'fasterrcnn': 'faster_rcnn_inception_resnet_v2_640x640_coco17_tpu-8'
     }[config['object_detection_backbone']]
     config['object_detection_batch_size'] = {'ssd': 16, 'fasterrcnn': 4}[config['object_detection_backbone']]
+    config['lr_objectdetection'] = 0.0005 
 
     config['train_loss'] = ['cce','focal'][1]
     config['test_losses'] = ['focal'] #['cce','focal']
