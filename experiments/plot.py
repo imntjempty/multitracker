@@ -188,6 +188,24 @@ def plot_experiment_c(args):
             with open(os.path.join(checkpoint_dir,'experiment_c_speed.json'), 'r') as f:
                 durations = json.load(f)
     axs[0].legend()
+
+    ## plot speed
+    for backbone in durations.keys():
+        for bs in durations[backbone].keys():
+            ''#print('backbone',backbone,bs,':', durations[backbone][bs])
+    labels = ['1','4','16']
+    vgg_durations = [durations['vgg16'][bs] for bs in labels]
+    efficient_durations = [durations['efficientnetLarge'][bs] for bs in labels]
+    w = 0.35
+
+    for bs in [1,4,16]:
+        rectsvgg = axs[1].bar(np.arange(len(labels)) - w/2, vgg_durations, w, label='VGG16')
+        rectsefficient = axs[1].bar(np.arange(len(labels)) + w/2, efficient_durations, w, label='EfficientNet B6')
+
+    axs[1].set_xticks(np.arange(len(labels)))
+    axs[1].set_xticklabels(labels)
+    axs[1].legend()
+
     fig.tight_layout()
     plt.savefig(os.path.join(output_dir,'C_loss.png'), dpi=dpi)
 
@@ -221,6 +239,36 @@ def plot_experiment_e(args):
     fig.tight_layout()
     plt.savefig(os.path.join(output_dir,'E.png'), dpi=dpi)
 
+def plot_experiment_f(args):
+    #num_test_samples = len(glob(os.path.join(config['roi_dir'],'test','*.png')))
+    base_dir = os.path.expanduser('~/checkpoints/experiments/MiceTop/F')
+    num_train_samples = len(db.get_labeled_bbox_frames(video_id))
+    ## plot losses
+    colors = {1: 'tab:brown', 10: 'tab:blue',20: 'tab:orange', 50: 'tab:green', 100: 'tab:red'}
+    fig, axs = plt.subplots(1)
+    axs = [axs]
+    fig.set_size_inches(figsize[0],figsize[1])
+    axs[0].set_title('Experiment F - object detection: SSD vs MaskRCNN')
+    axs[0].set_xlabel('steps')
+    axs[0].set_ylabel('loss')
+    axs[0].set_ylim([0.0,2.])
+    #axs[0].hlines(bg_accuracy.mice_bg_focal_loss, 0, config['max_steps'], colors='k', linestyles='solid', label='baseline - no keypoints')
+    axs[0].grid(True)
+    
+    for perc_used in [1,10,50,100]:
+        exp_dir = glob(base_dir+'/%i-*/'%perc_used)[0]
+        with open(os.path.join(exp_dir,'train_log.csv'),'r') as f:
+            train_data = [[int(l.replace('\n','').split(',')[0]),float(l.replace('\n','').split(',')[1])] for l in f.readlines()]
+        with open(os.path.join(exp_dir,'test_log.csv'),'r') as f:
+            test_data = [[int(l.replace('\n','').split(',')[0]),float(l.replace('\n','').split(',')[1])] for l in f.readlines()]
+        
+        axs[0].plot([c[0] for c in train_data],[c[1] for c in train_data],color=colors[perc_used],linestyle='--',label='train {0}% used'.format(perc_used))
+        axs[0].plot([c[0] for c in test_data],[c[1] for c in test_data],color=colors[perc_used],linestyle='-',label='test  {0}% used'.format(perc_used))
+    
+    axs[0].legend()
+    fig.tight_layout()
+    plt.savefig(os.path.join(output_dir,'F.png'), dpi=dpi)
+
 def reset_figures():
     try:
         plt.close() 
@@ -242,11 +290,13 @@ if __name__ == '__main__':
     if 0:
         plot_experiment_b(args)
         reset_figures()
-    if 0:
+    if 1:
         plot_experiment_c(args)
         reset_figures()
     if 1:
         plot_experiment_e(args)
         reset_figures()
-    
+    if 1:
+        plot_experiment_f(args)
+        reset_figures()
     print('[*] wrote plots to %s' % output_dir)

@@ -15,8 +15,6 @@ def experiment_d(args):
     config['mixup']=False
     config['hflips']=False 
     config['vflips']=False 
-    config['train_loss'] = 'focal'
-    config['test_losses'] = ['focal'] #['cce','focal']
     config['max_steps'] = 50000
     #config['max_steps'] = 15000
     config['early_stopping'] = False
