@@ -10,6 +10,11 @@ class BlurPool2D(tf.keras.layers.Layer):
 
         super(BlurPool2D, self).__init__(**kwargs)
 
+    def get_config(self):
+        config = super().get_config().copy()
+        config.update({'pool_size':self.pool_size,'kernel_size':self.kernel_size})
+        return config
+
     def build(self, input_shape):
 
         if self.kernel_size == 3:

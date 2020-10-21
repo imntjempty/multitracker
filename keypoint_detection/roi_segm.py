@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from multiprocessing import Pool
 from datetime import datetime 
 from IPython.display import clear_output
-from multitracker.keypoint_detection import model , unet, heatmap_drawing, focus_augmentation
+from multitracker.keypoint_detection import model , unet, heatmap_drawing, focus_augmentation, stacked_hourglass
 from multitracker.be import video 
 import cv2 as cv 
 from glob import glob 
@@ -312,6 +312,8 @@ def train(config):
         checkpoint_path = os.path.expanduser("~/checkpoints/experiments/%s/B/%s-%s" % (config['project_name'], ['random','imagenet'][int(config['should_init_pretrained'])] , now))
     elif config['experiment'] == 'C':
         checkpoint_path = os.path.expanduser("~/checkpoints/experiments/%s/C/%s-%s" % (config['project_name'], config['backbone'] , now))
+        if config['num_hourglass'] > 1:
+            checkpoint_path = checkpoint_path.replace('/C/','/C/hourglass-%i-'%config['num_hourglass'])
     elif config['experiment'] == 'D':
         checkpoint_path = os.path.expanduser("~/checkpoints/experiments/%s/D/%s-%s" % (config['project_name'], config['train_loss'] , now))
         

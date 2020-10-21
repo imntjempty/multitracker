@@ -23,9 +23,12 @@ def experiment_c(args):
     config['lr'] = 1e-4
 
     #for backbone in ['vgg16','efficientnetLarge','psp']:
-    for backbone in ['psp']:
+    for backbone in ['hourglass4']:
         print('[*] starting sub experiment backbone %s' % backbone)
         config['backbone'] = backbone
+        if 'hourglass' in config['backbone']:
+            config['num_hourglass'] = int(config['backbone'][9:])
+            config['backbone'] = 'efficientnetLarge'
         print(config,'\n')
         checkpoint_path = roi_segm.train(config)
         
