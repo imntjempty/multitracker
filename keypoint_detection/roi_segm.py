@@ -364,7 +364,7 @@ def train(config):
             # test data
             nt = 0
             for xt,yt in dataset_test:
-                predicted_test = net(xt,training=False)[0]
+                predicted_test = net(xt,training=False)[-1]
                 if not predicted_test.shape[1] == yt.shape[1]:
                     predicted_test = tf.image.resize(predicted_test, x.shape[1:3]) 
 

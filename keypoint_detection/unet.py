@@ -157,7 +157,7 @@ def get_efficientB6_model(config):
 def get_decoded(config, encoder, encoded_layer_names):
     encoded_layers = []
     for i , l in enumerate(encoder.layers):
-        l.trainable = True
+        #l.trainable = True
         if l.name in encoded_layer_names:
             encoded_layers.append(l.output)
             #print('efficient',i, l.output.shape, l.name )
