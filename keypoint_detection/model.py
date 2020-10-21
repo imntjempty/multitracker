@@ -464,6 +464,7 @@ def get_config(project_id = 3):
     #config['loss'] = ['l1','dice','focal','normed_l1','l2'][2]
     #if config['loss'] == 'l2':
     #    config['lr'] = 2e-4
+    config['blurpool'] = True
     config['autoencoding'] = [False, True][0]
     config['pretrained_encoder'] = [False,True][1]
 

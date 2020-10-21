@@ -13,6 +13,7 @@
 import tensorflow as tf 
 import tensorflow_addons as tfa
 from multitracker.keypoint_detection.nets import upsample, EncoderPretrained, Encoder, Decoder, EncoderScratch
+from multitracker.keypoint_detection.blurpool import BlurPool2D
 
 def BottleneckBlock(inputs, filters, strides=1, downsample=False, name=None):
     inb = inputs
@@ -23,20 +24,26 @@ def BottleneckBlock(inputs, filters, strides=1, downsample=False, name=None):
     b = upsample(filters,1,1,norm_type=None,act=None)(b)
     return inb + b 
 
-def hourglass(inputs, level, filters):
-    up = BottleneckBlock(inputs, filters, downsample = False)
-    up = BottleneckBlock(up, filters, downsample = False)
-    low = tf.keras.layers.MaxPool2D(pool_size = 2, strides = 2)(inputs)
-    low = BottleneckBlock(low, filters, downsample = False)
-    if level > 1:
-        low = hourglass(low, level-1, filters)
+def hourglass(config,inputs, level, filters):
+    up = BottleneckBlock(inputs, filters)
+    up = BottleneckBlock(up, filters)
+    if config['blurpool']:
+        low = BlurPool2D()(inputs)
     else:
-        low = BottleneckBlock(low, filters, downsample = False)
-    low = BottleneckBlock(low, filters, downsample = False)
+        low = tf.keras.layers.MaxPool2D(pool_size = 2, strides = 2)(inputs)
+    low = BottleneckBlock(low, filters)
+    if level > 1:
+        low = hourglass(config, low, level-1, filters)
+    else:
+        low = BottleneckBlock(low, filters)
+    low = BottleneckBlock(low, filters)
     lowup = tf.keras.layers.UpSampling2D(size=2)(low)
     return up + lowup
 
 def get_model(config):
+    if not 'blurpool' in config:
+        config['blurpool'] = False 
+        
     inputs = tf.keras.layers.Input(shape=(config['img_height'], config['img_width'], 3))
     
     from tensorflow.keras.applications import EfficientNetB6
@@ -49,7 +56,7 @@ def get_model(config):
     x = upsample(filters,1,1,norm_type=None,act=None)(encoding.output) 
     x = BottleneckBlock(x, filters)
     for i in range(config['num_hourglass']):
-        x = hourglass(x, 3, filters) 
+        x = hourglass(config, x, 3, filters) 
         x = upsample(filters,1,1)(x)
         y = upsample(1+len(config['keypoint_names']),1,1,norm_type=None,act=tf.keras.layers.Activation('softmax'))(x)  
         ybig = tf.keras.layers.Lambda( lambda image: tf.image.resize(image,(config['img_height'], config['img_width']),method = tf.image.ResizeMethod.BICUBIC))(y)
@@ -59,7 +66,7 @@ def get_model(config):
         if i < config['num_hourglass']:
             x = upsample(filters,1,1,norm_type=None,act=None)(x) + upsample(filters,1,1,norm_type=None,act=None)(y)
     
-    model = tf.keras.Model(inputs,outputs,name="ErfnetHourglass")
+    model = tf.keras.Model(inputs,outputs,name="StackedHourglass")
     return model 
 
 
@@ -163,5 +170,6 @@ def get_model_erfnet_pretrained(config, norm_type = "batchnorm"):
 
 if __name__ == "__main__":
     config = {'img_height': 224, 'img_width': 224, 'num_hourglass': 4, 'keypoint_names': 11*'a'}
+    config['blurpool'] = bool(0)
     model = get_model(config)
     model.summary()
