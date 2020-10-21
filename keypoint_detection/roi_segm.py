@@ -336,11 +336,14 @@ def train(config):
 
     def train_step(inp, y, writer_train, writer_test, global_step, should_summarize = False):
         with tf.GradientTape(persistent=True) as tape:
-            predicted_heatmaps = net(inp,training=True)[0]
-            if config['train_loss'] == 'focal':
-                loss = calc_focal_loss(y,predicted_heatmaps)
-            elif config['train_loss'] == 'cce':
-                loss = calc_cce_loss(y,predicted_heatmaps)
+            all_predicted_heatmaps = net(inp,training=True)
+            loss = 0.0
+            for predicted_heatmaps in all_predicted_heatmaps:
+                if config['train_loss'] == 'focal':
+                    loss += calc_focal_loss(y,predicted_heatmaps)
+                elif config['train_loss'] == 'cce':
+                    loss += calc_cce_loss(y,predicted_heatmaps)
+            loss = loss / float(len(all_predicted_heatmaps))
 
         # clipped gradients
         gradients = tape.gradient(loss,net.trainable_variables)
