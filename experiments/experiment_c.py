@@ -22,8 +22,8 @@ def experiment_c(args):
     config['rotation_augmentation'] = bool(0)
     config['lr'] = 1e-4
 
-    #for backbone in ['vgg16','efficientnetLarge']:
-    for backbone in ['vgg16']:
+    #for backbone in ['vgg16','efficientnetLarge','psp']:
+    for backbone in ['psp']:
         print('[*] starting sub experiment backbone %s' % backbone)
         config['backbone'] = backbone
         print(config,'\n')

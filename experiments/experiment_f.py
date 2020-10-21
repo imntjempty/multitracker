@@ -12,6 +12,7 @@ def experiment_f(args):
     config = model.get_config(args.project_id)
     config['video_id'] = int(args.video_id)
     config['experiment'] = 'F'
+    config['maxsteps_objectdetection'] = 50000
 
     #for od_backbone in ['fasterrcnn','ssd']:
     for od_backbone in ['fasterrcnn']:

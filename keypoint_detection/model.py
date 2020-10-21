@@ -487,7 +487,7 @@ def get_config(project_id = 3):
 
     config['keypoint_names'] = db.get_keypoint_names(config['project_id'])
 
-    config['backbone'] = ["vgg16","efficientnet","efficientnetLarge"][2]
+    config['backbone'] = ["vgg16","efficientnet","efficientnetLarge",'psp'][2]
     config['object_detection_backbone'] = ['ssd','fasterrcnn'][0]
     config['object_detection_backbonepath'] = {
         'ssd': 'ssd_resnet50_v1_fpn_640x640_coco17_tpu-8',
