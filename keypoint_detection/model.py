@@ -464,6 +464,7 @@ def get_config(project_id = 3):
     #config['loss'] = ['l1','dice','focal','normed_l1','l2'][2]
     #if config['loss'] == 'l2':
     #    config['lr'] = 2e-4
+    config['blurpool'] = True
     config['autoencoding'] = [False, True][0]
     config['pretrained_encoder'] = [False,True][1]
 
@@ -472,7 +473,7 @@ def get_config(project_id = 3):
     config['hflips'] = [False,True][1]
     config['vflips'] = [False,True][1]
     config['rotation_augmentation'] = bool(1)
-    config['num_hourglass'] = 1 #8
+    config['num_hourglass'] = 4 #8
     config['fov'] = 0.75 # default 0.5
     config['selftrain_start_step'] = 10000
     config['n_blocks'] = 5

@@ -292,8 +292,11 @@ def train(config):
     dataset_train = load_roi_dataset(config,mode='train')
     dataset_test = load_roi_dataset(config,mode='test')
 
-    net = unet.get_model(config) # outputs: keypoints + background
-    
+    if config['num_hourglass'] == 1:
+        net = unet.get_model(config) # outputs: keypoints + background
+    else:
+        net = stacked_hourglass.get_model(config)
+        
     # decaying learning rate 
     decay_steps, decay_rate = 3000, 0.95
     lr = tf.keras.optimizers.schedules.ExponentialDecay(config['lr'], decay_steps, decay_rate)
@@ -336,11 +339,14 @@ def train(config):
 
     def train_step(inp, y, writer_train, writer_test, global_step, should_summarize = False):
         with tf.GradientTape(persistent=True) as tape:
-            predicted_heatmaps = net(inp,training=True)[0]
-            if config['train_loss'] == 'focal':
-                loss = calc_focal_loss(y,predicted_heatmaps)
-            elif config['train_loss'] == 'cce':
-                loss = calc_cce_loss(y,predicted_heatmaps)
+            all_predicted_heatmaps = net(inp,training=True)
+            loss = 0.0
+            for predicted_heatmaps in all_predicted_heatmaps:
+                if config['train_loss'] == 'focal':
+                    loss += calc_focal_loss(y,predicted_heatmaps)
+                elif config['train_loss'] == 'cce':
+                    loss += calc_cce_loss(y,predicted_heatmaps)
+            loss = loss / float(len(all_predicted_heatmaps))
 
         # clipped gradients
         gradients = tape.gradient(loss,net.trainable_variables)
