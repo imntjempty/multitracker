@@ -4,7 +4,7 @@ import tensorflow as tf
 from tensorflow.keras.backend import clear_session
 from multitracker.keypoint_detection import model, roi_segm
 
-def experiment_c(args):
+def experiment_c(args, max_steps = 50000):
     print('[*] starting experiment C: keypoint estimation test loss/inference speed: EfficientNet vs VGG16')
     config = model.get_config(args.project_id)
     model.create_train_dataset(config)
@@ -14,21 +14,19 @@ def experiment_c(args):
     config['mixup']=False
     config['hflips']=False 
     config['vflips']=False 
+    config['blurpool'] = False
     config['train_loss'] = 'focal'
     config['test_losses'] = ['focal'] #['cce','focal']
-    config['max_steps'] = 50000
+    config['max_steps'] = max_steps
     #config['max_steps'] = 15000
     config['early_stopping'] = False
     config['rotation_augmentation'] = bool(0)
     config['lr'] = 1e-4
 
-    #for backbone in ['vgg16','efficientnetLarge','psp']:
-    for backbone in ['hourglass4']:
+    #for backbone in ['hourglass2']:
+    for backbone in ['vgg16','efficientnetLarge','psp']:
         print('[*] starting sub experiment backbone %s' % backbone)
         config['backbone'] = backbone
-        if 'hourglass' in config['backbone']:
-            config['num_hourglass'] = int(config['backbone'][9:])
-            config['backbone'] = 'efficientnetLarge'
         print(config,'\n')
         checkpoint_path = roi_segm.train(config)
         

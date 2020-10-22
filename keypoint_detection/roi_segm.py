@@ -286,6 +286,9 @@ def inference_heatmap(config, trained_model, frame, bounding_boxes):
 def train(config):
     #config['cutmix'] = False
     #config['mixup'] = True
+    if 'hourglass' in config['backbone']:
+        config['num_hourglass'] = int(config['backbone'][9:])
+        config['backbone'] = 'efficientnetLarge'
     print('[*] config', config)
     
     

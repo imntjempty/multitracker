@@ -4,7 +4,7 @@ import tensorflow as tf
 from tensorflow.keras.backend import clear_session
 from multitracker.keypoint_detection import model, roi_segm
 
-def experiment_d(args):
+def experiment_d(args, max_steps = 50000):
     print('[*] starting experiment D: keypoint estimation categorical cross entropy / focal loss test trained with categorical cross entropy and focal loss')
     config = model.get_config(args.project_id)
     model.create_train_dataset(config)
@@ -15,7 +15,9 @@ def experiment_d(args):
     config['mixup']=False
     config['hflips']=False 
     config['vflips']=False 
-    config['max_steps'] = 50000
+    config['blurpool'] = False
+    config['max_steps'] = max_steps
+    config['backbone'] = 'hourglass2'
     #config['max_steps'] = 15000
     config['early_stopping'] = False
     config['rotation_augmentation'] = bool(0)
