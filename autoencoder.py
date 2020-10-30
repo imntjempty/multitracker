@@ -19,6 +19,7 @@ from tensorflow.keras import backend as K
 from datetime import datetime
 
 from multitracker.be import dbconnection
+from multitracker.keypoint_detection.blurpool import BlurPool2D
 
 n_latentcode = 256
 
@@ -64,9 +65,10 @@ def downsample_stridedconv(filters, size, norm_type='batchnorm', apply_norm=True
 
   result = tf.keras.Sequential()
   result.add(
-      Conv2D(filters, size, strides=2, padding='same',
+      Conv2D(filters, size, strides=1, padding='same',
                              kernel_initializer=initializer, use_bias=False))
 
+  result.add(BlurPool2D())
   if apply_norm:
     if norm_type.lower() == 'batchnorm':
       result.add(tf.keras.layers.BatchNormalization())
