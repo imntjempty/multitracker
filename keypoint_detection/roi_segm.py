@@ -25,12 +25,16 @@ db = dbconnection.DatabaseConnection()
 
 focal_loss = tfa.losses.SigmoidFocalCrossEntropy(False)
 cce_loss = tf.keras.losses.CategoricalCrossentropy(False)
+l2_loss = tf.keras.losses.MeanSquaredError()
 
 def calc_focal_loss(ytrue,ypred):
     return tf.reduce_mean( focal_loss(ytrue, ypred))
 
 def calc_cce_loss(ytrue, ypred):
     return tf.reduce_mean( cce_loss(ytrue, ypred) )
+
+def calc_l2_loss(ytrue, ypred):
+    return tf.reduce_mean( l2_loss(ytrue, ypred) )
 
 def calc_accuracy(config, ytrue, ypred):
     correct_prediction = tf.equal(tf.argmax(ytrue,3),tf.argmax(ypred,3))
@@ -351,6 +355,8 @@ def train(config):
                     loss += calc_focal_loss(y,predicted_heatmaps)
                 elif config['train_loss'] == 'cce':
                     loss += calc_cce_loss(y,predicted_heatmaps)
+                elif config['train_loss'] == 'l2':
+                    loss += calc_l2_loss(y,predicted_heatmaps)
             loss = loss / float(len(all_predicted_heatmaps))
 
         # clipped gradients
@@ -448,6 +454,11 @@ def train(config):
                     x,y = model.hflip(swaps,x,y)
                 if np.random.random() < 0.5 and config['vflips']:
                     x,y = model.vflip(swaps,x,y)
+                if np.random.random() < 0.5 and 'rot90s' in config and config['rot90s']:
+                    _num_rots = int(np.random.uniform(4))
+                    for ir in range(_num_rots):
+                        x = tf.image.rot90(x)
+                        y = tf.image.rot90(y)
                 if 1:        
                     # mixup augmentation
                     if np.random.random() < 0.5:
@@ -476,7 +487,7 @@ def train(config):
                     print('[*] stopping keypoint estimation after step %i, because computational budget run out.' % n)
                     finish = True 
                 
-                if n>20000 and 'test_loss' in step_result and config['early_stopping'] and len(test_losses) > 3:
+                if n>config['min_steps_keypoints'] and 'test_loss' in step_result and config['early_stopping'] and len(test_losses) > 3:
                     # early stopping        
                     if step_result['test_loss'] > test_losses[-2] and step_result['test_loss'] > test_losses[-3] and step_result['test_loss'] > test_losses[-4] and min(test_losses[:-1]) < 1.5*test_losses[-1]:
                         finish = True 
@@ -486,8 +497,9 @@ def train(config):
                     ckpt_save_path = ckpt_manager.save()
                     print('[*] saving model to %s'%ckpt_save_path)
                     net.save(os.path.join(checkpoint_path,'trained_model.h5'))
-                    return os.path.join(checkpoint_path,'trained_model.h5') 
-            
+                    #return os.path.join(checkpoint_path,'trained_model.h5') 
+                    return checkpoint_path 
+
                 n+=1
         #except Exception as e:
         #    print('step',n,'\n',e)
