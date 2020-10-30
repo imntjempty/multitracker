@@ -336,7 +336,7 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
             roi = frame_kp[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:]
             roi = tf.image.resize(roi,[224,224])
             roi = tf.expand_dims(tf.convert_to_tensor(roi),axis=0)
-            yroi = keypoint_model(roi, training=False).numpy()
+            yroi = keypoint_model(roi, training=False)[-1].numpy()
             yroi = yroi[0,:,:,:]
             yroi = cv.resize(yroi,(crop_dim//2*2,crop_dim//2*2))
             

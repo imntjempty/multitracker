@@ -13,10 +13,11 @@ import h5py
 from multitracker import util 
 from multitracker.keypoint_detection import heatmap_drawing, model 
 from multitracker.keypoint_detection import predict
+from multitracker.keypoint_detection.blurpool import BlurPool2D
 
 def load_model(path_model):
     t0 = time.time()
-    trained_model = tf.keras.models.load_model(h5py.File(os.path.join(path_model,'trained_model.h5'), 'r'))
+    trained_model = tf.keras.models.load_model(h5py.File(os.path.join(path_model,'trained_model.h5'), 'r'),custom_objects={'BlurPool2D':BlurPool2D})
     t1 = time.time()
     print('[*] loaded keypoint model from %s in %f seconds.' %(path_model,t1-t0))
     return trained_model 

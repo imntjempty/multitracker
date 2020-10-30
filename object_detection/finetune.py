@@ -569,7 +569,7 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
                         writer_test.flush()
 
                     # check for early stopping -> stop training if test loss is increasing
-                    if idx==config['maxsteps_objectdetection'] or (config['early_stopping'] and len(test_losses) > 3 and test_loss > test_losses[-2] and test_loss > test_losses[-3] and test_loss > test_losses[-4] and min(test_losses[:-1]) < 1.5*test_losses[-1]):
+                    if idx==config['maxsteps_objectdetection'] or (idx>config['minsteps_objectdetection'] and config['early_stopping'] and len(test_losses) > 3 and test_loss > test_losses[-2] and test_loss > test_losses[-3] and test_loss > test_losses[-4] and min(test_losses[:-1]) < 1.5*test_losses[-1]):
                         early_stopping = True 
                         print('[*] stopping object detection early at step %i, epoch %i, because current test loss %f is higher than previous %f and %f' % (idx, epoch, test_loss, test_losses[-2], test_losses[-3]))
                         ckpt_saver = tf.compat.v2.train.Checkpoint(detection_model=detection_model)
