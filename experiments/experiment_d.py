@@ -23,7 +23,8 @@ def experiment_d(args, max_steps = 50000):
     config['rotation_augmentation'] = bool(0)
     config['lr'] = 1e-4
 
-    for loss_name in ['focal','cce']:
+    #for loss_name in ['focal','cce','l2']:
+    for loss_name in ['cce','l2']:
         print('[*] starting sub experiment loss function %s' % loss_name)
         config['train_loss'] = loss_name
         
