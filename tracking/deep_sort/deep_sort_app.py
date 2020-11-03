@@ -235,7 +235,7 @@ def append_crop_mosaic(frame, vis_crops):
 #def run(config, detection_file, output_file, min_confidence,
 #        nms_max_overlap, max_cosine_distance,
 #        nn_budget, display):
-def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_confidence,
+def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_confidence, min_confidence_keypoints,
         nms_max_overlap, max_cosine_distance,
         nn_budget, display):
             
@@ -341,7 +341,10 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
             yroi = cv.resize(yroi,(crop_dim//2*2,crop_dim//2*2))
             
             y_kpheatmaps[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:] = yroi
-        keypoints = get_heatmaps_keypoints(y_kpheatmaps, thresh_detection=0.5)
+        if 0:
+            for ik, keypoint_name in enumerate(config['keypoint_names']):
+                print('HM',ik,keypoint_name,'minmax',y_kpheatmaps[:,:,ik].min(),y_kpheatmaps[:,:,ik].max(),'meanstd',y_kpheatmaps[:,:,ik].mean(),y_kpheatmaps[:,:,ik].std())
+        keypoints = get_heatmaps_keypoints(y_kpheatmaps, thresh_detection=min_confidence_keypoints)
         print('%i detections. %i keypoints' % (len(detections), len(keypoints)),[kp for kp in keypoints])
 
         # update tracked keypoints with new detections

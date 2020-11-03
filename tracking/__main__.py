@@ -17,7 +17,7 @@ from multitracker.keypoint_detection import heatmap_drawing, model , roi_segm
 from multitracker.keypoint_detection import predict 
 from multitracker.tracking.inference import load_model as load_keypoint_model
 from multitracker.tracking.inference import load_data, load_model, get_heatmaps_keypoints
-from multitracker.keypoint_detection.roi_segm import inference_heatmap, get_center
+from multitracker.keypoint_detection.roi_segm import get_center
 from multitracker.tracking.tracklets import get_tracklets
 from multitracker.tracking.clustering import get_clustlets
 from multitracker.object_detection import finetune
@@ -117,8 +117,9 @@ def main(args):
     nn_budget = None # Maximum size of the appearance descriptors gallery. If None, no budget is enforced.
     display = True # dont write vis images
 
+    print(config)
     deep_sort_app.run(config, detection_model, encoder_model, keypoint_model, output_dir, 
-            min_confidence, nms_max_overlap, max_cosine_distance, nn_budget, display)
+            args.min_confidence_boxes, args.min_confidence_keypoints, nms_max_overlap, max_cosine_distance, nn_budget, display)
     
     video_file = os.path.join(video.get_project_dir(video.base_dir_default, config['project_id']),'tracking_%s_vis%i.mp4' % (config['project_name'],config['video_id']))
     
@@ -130,6 +131,7 @@ def convert_video_h265(video_in, video_out):
     if os.path.isfile(video_out):
         os.remove(video_out)
     subprocess.call(['ffmpeg','-i',video_in, '-c:v','libx265','-preset','ultrafast',video_out])
+    os.remove(video_file.replace('.mp4','.avi'))
 
 if __name__ == '__main__':
     import argparse
@@ -140,7 +142,8 @@ if __name__ == '__main__':
     parser.add_argument('--project_id',required=True,type=int)
     parser.add_argument('--video_id',required=True,type=int)
     parser.add_argument('--minutes',required=False,default=0.0,type=float)
-    parser.add_argument('--thresh_detection',required=False,default=0.5,type=float)
+    parser.add_argument('--min_confidence_boxes',required=False,default=0.5,type=float)
+    parser.add_argument('--min_confidence_keypoints',required=False,default=0.5,type=float)
     #parser.add_argument('--fixed_number',required=False,default=4,type=int)
     args = parser.parse_args()
     
