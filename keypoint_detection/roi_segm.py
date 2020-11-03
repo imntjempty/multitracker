@@ -184,21 +184,21 @@ def load_roi_dataset(config,mode='train',batch_size=None):
     #mean_rgb = calc_mean_rgb(config)
     hroi,wroicomp = cv.imread(glob(os.path.join(config['roi_dir'],'train','*.png'))[0]).shape[:2]
     wroi = hroi#wroicomp // (1+len(config['keypoint_names'])//3)
-    #print('wroi',hroi,wroicomp,wroi,'->',wroicomp//wroi)
     h = hroi #int(hroi * 0.98)
-    #config['img_height'] = 224
-    #config['img_width'] = 224
-
+    if 1:
+        print('wroi',hroi,wroicomp,wroi,'->',wroicomp//wroi)
     def load_im(image_file):
         image = tf.io.read_file(image_file)
         image = tf.image.decode_png(image,channels=3)
         image = tf.cast(image,tf.float32)
         
         comp = [ image[:,ii*wroi:(ii+1)*wroi,:] for ii in range(wroicomp//wroi)] # from hstacked to depth stacked
+        comp = [comp[0]] + [c[:,:,::-1] for c in comp[1:]] # keypoint heatmaps are in BGR not RGB
+
         # preprocess rgb image 
         comp[0] = unet.preprocess(config, comp[0])
         comp = tf.concat(comp,axis=2)
-        comp = comp[:,:,:(3+len(config['keypoint_names']))]
+        comp = comp[:,:,:(3+len(config['keypoint_names']))] # cut 'overhanging' channels, that were filled up to reach 3channel png image
         hh = h 
         if mode == 'train' and config['rotation_augmentation']:
             # random scale augmentation
@@ -273,7 +273,6 @@ def inference_heatmap(config, trained_model, frame, bounding_boxes):
 
         # crop region around center of bounding box
         center = get_center(x1,y1,x2,y2, H, W, crop_dim)
-        
         roi = frame[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:]
         roi = tf.image.resize(roi,[config['img_height'],config['img_width']])
         roi = tf.expand_dims(tf.convert_to_tensor(roi),axis=0)
@@ -402,6 +401,10 @@ def train(config):
                     im_summary('image',inp/256.)
                     for kk, keypoint_name in enumerate(config['keypoint_names']):
                         im_summary('heatmap_%s' % keypoint_name, tf.concat((tf.expand_dims(y[:,:,:,kk],axis=3), tf.expand_dims(predicted_heatmaps[:,:,:,kk],axis=3)),axis=2))
+                        tf.summary.scalar(keypoint_name+'_gt_min',tf.reduce_min(y[:,:,:,kk]),step=global_step)
+                        tf.summary.scalar(keypoint_name+'_gt_max',tf.reduce_max(y[:,:,:,kk]),step=global_step)
+                        tf.summary.scalar(keypoint_name+'_pr_min',tf.reduce_min(predicted_heatmaps[:,:,:,kk]),step=global_step)
+                        tf.summary.scalar(keypoint_name+'_pr_max',tf.reduce_max(predicted_heatmaps[:,:,:,kk]),step=global_step)
                     im_summary('background', tf.concat((tf.expand_dims(y[:,:,:,-1],axis=3),tf.expand_dims(predicted_heatmaps[:,:,:,-1],axis=3)),axis=2))
                     
                     tf.summary.scalar("learning rate", lr(global_step), step = global_step)
@@ -455,7 +458,7 @@ def train(config):
                 if np.random.random() < 0.5 and config['vflips']:
                     x,y = model.vflip(swaps,x,y)
                 if np.random.random() < 0.5 and 'rot90s' in config and config['rot90s']:
-                    _num_rots = int(np.random.uniform(4))
+                    _num_rots = 1+int(np.random.uniform(3))
                     for ir in range(_num_rots):
                         x = tf.image.rot90(x)
                         y = tf.image.rot90(y)
@@ -471,7 +474,7 @@ def train(config):
                                 x, y = model.mixup(x,y)
                     #x = focus_augmentation.out_of_focus_augment(x, proba = 0.5)
 
-                should_summarize=n%100==0
+                should_summarize=n%200==0
                 step_result = train_step(x, y, writer_train, writer_test, n, should_summarize=should_summarize)
                 
                 if n % 2000 == 0:

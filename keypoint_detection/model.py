@@ -1,3 +1,4 @@
+
 """
 
     python3.7 -m multitracker.keypoint_detection.model --project_id 7 --video_id 9
@@ -452,11 +453,12 @@ def train(config):
 
 # </train>
 def get_config(project_id = 3):
-    config = {'batch_size': 16}
+    config = {'batch_size': 8}
     config.update({'img_height': 224,'img_width': 224})
     #config.update({'img_height': 512,'img_width': 512})
     config['epochs'] = 1000000
-    config['max_steps'] = 40000
+    config['max_steps'] = 200000
+    config['min_steps_keypoints'] = 50000
     config['max_hours'] = 30.
     config['lr'] = 2e-5 * 5   *5 *2.
     config['lr'] = 2e-5
@@ -468,11 +470,12 @@ def get_config(project_id = 3):
     config['autoencoding'] = [False, True][0]
     config['pretrained_encoder'] = [False,True][1]
 
-    config['mixup'] = [False, True][1]
+    config['mixup'] = [False, True][0]
     config['cutmix'] = [False, True][0]
     config['hflips'] = [False,True][1]
     config['vflips'] = [False,True][1]
     config['rotation_augmentation'] = bool(1)
+    config['rot90s'] = bool(1)
     config['num_hourglass'] = 4 #8
     config['fov'] = 0.75 # default 0.5
     config['selftrain_start_step'] = 10000
@@ -496,7 +499,8 @@ def get_config(project_id = 3):
     }[config['object_detection_backbone']]
     config['object_detection_batch_size'] = {'ssd': 16, 'fasterrcnn': 4}[config['object_detection_backbone']]
     config['lr_objectdetection'] = 0.0005 
-
+    config['maxsteps_objectdetection'] = 50000
+    config['minsteps_objectdetection'] = 20000
     config['train_loss'] = ['cce','focal'][1]
     config['test_losses'] = ['focal'] #['cce','focal']
 
