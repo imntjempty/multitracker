@@ -124,7 +124,7 @@ def write_crop_to_disk(obj):
             roi_comp = np.hstack(rois)
             #if min(roi_comp.shape[:2])>1:
             
-            f_roi = os.path.join(config['roi_dir'],_mode,'%s_%i.png' % (obj['frame_idx'], j))
+            f_roi = os.path.join(config['roi_dir'],_mode,'%i_%s_%i.png' % (obj['video_id'], obj['frame_idx'], j))
             if np.min(roi_comp.shape[:2])>=3:# and roi_comp.shape[1]==(len_parts * crop_dim):
                 cv.imwrite(f_roi, roi_comp)
                     
@@ -187,7 +187,7 @@ def load_roi_dataset(config,mode='train',batch_size=None):
                 for i, frame_idx in enumerate(frame_bboxes.keys()):
                     frame_bboxes[frame_idx] = np.array(frame_bboxes[frame_idx]) 
                     f = os.path.join(image_directory,'%i_%s.png' % (_video_id,frame_idx)) 
-                    obj = {'Hframe':Hframe,'Hcomp':Hcomp,'w':w,'f':f,'config':config,'crop_dim_extended':crop_dim_extended,'len_parts':len_parts,'frame_idx':frame_idx,'boxes':frame_bboxes[frame_idx]}
+                    obj = {'Hframe':Hframe,'Hcomp':Hcomp,'w':w,'f':f, 'video_id':_video_id, 'config':config,'crop_dim_extended':crop_dim_extended,'len_parts':len_parts,'frame_idx':frame_idx,'boxes':frame_bboxes[frame_idx]}
                     result_objs.append(pool.apply_async(write_crop_to_disk,(obj,)))
                     #write_crop_to_disk(obj)
                     
