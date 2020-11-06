@@ -193,7 +193,12 @@ def create_train_dataset(config):
         max_height = None 
         if 'max_height' in config:
             max_height = config['max_height']
-        heatmap_drawing.randomly_drop_visualiztions(config['project_id'], config['video_id'], dst_dir=config['data_dir'],max_height=max_height)
+        if not 'train_video_ids' in config or config['train_video_ids'] == '':
+            heatmap_drawing.randomly_drop_visualiztions(config['project_id'], config['video_id'], dst_dir=config['data_dir'],max_height=max_height)
+        else:
+            for _video_id in config['train_video_ids'].split(','):
+                print('dropping for video',_video_id)
+                heatmap_drawing.randomly_drop_visualiztions(config['project_id'], int(_video_id), dst_dir=config['data_dir'],max_height=max_height)
         
 
         if 0:
@@ -471,7 +476,7 @@ def get_config(project_id = 3):
     config['pretrained_encoder'] = [False,True][1]
 
     config['mixup'] = [False, True][0]
-    config['cutmix'] = [False, True][0]
+    config['cutmix'] = [False, True][1]
     config['hflips'] = [False,True][1]
     config['vflips'] = [False,True][1]
     config['rotation_augmentation'] = bool(1)

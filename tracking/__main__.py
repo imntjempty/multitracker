@@ -1,4 +1,10 @@
 
+"""
+    main program to track animals and their corresponding limbs on a video file
+
+    python3.7 -m multitracker.tracking --project_id 7 --video_id 13 --objectdetection_model ~/checkpoints/bbox_detection/MiceTop_vid9/2020-10-28_01-15-29 --autoencoder_model ~/checkpoints/multitracker_ae_bbox/MiceTop/2020-10-28_08-04-51 --keypoint_model /home/alex/checkpoints/roi_keypoint/MiceTop-2020-11-03_01-02-15
+"""
+
 import os
 import numpy as np 
 import tensorflow as tf 
@@ -34,8 +40,10 @@ def main(args):
     config['keypoint_model'] = args.keypoint_model
     config['autoencoder_model'] = args.autoencoder_model 
     config['objectdetection_model'] = args.objectdetection_model
+    config['train_video_ids'] = args.train_video_ids
     config['minutes'] = args.minutes
     config['fixed_number'] = db.get_video_fixednumber(args.video_id) #args.fixed_number
+    config['fixed_number'] = None
     config['n_blocks'] = 4
 
     # <load frames>
@@ -141,6 +149,7 @@ if __name__ == '__main__':
     parser.add_argument('--autoencoder_model', required=False,default=None)
     parser.add_argument('--project_id',required=True,type=int)
     parser.add_argument('--video_id',required=True,type=int)
+    parser.add_argument('--train_video_ids',default='')
     parser.add_argument('--minutes',required=False,default=0.0,type=float)
     parser.add_argument('--min_confidence_boxes',required=False,default=0.5,type=float)
     parser.add_argument('--min_confidence_keypoints',required=False,default=0.5,type=float)

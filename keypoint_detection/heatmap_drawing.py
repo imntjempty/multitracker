@@ -165,7 +165,7 @@ def write_mp(frame_data):
             newW = int(_W * float(frame_data['max_height']) / _H)
             vis = cv.resize(vis,(newW,frame_data['max_height']))
 
-        name = frame_data['frame_idx']
+        name = str(frame_data['video_id'])+'_'+frame_data['frame_idx']
         if 'random_maps' in frame_data and frame_data['random_maps']==True:
             name += '--'+'_'.join([str(int(np.random.uniform(1e4))) for _ in range(5)])
             
@@ -216,17 +216,18 @@ def randomly_drop_visualiztions(project_id, video_id, dst_dir = '/tmp/keypoint_h
         frame_idxs = frame_idxs[:min(num,len(frame_idxs))]
 
     for mode in ['train','test']:
-            mode_dir = os.path.join(dst_dir,mode)
-            if not os.path.isdir(mode_dir):
-                os.makedirs(mode_dir)
+        mode_dir = os.path.join(dst_dir,mode)
+        if not os.path.isdir(mode_dir):
+            os.makedirs(mode_dir)
 
     frames_dir = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, project_id), video_id))
     with Pool(processes=os.cpu_count()) as pool:
         result_objs=[]
         for i, frame_idx in enumerate(frame_data.keys()):
-            result = pool.apply_async(write_mp,({'frame_idx':frame_idx,'frame_data':frame_data[frame_idx], 'frames_dir': frames_dir, 'project_id':project_id, 'video_id':video_id, 'random_maps':random_maps, 'dst_dir':dst_dir, 'keypoint_names':keypoint_names, 'horistack':horistack,'max_height':max_height},))
-            #write_mp({'frame_idx':frame_idx,'frame_data':frame_data[frame_idx], 'project_id':project_id, 'video_id':video_id, 'dst_dir':dst_dir, 'keypoint_names':keypoint_names, 'horistack':horistack,'max_height':max_height})
-            result_objs.append(result)
+            obj = {'frame_idx':frame_idx,'frame_data':frame_data[frame_idx], 'frames_dir': frames_dir, 'project_id':project_id, 'video_id':video_id, 'random_maps':random_maps, 'dst_dir':dst_dir, 'keypoint_names':keypoint_names, 'horistack':horistack,'max_height':max_height}
+            result_objs.append(pool.apply_async(write_mp,(obj,)))
+            #write_mp(obj)
+
         results = [result.get() for result in result_objs]
 
 if __name__ == '__main__':

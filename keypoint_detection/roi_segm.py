@@ -85,13 +85,36 @@ def write_crop_to_disk(obj):
         f = f.replace('/train/','/test/')
         im = cv.imread( f )
         _mode = 'test'
-    
     parts = [ im[:,ii*w:(ii+1)*w,:] for ii in range(obj['len_parts'] )]
     #print(i,frame_idx,'boxes',frame_bboxes[frame_idx])
     # scale to fit max_height
     #print('scaling',frame_bboxes[frame_idx][0],'to',(Hcomp/Hframe) * frame_bboxes[frame_idx][0])
     obj['boxes'] = (Hcomp/Hframe) * obj['boxes']
     
+    add_backgrounds = True
+    #obj['boxes'] = [] # WARNING! only for bg debug
+    if add_backgrounds: 
+        ## add 3 random background patches without keypoints
+        num_random_backgrounds = 3 
+        while num_random_backgrounds > 0:
+            #random_box = sorted(tuple(np.int32(np.around(np.random.uniform(0,im.shape[1]))))) + sorted(tuple(np.int32(np.around(np.random.uniform(0,im.shape[0])))))
+            #random_box = [random_box[2],random_box[0],random_box[3],random_box[1]] # (x1,x2,y1,y2)=>(y1,x1,y2,x2)
+            rx, ry = int(np.random.uniform(crop_dim_extended//2,im.shape[0]-crop_dim_extended//2)),int(np.random.uniform(crop_dim_extended//2,im.shape[1]-crop_dim_extended//2))
+            random_box = [ry-crop_dim_extended//2,rx-crop_dim_extended//2,ry+crop_dim_extended//2,rx+crop_dim_extended//2]
+
+            # if not overlaying with other boxes, add as background patch
+            overlapping = True 
+            for ii in range(len(obj['boxes'])):    # l1 = randombox, l2 = 
+                positive_box = obj['boxes'][ii]
+                if random_box[1]>=positive_box[3] or positive_box[1]>=random_box[3]:
+                    overlapping = False 
+                elif random_box[0] <= positive_box[2] or positive_box[2] <= random_box[0]:
+                    overlapping = False
+
+            if not overlapping:
+                obj['boxes'] = np.vstack((obj['boxes'],random_box))
+                num_random_backgrounds-=1
+
     for j, (y1,x1,y2,x2) in enumerate(obj['boxes']):
         # crop region around center of bounding box
         center = get_center(x1,y1,x2,y2,im.shape[0], im.shape[1], crop_dim_extended)        
@@ -102,7 +125,7 @@ def write_crop_to_disk(obj):
             #if min(roi_comp.shape[:2])>1:
             
             f_roi = os.path.join(config['roi_dir'],_mode,'%s_%i.png' % (obj['frame_idx'], j))
-            if np.min(roi_comp.shape)>=3:# and roi_comp.shape[1]==(len_parts * crop_dim):
+            if np.min(roi_comp.shape[:2])>=3:# and roi_comp.shape[1]==(len_parts * crop_dim):
                 cv.imwrite(f_roi, roi_comp)
                     
         except Exception as e:
@@ -146,27 +169,31 @@ def load_roi_dataset(config,mode='train',batch_size=None):
         print('[*] creating cropped regions for each animal to train keypoint prediction ...')
         # extract bounding boxes of animals
         # <bboxes>
-        frame_bboxes = {}
-        db.execute("select * from bboxes where video_id=%i;" % config['video_id'])
-        db_boxxes = [x for x in db.cur.fetchall()]
-        shuffle(db_boxxes)
-        for dbbox in db_boxxes:
-            _, _, frame_idx, x1, y1, x2, y2 = dbbox 
-            if not frame_idx in frame_bboxes:
-                frame_bboxes[frame_idx] = [] 
-            frame_bboxes[frame_idx].append(np.array([float(z) for z in [y1,x1,y2,x2]]))
-        
-        with Pool(processes=os.cpu_count()) as pool:
-            result_objs=[]
-            for i, frame_idx in enumerate(frame_bboxes.keys()):
-                frame_bboxes[frame_idx] = np.array(frame_bboxes[frame_idx]) 
-                f = os.path.join(image_directory,'%s.png' % frame_idx) 
-                obj = {'Hframe':Hframe,'Hcomp':Hcomp,'w':w,'f':f,'config':config,'crop_dim_extended':crop_dim_extended,'len_parts':len_parts,'frame_idx':frame_idx,'boxes':frame_bboxes[frame_idx]}
-                result_objs.append(pool.apply_async(write_crop_to_disk,(obj,)))
-                #write_crop_to_disk(obj)
-                
-            results = [result.get() for result in result_objs]
+        for _video_id in config['train_video_ids'].split(','):
+            _video_id = int(_video_id)
+            frame_bboxes = {}
+            db.execute("select * from bboxes where video_id=%i;" % _video_id)
+            db_boxxes = [x for x in db.cur.fetchall()]
+            shuffle(db_boxxes)
+            for dbbox in db_boxxes:
+                _, _, frame_idx, x1, y1, x2, y2 = dbbox 
+                if not frame_idx in frame_bboxes:
+                    frame_bboxes[frame_idx] = [] 
+                frame_bboxes[frame_idx].append(np.array([float(z) for z in [y1,x1,y2,x2]]))
             
+            with Pool(processes=os.cpu_count()) as pool:
+                result_objs=[]
+            
+                for i, frame_idx in enumerate(frame_bboxes.keys()):
+                    frame_bboxes[frame_idx] = np.array(frame_bboxes[frame_idx]) 
+                    f = os.path.join(image_directory,'%i_%s.png' % (_video_id,frame_idx)) 
+                    obj = {'Hframe':Hframe,'Hcomp':Hcomp,'w':w,'f':f,'config':config,'crop_dim_extended':crop_dim_extended,'len_parts':len_parts,'frame_idx':frame_idx,'boxes':frame_bboxes[frame_idx]}
+                    result_objs.append(pool.apply_async(write_crop_to_disk,(obj,)))
+                    #write_crop_to_disk(obj)
+                    
+                results = [result.get() for result in result_objs]
+            
+        with Pool(processes=os.cpu_count()) as pool:
             # check homogenous image sizes
             results_shapefilter = []
             sampled_shapes = []
@@ -401,10 +428,10 @@ def train(config):
                     im_summary('image',inp/256.)
                     for kk, keypoint_name in enumerate(config['keypoint_names']):
                         im_summary('heatmap_%s' % keypoint_name, tf.concat((tf.expand_dims(y[:,:,:,kk],axis=3), tf.expand_dims(predicted_heatmaps[:,:,:,kk],axis=3)),axis=2))
-                        tf.summary.scalar(keypoint_name+'_gt_min',tf.reduce_min(y[:,:,:,kk]),step=global_step)
-                        tf.summary.scalar(keypoint_name+'_gt_max',tf.reduce_max(y[:,:,:,kk]),step=global_step)
-                        tf.summary.scalar(keypoint_name+'_pr_min',tf.reduce_min(predicted_heatmaps[:,:,:,kk]),step=global_step)
-                        tf.summary.scalar(keypoint_name+'_pr_max',tf.reduce_max(predicted_heatmaps[:,:,:,kk]),step=global_step)
+                        #tf.summary.scalar(keypoint_name+'_gt_min',tf.reduce_min(y[:,:,:,kk]),step=global_step)
+                        #tf.summary.scalar(keypoint_name+'_gt_max',tf.reduce_max(y[:,:,:,kk]),step=global_step)
+                        #tf.summary.scalar(keypoint_name+'_pr_min',tf.reduce_min(predicted_heatmaps[:,:,:,kk]),step=global_step)
+                        #tf.summary.scalar(keypoint_name+'_pr_max',tf.reduce_max(predicted_heatmaps[:,:,:,kk]),step=global_step)
                     im_summary('background', tf.concat((tf.expand_dims(y[:,:,:,-1],axis=3),tf.expand_dims(predicted_heatmaps[:,:,:,-1],axis=3)),axis=2))
                     
                     tf.summary.scalar("learning rate", lr(global_step), step = global_step)
