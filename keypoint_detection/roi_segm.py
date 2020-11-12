@@ -334,10 +334,7 @@ def train(config):
     dataset_train = load_roi_dataset(config,mode='train')
     dataset_test = load_roi_dataset(config,mode='test')
 
-    if config['num_hourglass'] == 1:
-        net = unet.get_model(config) # outputs: keypoints + background
-    else:
-        net = stacked_hourglass.get_model(config)
+    net = model.get_model(config) # outputs: keypoints + background
         
     # decaying learning rate 
     decay_steps, decay_rate = 3000, 0.95
