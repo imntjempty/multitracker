@@ -39,9 +39,10 @@ def load_data(project_id,video_id,max_minutes=0):
     return frame_files
 
 def get_heatmaps_keypoints(heatmaps, thresh_detection=0.5):
+    x = np.array(heatmaps,copy=True)
     keypoints = [] 
-    for c in range(heatmaps.shape[2]-1): # dont extract from background channel
-        channel_candidates = predict.extract_frame_candidates(heatmaps[:,:,c], thresh = thresh_detection, pp = int(0.02 * np.min(heatmaps.shape[:2])))
+    for c in range(x.shape[2]-1): # dont extract from background channel
+        channel_candidates = predict.extract_frame_candidates(x[:,:,c], thresh = thresh_detection, pp = int(0.02 * np.min(x.shape[:2])))
         for [px,py,val] in channel_candidates:
             keypoints.append([px,py,c])
 
