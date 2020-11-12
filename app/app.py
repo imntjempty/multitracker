@@ -154,7 +154,9 @@ def render_labeling(project_id,video_id):
             frame_candidates.append(predict.extract_frame_candidates(imp[:,:,c],0.1))
         print('frame_candidates',frame_candidates)
         
-    print('[*] serving keypoint label job for frame %s %s.'%(frame_idx,get_frame_time(frame_idx)))       
+    nearest_labeled_frame_diff = np.min(np.abs(np.array([int(idx) for idx in labeled_frame_idxs]) - int(frame_idx)))
+    
+    print('[*] serving keypoint label job for frame %s %s. nearest frame already labeled %i frames away'%(frame_idx,get_frame_time(frame_idx),nearest_labeled_frame_diff))       
     
     if args.open_gallery:
         p = subprocess.Popen(['eog',unlabeled[maxidx]])
