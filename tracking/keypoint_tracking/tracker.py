@@ -22,6 +22,7 @@ class KeypointTracker(object):
         self.tracks = []
         self.graveyard = []
         self.max_num_misses = 100
+        self.max_num_misses = 5
         self.max_age_wo_detection = 2
         self.max_dist_keypoint = 75
 
@@ -55,7 +56,7 @@ class KeypointTracker(object):
                     estimated_pos = np.array(self.tracks[min_idx[0]].position)#
                     #if len(tracks[min_idx[0]].history)>2:
                     #    estimated_pos = estimated_pos + ( np.array(tracks[min_idx[0]]['history'][-2]) -np.array(keypoints[min_idx[1]][:2])  )
-                    if len(self.tracks[min_idx[0]].history_class)>1 and 1:
+                    if len(self.tracks[min_idx[0]].history_class)>1 and 0:
                         print(k, j, self.tracks[min_idx[0]].position, '<->',keypoints[min_idx[1]][:2],':::',self.tracks[min_idx[0]].history_class[-2],keypoints[min_idx[1]][2], 'D',np.sqrt( (self.tracks[min_idx[0]].position[0]-keypoints[min_idx[1]][0])**2 + (self.tracks[min_idx[0]].position[1]-keypoints[min_idx[1]][1])**2 ))
                     
                     self.tracks[min_idx[0]].position =  alpha * estimated_pos + (1-alpha) * np.array(keypoints[min_idx[1]][:2])

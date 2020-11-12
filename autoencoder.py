@@ -83,9 +83,9 @@ def Encoder(inputs, config={}):
     x = inputs
     # denoising
     x = tf.keras.layers.GaussianNoise(0.2)(x)
-    x = downsample_stridedconv(32,(3,3), norm_type='batchnorm', apply_norm=False)(x) # 40
-    x = downsample_stridedconv(64,(3,3), norm_type='batchnorm', apply_norm=True)(x) # 20
-    x = downsample_stridedconv(64,(3,3), norm_type='batchnorm', apply_norm=True)(x) # 10
+    x = downsample_stridedconv(16,(5,5), norm_type='batchnorm', apply_norm=False)(x) # 40
+    x = downsample_stridedconv(16,(5,5), norm_type='batchnorm', apply_norm=True)(x) # 20
+    x = downsample_stridedconv(32,(5,5), norm_type='batchnorm', apply_norm=True)(x) # 10
     f = x 
     #x = downsample_stridedconv(128,(3,3), norm_type='batchnorm', apply_norm=True)(x) # 5
     #x = downsample_stridedconv(256,(3,3), norm_type='batchnorm', apply_norm=True)(x) # 5
@@ -98,8 +98,8 @@ def Decoder(config,encoder):
     #x = llayers.upsample_transpconv(256,(3,3), norm_type='batchnorm', apply_norm=True)(x) # 5
     #x = upsample_transpconv(128,(3,3), norm_type='batchnorm', apply_norm=True)(x) # 5
     #x = upsample_transpconv(128,(3,3), norm_type='batchnorm', apply_norm=True)(x) # 10
-    x = upsample_transpconv(64,(3,3), norm_type='batchnorm', apply_norm=True)(x) # 20
-    x = upsample_transpconv(32,(3,3), norm_type='batchnorm', apply_norm=True)(x) # 40
+    x = upsample_transpconv(32,(3,3), norm_type='batchnorm', apply_norm=True)(x) # 20
+    x = upsample_transpconv(16,(3,3), norm_type='batchnorm', apply_norm=True)(x) # 40
     x = upsample_transpconv(3,(3,3), norm_type='batchnorm', apply_norm=False,activation=tf.tanh)(x) # 80
     return x 
 
@@ -109,7 +109,8 @@ def load_im(image_file):
     return preprocess(image)
 
 def preprocess(image):
-    image = tf.image.resize_with_pad(image,640,640,antialias=True)
+    #image = tf.image.resize_with_pad(image,640,640,antialias=True)
+    image = tf.image.resize(image,[640,640])
     image = tf.cast(image,tf.float32)
     image = (image / 127.5) - 1
 
@@ -155,7 +156,7 @@ def train(config=None):
 
     # checkpoints and tensorboard summary writer
     now = str(datetime.now()).replace(' ','_').replace(':','-').split('.')[0]
-    checkpoint_path = os.path.expanduser("~/checkpoints/multitracker_ae_bbox/%s/%s" % (config['project_name'], now))
+    checkpoint_path = os.path.expanduser("~/checkpoints/multitracker/ae/vid_%s-%s" % (config['video_id'], now))
     vis_directory = os.path.join(checkpoint_path,'vis')
     logdir = os.path.join(checkpoint_path,'logs')
     for _directory in [checkpoint_path,logdir]:
@@ -179,6 +180,7 @@ def train(config=None):
         ckpt.restore(ckpt_manager.latest_checkpoint)
         print('[*] Latest checkpoint restored',ckpt_manager.latest_checkpoint)
 
+    @tf.function
     def train_step(inp, writer, global_step, should_summarize = False):
         # persistent is set to True because the tape is used more than
         # once to calculate the gradients.

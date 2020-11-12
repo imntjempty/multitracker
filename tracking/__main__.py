@@ -15,7 +15,7 @@ import time
 from datetime import datetime
 import cv2 as cv 
 import h5py
-
+import json 
 
 from multitracker import util 
 from multitracker.be import video
@@ -67,7 +67,7 @@ def main(args):
     config['objectdetection_max_steps'] = 30000
     # train object detector
     now = str(datetime.now()).replace(' ','_').replace(':','-').split('.')[0]
-    checkpoint_directory_object_detection = os.path.expanduser('~/checkpoints/bbox_detection/%s_vid%i/%s' % (config['project_name'], int(config['video_id']),now))
+    checkpoint_directory_object_detection = os.path.expanduser('~/checkpoints/multitracker/bbox/vids%s-%s' % (config['train_video_ids'], now))
     object_detect_restore = None 
     if 'objectdetection_model' in config and config['objectdetection_model'] is not None:
         object_detect_restore = config['objectdetection_model']
@@ -104,9 +104,16 @@ def main(args):
         #ckpt_detect, model_config_detect, detection_model = finetune.restore_weights(config['objectdetection_model'])
         from object_detection.utils import config_util
         from object_detection.builders import model_builder
-        configs = config_util.get_configs_from_pipeline_file(finetune.get_pipeline_config(config))
+        # load config json to know which backbone was used 
+        with open(os.path.join(config['objectdetection_model'],'config.json')) as json_file:
+            objconfig = json.load(json_file)
+        configs = config_util.get_configs_from_pipeline_file(finetune.get_pipeline_config(objconfig))
         model_config = configs['model']
-        model_config.ssd.num_classes = 1
+        
+        if objconfig['objectdetection_model'] == 'ssd':
+            model_config.ssd.num_classes = 1
+        else:
+            model_config.faster_rcnn.num_classes = 1
         detection_model = model_builder.build(model_config=model_config, is_training=False)
         ckpt = tf.compat.v2.train.Checkpoint(detection_model=detection_model)
         ckpt.restore(tf.train.latest_checkpoint(config['objectdetection_model'])).expect_partial()
@@ -126,8 +133,9 @@ def main(args):
     display = True # dont write vis images
 
     print(config)
+    crop_dim = roi_segm.get_roi_crop_dim(config['project_id'], config['video_id'], cv.imread(frame_files[0]).shape[0])
     deep_sort_app.run(config, detection_model, encoder_model, keypoint_model, output_dir, 
-            args.min_confidence_boxes, args.min_confidence_keypoints, nms_max_overlap, max_cosine_distance, nn_budget, display)
+            args.min_confidence_boxes, args.min_confidence_keypoints, crop_dim, nms_max_overlap, max_cosine_distance, nn_budget, display)
     
     video_file = os.path.join(video.get_project_dir(video.base_dir_default, config['project_id']),'tracking_%s_vis%i.mp4' % (config['project_name'],config['video_id']))
     
@@ -139,7 +147,7 @@ def convert_video_h265(video_in, video_out):
     if os.path.isfile(video_out):
         os.remove(video_out)
     subprocess.call(['ffmpeg','-i',video_in, '-c:v','libx265','-preset','ultrafast',video_out])
-    os.remove(video_file.replace('.mp4','.avi'))
+    os.remove(video_in)
 
 if __name__ == '__main__':
     import argparse

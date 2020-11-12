@@ -178,6 +178,7 @@ def detect_frame_boundingboxes(config, detection_model, encoder_model, seq_info,
     inp_tensor = cv.resize(inp_tensor,(640,640))
     inp_tensor = tf.expand_dims(inp_tensor,0)
     features, _ = encoder_model(autoencoder.preprocess(inp_tensor),training=False)
+    features = tf.image.resize(features,[H,W])
     
     bboxes = detect_bounding_boxes(detection_model, inp_tensor)
     #for i in range(bboxes['detection_boxes'].shape[0]):
@@ -196,10 +197,16 @@ def detect_frame_boundingboxes(config, detection_model, encoder_model, seq_info,
             height = height - top  
             width = width - left
 
-            _scale = inp_tensor.shape[2]/seq_info['image_size'][1]
-            features_crop = features[:,int(_scale*top/8.):int(_scale*(top+height)/8.),int(_scale*left/8.):int(_scale*(left+width)/8.),:] 
+            itop,iheight,ileft,iwidth = [int(ii) for ii in [top,height,left,width]]
+            features_crop = features[:,itop:itop+iheight,ileft:ileft+iwidth,:]
+            features_crop = tf.image.resize(features_crop,[64,64])
+            features_crop = tf.keras.layers.Flatten()(features_crop)
+
+            #print('FEATURES',frame_idx,j,'cropped',features_crop.shape)
+            #_scale = inp_tensor.shape[2]/seq_info['image_size'][1]
+            #features_crop = features[:,int(_scale*top/8.):int(_scale*(top+height)/8.),int(_scale*left/8.):int(_scale*(left+width)/8.),:] 
             #print('[*] cropped',int(_scale*top/8.),int(_scale*(top+height)/8.),int(_scale*left/8.),int(_scale*(left+width)/8.),'->',features_crop.shape)
-            features_crop = tf.keras.layers.GlobalAveragePooling2D()(features_crop)
+            #features_crop = tf.keras.layers.GlobalAveragePooling2D()(features_crop)
             features_crop = features_crop.numpy()[0,:]
 
             detection = Detection([left,top,width,height], proba, features_crop)
@@ -235,7 +242,7 @@ def append_crop_mosaic(frame, vis_crops):
 #def run(config, detection_file, output_file, min_confidence,
 #        nms_max_overlap, max_cosine_distance,
 #        nn_budget, display):
-def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_confidence, min_confidence_keypoints,
+def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_confidence, min_confidence_keypoints, crop_dim, 
         nms_max_overlap, max_cosine_distance,
         nn_budget, display):
             
@@ -266,12 +273,15 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
     seq_info = gather_sequence_info(config)
     #print('seq_info',seq_info.keys())
     
+    max_age = 30 
+    #max_age = 5
+    
     metric = nn_matching.NearestNeighborDistanceMetric(
         "cosine", max_cosine_distance, nn_budget)
     if 'fixed_number' in config and config['fixed_number'] is not None:
-        tracker = Tracker(metric,fixed_number=config['fixed_number'])
+        tracker = Tracker(metric,fixed_number=config['fixed_number'],max_age=max_age)
     else:
-        tracker = Tracker(metric)
+        tracker = Tracker(metric,max_age=max_age)
     results = []
 
     if not os.path.isdir('/tmp/vis/'): os.makedirs('/tmp/vis/')
@@ -290,7 +300,7 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
     print('[*] writing video file %s' % video_file)
     
     keypoint_tracker = keypoint_tracking.KeypointTracker()
-
+    
     def frame_callback(vis, frame_idx):
         global count_failed
         global count_ok
@@ -303,7 +313,7 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
         #print('frame',frame.dtype,frame.shape)
         #im = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
         frame_kp = unet.preprocess(config, frame)
-        crop_dim = roi_segm.get_roi_crop_dim(config['project_id'], config['video_id'], frame.shape[0]) 
+            
         #print('crop_dim',crop_dim)
         #if detections is None:
         #    return False 
@@ -324,27 +334,34 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
         tracker.predict()
         tracker.update(detections)
         
-        # inference keypoints for all detections
-        y_kpheatmaps = np.zeros((frame.shape[0],frame.shape[1],1+len(config['keypoint_names'])),np.float32)
-        #for i, track in enumerate(tracker.tracks):
-        for i, detection in enumerate(detections):
-            x1,y1,x2,y2 = detection.to_tlbr()
-            # crop region around center of bounding box
-            center = roi_segm.get_center(x1,y1,x2,y2, frame.shape[0], frame.shape[1], crop_dim)
-            center[0] = int(round(center[0]))
-            center[1] = int(round(center[1]))
-            roi = frame_kp[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:]
-            roi = tf.image.resize(roi,[224,224])
-            roi = tf.expand_dims(tf.convert_to_tensor(roi),axis=0)
-            yroi = keypoint_model(roi, training=False)[-1].numpy()
-            yroi = yroi[0,:,:,:]
-            yroi = cv.resize(yroi,(crop_dim//2*2,crop_dim//2*2))
-            
-            y_kpheatmaps[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:] = yroi
-        if 0:
-            for ik, keypoint_name in enumerate(config['keypoint_names']):
-                print('HM',ik,keypoint_name,'minmax',y_kpheatmaps[:,:,ik].min(),y_kpheatmaps[:,:,ik].max(),'meanstd',y_kpheatmaps[:,:,ik].mean(),y_kpheatmaps[:,:,ik].std())
-        keypoints = get_heatmaps_keypoints(y_kpheatmaps, thresh_detection=min_confidence_keypoints)
+        if len(detections) == 0:
+            keypoints = []
+        else:
+            # inference keypoints for all detections
+            y_kpheatmaps = np.zeros((frame.shape[0],frame.shape[1],1+len(config['keypoint_names'])),np.float32)
+            rois, centers = [],[]
+            #for i, track in enumerate(tracker.tracks):
+            for i, detection in enumerate(detections):
+                x1,y1,x2,y2 = detection.to_tlbr()
+                # crop region around center of bounding box
+                center = roi_segm.get_center(x1,y1,x2,y2, frame.shape[0], frame.shape[1], crop_dim)
+                center[0] = int(round(center[0]))
+                center[1] = int(round(center[1]))
+                centers.append(center)
+                roi = frame_kp[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:]
+                roi = tf.image.resize(roi,[224,224])
+                #roi = tf.expand_dims(tf.convert_to_tensor(roi),axis=0)
+                rois.append(roi)
+            rois = tf.stack(rois,axis=0)
+            yroi = keypoint_model(rois, training=False)[-1]
+            #yroi = yroi[0,:,:,:]
+            yroi = tf.image.resize(yroi,(crop_dim//2*2,crop_dim//2*2)).numpy()
+            for i in range(len(detections)):
+                y_kpheatmaps[centers[i][0]-crop_dim//2:centers[i][0]+crop_dim//2,centers[i][1]-crop_dim//2:centers[i][1]+crop_dim//2,:] = yroi[i,:,:,:]
+            if 0:
+                for ik, keypoint_name in enumerate(config['keypoint_names']):
+                    print('HM',ik,keypoint_name,'minmax',y_kpheatmaps[:,:,ik].min(),y_kpheatmaps[:,:,ik].max(),'meanstd',y_kpheatmaps[:,:,ik].mean(),y_kpheatmaps[:,:,ik].std())
+            keypoints = get_heatmaps_keypoints(y_kpheatmaps, thresh_detection=min_confidence_keypoints)
         print('%i detections. %i keypoints' % (len(detections), len(keypoints)),[kp for kp in keypoints])
 
         # update tracked keypoints with new detections
@@ -352,10 +369,10 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
 
         # Update visualization.
         if len(seq_info["image_filenames"][1])>int(frame_idx):
-            image = cv.imread(seq_info["image_filenames"][1][int(frame_idx)], cv.IMREAD_COLOR)
-            
+            #image = cv.imread(seq_info["image_filenames"][1][int(frame_idx)], cv.IMREAD_COLOR)
+            image=frame
             # draw keypoint detections 'whitish'
-            im = np.array(image, copy=True)
+            im = np.array(frame, copy=True)
             
             color_offset = 10
             radius_keypoint = 5
