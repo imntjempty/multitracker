@@ -81,7 +81,7 @@ def get_model(config):
 # </network architecture>
 
 # <data>
-
+'''
 def calc_mean_rgb(config):
     rgb = np.zeros((3,))
     calcframes = glob(os.path.join(os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'train'),'*.png'))
@@ -186,7 +186,7 @@ def load_raw_dataset(config,mode='train', image_directory = None):
     if mode == 'train':
         data = data.shuffle(512)
     return file_list, data 
-
+'''
 def create_train_dataset(config):
     # make sure that the heatmaps are 
     if not os.path.isdir(config['data_dir']) or len(glob(os.path.join(config['data_dir'],'train/*.png')))==0:
@@ -272,7 +272,7 @@ def get_swaps(config):
                 swaps.append((i,j))
     return swaps 
 
-# <train>
+'''# <train>
 #@tf.function 
 def train(config):
     filelist_train, dataset_train = load_raw_dataset(config,'train')
@@ -454,7 +454,7 @@ def train(config):
         epoch_loss = epoch_loss / epoch_steps
         end = time.time()
         print('[*] epoch %i (step %i) took %f seconds with train loss %f.'%(epoch,n, end-start,epoch_loss))
-
+'''
 
 # </train>
 def get_config(project_id = 3):
@@ -506,7 +506,7 @@ def get_config(project_id = 3):
     config['lr_objectdetection'] = 0.0005 
     config['maxsteps_objectdetection'] = 50000
     config['minsteps_objectdetection'] = 25000
-    config['object_flip'] = True
+    config['object_flip'] = bool(0)
     config['train_loss'] = ['cce','focal'][1]
     config['test_losses'] = ['focal'] #['cce','focal']
 
