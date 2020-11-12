@@ -101,38 +101,44 @@ def get_bbox_data(config, vis_input_data=0):
     test_gt_classes_one_hot_tensors = []
     test_gt_box_tensors = []
     
-    frames_dir = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'train')
+    frames_dir = os.path.join(video.base_dir_default,'%i' % config['project_id'])
     frame_bboxes = {}
-    db.execute("select * from bboxes where video_id=%i;" % config['video_id'])
-    db_boxxes = [x for x in db.cur.fetchall()]
-    shuffle(db_boxxes)
-    for dbbox in db_boxxes:
-        _, _, frame_idx, x1, y1, x2, y2 = dbbox 
-        if not frame_idx in frame_bboxes:
-            frame_bboxes[frame_idx] = [] 
-        frame_bboxes[frame_idx].append(np.array([float(z) for z in [y1,x1,y2,x2]]))
-    
-    for i, frame_idx in enumerate(frame_bboxes.keys()):
-        frame_bboxes[frame_idx] = np.array(frame_bboxes[frame_idx]) 
-    
-    H,W,_ = cv.imread( os.path.join(frames_dir, '%s.png' % list(frame_bboxes.keys())[0]) ).shape
+    for _video_id in config['train_video_ids'].split(','):
+        _video_id = int(_video_id)
+        db.execute("select * from bboxes where video_id=%i;" % _video_id)
+        db_boxxes = [x for x in db.cur.fetchall()]
+        shuffle(db_boxxes)
+        for dbbox in db_boxxes:
+            _, _, frame_idx, x1, y1, x2, y2 = dbbox
+            _key = '%i_%s' % (_video_id, frame_idx) 
+            if not _key in frame_bboxes:
+                frame_bboxes[_key] = [] 
+            frame_bboxes[_key].append(np.array([float(z) for z in [y1,x1,y2,x2]]))
+        
+        for i, _key in enumerate(frame_bboxes.keys()):
+            frame_bboxes[_key] = np.array(frame_bboxes[_key]) 
+        
+    # read one arbitray frame
+    sample_fim = ''
+    while not os.path.isfile(sample_fim):
+        k = int(np.random.uniform(len(list(frame_bboxes.keys()))))
+        sample_fim = os.path.join(frames_dir, config['train_video_ids'].split(',')[0],'frames','train','%s.png' % list(frame_bboxes.keys())[k].split('_')[1])
+
+    H,W,_ = cv.imread( sample_fim ).shape
     frames = list(frame_bboxes.keys())
     shuffle(frames)
-    for i, frame_idx in enumerate(frames):
-        #print(i,frame_idx)
-        f = os.path.join(frames_dir, '%s.png' % frame_idx)
-
-        frame_bboxes[frame_idx] = frame_bboxes[frame_idx] / np.array([H,W,H,W]) 
-        bboxes = frame_bboxes[frame_idx]
+    for i, _key in enumerate(frames):
+        frame_bboxes[_key] = frame_bboxes[_key] / np.array([H,W,H,W]) 
+        bboxes = frame_bboxes[_key]
         
         if np.random.uniform() > 0.2:
             #train_image_tensors.append(tf.expand_dims(tf.convert_to_tensor(image_np, dtype=tf.float32), axis=0))
-            train_image_tensors.append(str(frame_idx).zfill(5))
+            train_image_tensors.append(_key) # str(frame_idx).zfill(5)
             train_gt_box_tensors.append(tf.convert_to_tensor(bboxes, dtype=tf.float32))
             train_gt_classes_one_hot_tensors.append(tf.one_hot(tf.convert_to_tensor(np.ones(shape=[bboxes.shape[0]], dtype=np.int32) - label_id_offset), num_classes))
         else:
             #test_image_tensors.append(tf.expand_dims(tf.convert_to_tensor(image_np, dtype=tf.float32), axis=0))
-            test_image_tensors.append(str(frame_idx).zfill(5))
+            test_image_tensors.append(_key)
             test_gt_box_tensors.append(tf.convert_to_tensor(bboxes, dtype=tf.float32))
             test_gt_classes_one_hot_tensors.append(tf.one_hot(tf.convert_to_tensor(np.ones(shape=[bboxes.shape[0]], dtype=np.int32) - label_id_offset), num_classes))
     
@@ -152,16 +158,19 @@ def get_bbox_data(config, vis_input_data=0):
     labeling_list_test = tf.data.Dataset.from_tensor_slices(ddata_test)
     
     @tf.function
-    def load_im(frame_idx):
-        image_file = tf.strings.join([frames_dir, '/',frame_idx,'.png'])
+    def load_im(_key):
+        _video_id = tf.strings.split(_key,'_')[0]
+        frame_idx = tf.strings.split(_key,'_')[1]
+        image_file = tf.strings.join([frames_dir, '/', _video_id,'/frames/train/', frame_idx,'.png'])
         image = tf.io.read_file(image_file)
         image = tf.image.decode_png(image,channels=3)
         image = tf.cast(image,tf.float32)
-        return frame_idx, image
+        image = tf.image.resize(image,[H//2,W//2])
+        return _key, image
 
     data_train = labeling_list_train.map(load_im, num_parallel_calls = tf.data.experimental.AUTOTUNE).batch(config['object_detection_batch_size']).prefetch(4*config['object_detection_batch_size'])#.cache()
     data_test = labeling_list_test.map(load_im, num_parallel_calls = tf.data.experimental.AUTOTUNE).batch(config['object_detection_batch_size']).prefetch(4*config['object_detection_batch_size'])#.cache()
-    data_train = data_train.shuffle(512)
+    data_train = data_train.shuffle(256)
     return frame_bboxes, data_train, data_test  
     
 
@@ -314,7 +323,7 @@ def restore_weights(config, checkpoint_path = None, gt_boxes = None, gt_classes 
     _ = detection_model.postprocess(prediction_dict, shapes)
     print('[*] object detection weights restored from %s' % checkpoint_path)
     return ckpt, model_config, detection_model
-
+'''
 def inference_train_video(detection_model,config, steps, minutes = 0):
     project_id = int(config['project_id'])
     output_dir = '/tmp/multitracker/object_detection/predictions/%i/%i' % (config['video_id'], steps)
@@ -386,6 +395,7 @@ def inference_train_video(detection_model,config, steps, minutes = 0):
     #np.save(file_bboxes,frame_detections)
     np.savez_compressed(file_bboxes,boxes=frame_detections)
     print('[*] saved',file_bboxes)
+'''
 
 def finetune(config, checkpoint_directory, checkpoint_restore = None):
     #setup_oo_api() 
@@ -503,7 +513,7 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
                     gt_classes.append(tf.one_hot(tf.convert_to_tensor(np.ones(shape=[frame_bboxes[str(frame_idx[ii].numpy().decode("utf-8") )].shape[0]], dtype=np.int32) - label_id_offset), num_classes))
                 
                 # <augmentation>
-                if 0:
+                if config['object_flip']:
                     if np.random.uniform() > 0.5:
                         # hflip
                         image_tensors = image_tensors[:,:,::-1,:]
@@ -577,7 +587,12 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
                         saved_path = ckpt_manager.save()
                         print('[*] saved object detection model to',checkpoint_directory,'->',saved_path)
                         return detection_model
-                    
+                    if idx % 5000 ==0 :
+                        ckpt_saver = tf.compat.v2.train.Checkpoint(detection_model=detection_model)
+                        ckpt_manager = tf.train.CheckpointManager(ckpt_saver, checkpoint_directory, max_to_keep=5)
+                        saved_path = ckpt_manager.save()
+                        print('[*] saved object detection model to',checkpoint_directory,'->',saved_path)
+                        
                 idx += 1 
         
 
