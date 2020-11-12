@@ -42,7 +42,6 @@ def calc_accuracy(config, ytrue, ypred):
     acc = tf.reduce_mean(tf.cast(correct_prediction, "float"))
     return acc 
 
-
 def get_roi_crop_dim(project_id, video_id, Htarget):
     """
         we need to crop around the centers of bounding boxes
@@ -52,7 +51,17 @@ def get_roi_crop_dim(project_id, video_id, Htarget):
     [Hframe,Wframe,_] = cv.imread(glob(os.path.join(os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, project_id), video_id),'test'),'*.png'))[0]).shape
     db.execute("select * from bboxes where video_id=%i;" % video_id)
     db_boxxes = [x for x in db.cur.fetchall()]
-    assert len(db_boxxes) > 0, "[*] ERROR: no labeled bounding boxes found! please label at least one bounding box for video " + str(video_id) 
+    ref_vid_id = None
+    #assert len(db_boxxes) > 0, "[*] ERROR: no labeled bounding boxes found! please label at least one bounding box for video " + str(video_id) 
+    if len(db_boxxes) == 0:
+        while ref_vid_id is None:
+            try:
+                txtinp = input('   Sorry, I have not found any labeled bounding boxes. What video has the closest sized animals in videos, that you have already labeled? ')
+                ref_vid_id = int(txtinp)
+            except:
+                print('   ... :( sorry, I did not understand you Dave. Could you give me the video id? (it is a number)')
+        db.execute("select * from bboxes where video_id=%i;" % ref_vid_id)
+        db_boxxes = [x for x in db.cur.fetchall()]
         
     deltas = []
     for i, [_, _, frame_idx,x1,y1,x2,y2] in enumerate(db_boxxes):
@@ -95,7 +104,7 @@ def write_crop_to_disk(obj):
     #obj['boxes'] = [] # WARNING! only for bg debug
     if add_backgrounds: 
         ## add 3 random background patches without keypoints
-        num_random_backgrounds = 3 
+        num_random_backgrounds = 6 
         while num_random_backgrounds > 0:
             #random_box = sorted(tuple(np.int32(np.around(np.random.uniform(0,im.shape[1]))))) + sorted(tuple(np.int32(np.around(np.random.uniform(0,im.shape[0])))))
             #random_box = [random_box[2],random_box[0],random_box[3],random_box[1]] # (x1,x2,y1,y2)=>(y1,x1,y2,x2)
@@ -338,7 +347,7 @@ def train(config):
     # checkpoints and tensorboard summary writer
     now = str(datetime.now()).replace(' ','_').replace(':','-').split('.')[0]
     if not 'experiment' in config:
-        checkpoint_path = os.path.expanduser("~/checkpoints/roi_keypoint/%s-%s" % (config['project_name'],now))
+        checkpoint_path = os.path.expanduser("~/checkpoints/multitracker/keypoints/vids%s-%s" % (config['train_video_ids'],now))
     elif config['experiment'] == 'A':
         checkpoint_path = os.path.expanduser("~/checkpoints/experiments/%s/A/%i-%s" % (config['project_name'], int(100. * config['data_ratio']) , now))
     elif config['experiment'] == 'B':

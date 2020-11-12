@@ -497,7 +497,7 @@ def get_config(project_id = 3):
     config['keypoint_names'] = db.get_keypoint_names(config['project_id'])
 
     config['backbone'] = ["vgg16","efficientnet","efficientnetLarge",'psp'][2]
-    config['object_detection_backbone'] = ['ssd','fasterrcnn'][0]
+    config['object_detection_backbone'] = ['ssd','fasterrcnn'][1]
     config['object_detection_backbonepath'] = {
         'ssd': 'ssd_resnet50_v1_fpn_640x640_coco17_tpu-8',
         'fasterrcnn': 'faster_rcnn_inception_resnet_v2_640x640_coco17_tpu-8'
@@ -505,7 +505,8 @@ def get_config(project_id = 3):
     config['object_detection_batch_size'] = {'ssd': 16, 'fasterrcnn': 4}[config['object_detection_backbone']]
     config['lr_objectdetection'] = 0.0005 
     config['maxsteps_objectdetection'] = 50000
-    config['minsteps_objectdetection'] = 20000
+    config['minsteps_objectdetection'] = 25000
+    config['object_flip'] = True
     config['train_loss'] = ['cce','focal'][1]
     config['test_losses'] = ['focal'] #['cce','focal']
 
