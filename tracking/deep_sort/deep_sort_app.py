@@ -268,10 +268,17 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
     
     metric = nn_matching.NearestNeighborDistanceMetric(
         "cosine", max_cosine_distance, nn_budget)
-    if 'fixed_number' in config and config['fixed_number'] is not None:
-        tracker = Tracker(metric,fixed_number=config['fixed_number'])
+    if config['tracking_method'] == 'DeepSORT':
+        if 'fixed_number' in config and config['fixed_number'] is not None:
+            tracker = Tracker(metric,fixed_number=config['fixed_number'])
+        else:
+            tracker = Tracker(metric)
+    elif config['tracking_method'] == 'Tracktor++':
+        #if 'fixed_number' in config and config['fixed_number'] is not None:
+        tracker = tracktor.Tracker()
     else:
-        tracker = Tracker(metric)
+        raise Exception("Please give a method for tracking (supported DeepSORT and Tracktor++)")
+
     results = []
 
     if not os.path.isdir('/tmp/vis/'): os.makedirs('/tmp/vis/')
