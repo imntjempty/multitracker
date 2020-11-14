@@ -9,6 +9,7 @@ import os
 import numpy as np 
 import tensorflow as tf 
 from glob import glob 
+import random 
 from random import shuffle 
 import time 
 from datetime import datetime
@@ -16,10 +17,8 @@ import cv2 as cv
 import h5py
 import tqdm
 import json 
-
 import matplotlib.pyplot as plt
-import random 
-from random import shuffle 
+
 from multitracker import util 
 from multitracker.keypoint_detection import model 
 from multitracker.be import video
@@ -94,6 +93,7 @@ def plot_detections(image_np,
   return image_np_with_annotations
 
 def get_bbox_data(config, vis_input_data=0):
+    seed = 2305
     train_image_tensors = []
     train_gt_classes_one_hot_tensors = []
     train_gt_box_tensors = []
@@ -107,7 +107,7 @@ def get_bbox_data(config, vis_input_data=0):
         _video_id = int(_video_id)
         db.execute("select * from bboxes where video_id=%i;" % _video_id)
         db_boxxes = [x for x in db.cur.fetchall()]
-        shuffle(db_boxxes)
+        random.Random(4).shuffle(db_boxxes)
         for dbbox in db_boxxes:
             _, _, frame_idx, x1, y1, x2, y2 = dbbox
             _key = '%i_%s' % (_video_id, frame_idx) 
@@ -126,12 +126,12 @@ def get_bbox_data(config, vis_input_data=0):
 
     H,W,_ = cv.imread( sample_fim ).shape
     frames = list(frame_bboxes.keys())
-    shuffle(frames)
+    random.Random(4).shuffle(frames)
     for i, _key in enumerate(frames):
         frame_bboxes[_key] = frame_bboxes[_key] / np.array([H,W,H,W]) 
         bboxes = frame_bboxes[_key]
         
-        if np.random.uniform() > 0.2:
+        if i % 10 > 0: #np.random.uniform() > 0.2:
             #train_image_tensors.append(tf.expand_dims(tf.convert_to_tensor(image_np, dtype=tf.float32), axis=0))
             train_image_tensors.append(_key) # str(frame_idx).zfill(5)
             train_gt_box_tensors.append(tf.convert_to_tensor(bboxes, dtype=tf.float32))
@@ -248,7 +248,22 @@ def get_bbox_data_ram(config, vis_input_data=0):
 def get_pipeline_config(config, pipeline_dir = os.path.join(dbconnection.base_data_dir, 'object_detection')):
     return  os.path.join(pipeline_dir, config['object_detection_backbonepath'], 'pipeline.config')
     
+def load_trained_model(config):
+    from object_detection.utils import config_util
+    from object_detection.builders import model_builder
+        
+    configs = config_util.get_configs_from_pipeline_file(get_pipeline_config(config))
+    model_config = configs['model']
     
+    if config['objectdetection_model'] == 'ssd':
+        model_config.ssd.num_classes = 1
+    else:
+        model_config.faster_rcnn.num_classes = 1
+    detection_model = model_builder.build(model_config=model_config, is_training=False)
+    ckpt = tf.compat.v2.train.Checkpoint(detection_model=detection_model)
+    ckpt.restore(tf.train.latest_checkpoint(config['objectdetection_model'])).expect_partial()
+    return detection_model
+
 def restore_weights(config, checkpoint_path = None, gt_boxes = None, gt_classes =None):
     tf.keras.backend.clear_session()
 
@@ -323,79 +338,7 @@ def restore_weights(config, checkpoint_path = None, gt_boxes = None, gt_classes 
     _ = detection_model.postprocess(prediction_dict, shapes)
     print('[*] object detection weights restored from %s' % checkpoint_path)
     return ckpt, model_config, detection_model
-'''
-def inference_train_video(detection_model,config, steps, minutes = 0):
-    project_id = int(config['project_id'])
-    output_dir = '/tmp/multitracker/object_detection/predictions/%i/%i' % (config['video_id'], steps)
-    if not os.path.isdir(output_dir):
-        os.makedirs(output_dir)
-    print('[*] writing object detection bounding boxes %f minutes of video %i frames to %s for step %i' % (minutes,config['video_id'],output_dir,steps))
 
-    frames_dir = os.path.join(dbconnection.base_data_dir, 'projects/%i/%i/frames/train' % (config['project_id'], config['video_id']))
-    frame_files = sorted(glob(os.path.join(frames_dir,'*.png')))
-    if len(frame_files) == 0:
-        raise Exception("ERROR: no frames found in " + str(frames_dir))
-    
-    if minutes> 0:
-        frame_files = frame_files[:int(30. * 60. * minutes)]
-
-    # Again, uncomment this decorator if you want to run inference eagerly
-    @tf.function
-    def detect(input_tensor):
-        """Run detection on an input image.
-
-        Args:
-            input_tensor: A [1, height, width, 3] Tensor of type tf.float32.
-            Note that height and width can be anything since the image will be
-            immediately resized according to the needs of the model within this
-            function.
-
-        Returns:
-            A dict containing 3 Tensors (`detection_boxes`, `detection_classes`,
-            and `detection_scores`).
-        """
-        #input_tensor = tf.image.resize_with_pad(input_tensor,640,640,antialias=True)
-        preprocessed_image, shapes = detection_model.preprocess(input_tensor)
-        prediction_dict = detection_model.predict(preprocessed_image, shapes)
-        return detection_model.postprocess(prediction_dict, shapes)
-
-    label_id_offset = 1
-    idv_class_id = 1
-    num_classes = 1
-
-    category_index = {idv_class_id: {'id': idv_class_id, 'name': 'animal'}}
-    frame_detections = {}
-    for i in tqdm.tqdm(range(len(frame_files))):
-        #images = []
-        if i>0 and i % 1000 == 0:
-            file_bboxes = output_dir + '_bboxes_%05d' % i 
-            np.savez_compressed(file_bboxes,boxes=frame_detections)
-            #np.save(file_bboxes,frame_detections)
-            #print('[*] saved',file_bboxes)
-            frame_detections = {}
-
-        try:
-            image = cv.imread(frame_files[i])
-            input_tensor = tf.convert_to_tensor(np.expand_dims(image,axis=0), dtype=tf.float32)
-            detections = detect(input_tensor)
-            frame_detections[frame_files[i]] = detections
-            #print(i,'/',len(frame_files),frame_files[i])
-            if 1:
-                plot_detections(
-                    image,
-                    detections['detection_boxes'][0].numpy(),
-                    detections['detection_classes'][0].numpy().astype(np.uint32) + label_id_offset,
-                    detections['detection_scores'][0].numpy(),
-                    category_index, figsize=(15, 20), image_name=os.path.join(output_dir,"frame_" + ('%06d' % i) + ".png"))
-
-        except Exception as e:
-            print(e)
-
-    file_bboxes = output_dir + '_bboxes_%i' % len(frame_files)
-    #np.save(file_bboxes,frame_detections)
-    np.savez_compressed(file_bboxes,boxes=frame_detections)
-    print('[*] saved',file_bboxes)
-'''
 
 def finetune(config, checkpoint_directory, checkpoint_restore = None):
     #setup_oo_api() 

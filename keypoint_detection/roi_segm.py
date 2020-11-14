@@ -104,7 +104,7 @@ def write_crop_to_disk(obj):
     #obj['boxes'] = [] # WARNING! only for bg debug
     if add_backgrounds: 
         ## add 3 random background patches without keypoints
-        num_random_backgrounds = 6 
+        num_random_backgrounds = 4 
         while num_random_backgrounds > 0:
             #random_box = sorted(tuple(np.int32(np.around(np.random.uniform(0,im.shape[1]))))) + sorted(tuple(np.int32(np.around(np.random.uniform(0,im.shape[0])))))
             #random_box = [random_box[2],random_box[0],random_box[3],random_box[1]] # (x1,x2,y1,y2)=>(y1,x1,y2,x2)

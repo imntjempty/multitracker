@@ -101,23 +101,10 @@ def main(args):
     # <load models>
     # load trained object detection model
     if detection_model is None:
-        #ckpt_detect, model_config_detect, detection_model = finetune.restore_weights(config['objectdetection_model'])
-        from object_detection.utils import config_util
-        from object_detection.builders import model_builder
         # load config json to know which backbone was used 
         with open(os.path.join(config['objectdetection_model'],'config.json')) as json_file:
             objconfig = json.load(json_file)
-        configs = config_util.get_configs_from_pipeline_file(finetune.get_pipeline_config(objconfig))
-        model_config = configs['model']
-        
-        if objconfig['objectdetection_model'] == 'ssd':
-            model_config.ssd.num_classes = 1
-        else:
-            model_config.faster_rcnn.num_classes = 1
-        detection_model = model_builder.build(model_config=model_config, is_training=False)
-        ckpt = tf.compat.v2.train.Checkpoint(detection_model=detection_model)
-        ckpt.restore(tf.train.latest_checkpoint(config['objectdetection_model'])).expect_partial()
-
+        detection_model = finetune.load_trained_model(objconfig)
     # load trained autoencoder model for Deep Sort Tracking 
     encoder_model = deep_sort_app.load_feature_extractor(config)
 
