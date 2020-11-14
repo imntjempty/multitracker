@@ -79,7 +79,8 @@ class Track:
 
         self._n_init = n_init
         self._max_age = max_age
-        self.last_detection = None
+        self.last_detections = []
+        self.last_means = [] 
 
     def to_tlwh(self):
         """Get current position in bounding box format `(top left x, top left y,
@@ -145,7 +146,8 @@ class Track:
         if self.state == TrackState.Tentative and self.hits >= self._n_init:
             self.state = TrackState.Confirmed
         
-        self.last_detection = detection
+        self.last_detections.append(detection)
+        self.last_means.append(self.mean)
 
     def mark_missed(self):
         """Mark this track as missed (no association at the current time step).

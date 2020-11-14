@@ -209,7 +209,8 @@ def get_psp_model(config):
 
         for bin_size in bin_sizes:
             x = tf.keras.layers.AveragePooling2D(pool_size=(h//bin_size, w//bin_size), strides=(h//bin_size, w//bin_size))(input_tensor)
-            x = tf.keras.layers.Conv2D(128, 3, 2, padding='same')(x)
+            x = upsample(128, 3, strides=-2)(x)
+            x = upsample(128/len(bin_sizes),1, strides=1)
             print('pyramid',bin_size,x.shape)
             x = tf.keras.layers.Lambda(lambda x: tf.image.resize(x, (h,w)))(x)
             concat_list.append(x)
