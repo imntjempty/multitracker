@@ -2,7 +2,7 @@
 """
     main program to track animals and their corresponding limbs on a video file
 
-    python3.7 -m multitracker.tracking --project_id 7 --video_id 13 --objectdetection_model ~/checkpoints/bbox_detection/MiceTop_vid9/2020-10-28_01-15-29 --autoencoder_model ~/checkpoints/multitracker_ae_bbox/MiceTop/2020-10-28_08-04-51 --keypoint_model /home/alex/checkpoints/roi_keypoint/MiceTop-2020-11-03_01-02-15
+    python3.7 -m multitracker.tracking --project_id 7 --video_id 13 --train_video_ids 9,14 --objectdetection_model ~/checkpoints/bbox_detection/MiceTop_vid9/2020-10-28_01-15-29 --autoencoder_model ~/checkpoints/multitracker_ae_bbox/MiceTop/2020-10-28_08-04-51 --keypoint_model /home/alex/checkpoints/roi_keypoint/MiceTop-2020-11-03_01-02-15
 """
 
 import os
@@ -45,7 +45,8 @@ def main(args):
     config['fixed_number'] = db.get_video_fixednumber(args.video_id) #args.fixed_number
     config['fixed_number'] = None
     config['n_blocks'] = 4
-
+    config['tracking_method'] = args.tracking_method
+    
     # <load frames>
     output_dir = '/tmp/multitracker/object_detection/predictions/%i' % (config['video_id'])
     if not os.path.isdir(output_dir):
@@ -104,6 +105,7 @@ def main(args):
         # load config json to know which backbone was used 
         with open(os.path.join(config['objectdetection_model'],'config.json')) as json_file:
             objconfig = json.load(json_file)
+        objconfig['objectdetection_model'] = config['objectdetection_model']
         detection_model = finetune.load_trained_model(objconfig)
     # load trained autoencoder model for Deep Sort Tracking 
     encoder_model = deep_sort_app.load_feature_extractor(config)
@@ -119,7 +121,6 @@ def main(args):
     nn_budget = None # Maximum size of the appearance descriptors gallery. If None, no budget is enforced.
     display = True # dont write vis images
 
-    print(config)
     crop_dim = roi_segm.get_roi_crop_dim(config['project_id'], config['video_id'], cv.imread(frame_files[0]).shape[0])
     deep_sort_app.run(config, detection_model, encoder_model, keypoint_model, output_dir, 
             args.min_confidence_boxes, args.min_confidence_keypoints, crop_dim, nms_max_overlap, max_cosine_distance, nn_budget, display)
@@ -148,6 +149,8 @@ if __name__ == '__main__':
     parser.add_argument('--minutes',required=False,default=0.0,type=float)
     parser.add_argument('--min_confidence_boxes',required=False,default=0.5,type=float)
     parser.add_argument('--min_confidence_keypoints',required=False,default=0.5,type=float)
+    parser.add_argument('--tracking_method',required=False,default='DeepSORT',type=str)
+    
     #parser.add_argument('--fixed_number',required=False,default=4,type=int)
     args = parser.parse_args()
     

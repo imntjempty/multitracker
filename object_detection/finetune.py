@@ -255,7 +255,7 @@ def load_trained_model(config):
     configs = config_util.get_configs_from_pipeline_file(get_pipeline_config(config))
     model_config = configs['model']
     
-    if config['objectdetection_model'] == 'ssd':
+    if config['object_detection_backbone'] == 'ssd':
         model_config.ssd.num_classes = 1
     else:
         model_config.faster_rcnn.num_classes = 1
