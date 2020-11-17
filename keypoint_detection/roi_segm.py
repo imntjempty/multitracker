@@ -289,38 +289,6 @@ def get_center(x1,y1,x2,y2,H,W,crop_dim):
     center[1] = min(W-crop_dim//2,center[1] )
     center[1] = max(crop_dim//2,center[1] )
     return center 
-
-def inference_heatmap(config, trained_model, frame, bounding_boxes):
-    if 'max_height' in config and config['max_height'] is not None:
-        H = config['max_height']
-    else:
-        H = frame.shape[0]
-    W = frame.shape[1] * H/frame.shape[0]
-    crop_dim = get_roi_crop_dim(config['project_id'], config['video_id'], H)
-
-    y = None 
-    for j, (y1,x1,y2,x2) in enumerate(bounding_boxes): 
-        incoords = [y1,x1,y2,x2]
-        # scale down bounding boxes 
-        x1*=H/frame.shape[0]
-        y1*=H/frame.shape[0]
-        x2*=H/frame.shape[0]
-        y2*=H/frame.shape[0]
-
-        # crop region around center of bounding box
-        center = get_center(x1,y1,x2,y2, H, W, crop_dim)
-        roi = frame[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:]
-        roi = tf.image.resize(roi,[config['img_height'],config['img_width']])
-        roi = tf.expand_dims(tf.convert_to_tensor(roi),axis=0)
-        yroi = trained_model.predict(roi)
-        yroi = cv.resize(yroi,(crop_dim,crop_dim))
-
-        # paste onto whole frame y 
-        if y is None:
-            y = np.zeros([frame.shape[0],frame.shape[1],y.shape[-1]])
-
-        y[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:] += yroi 
-    return y 
     
 def train(config):
     #config['cutmix'] = False

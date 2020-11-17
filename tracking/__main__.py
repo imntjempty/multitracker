@@ -21,8 +21,7 @@ from multitracker import util
 from multitracker.be import video
 from multitracker.keypoint_detection import heatmap_drawing, model , roi_segm
 from multitracker.keypoint_detection import predict 
-from multitracker.tracking.inference import load_model as load_keypoint_model
-from multitracker.tracking.inference import load_data, load_model, get_heatmaps_keypoints
+from multitracker.tracking import inference 
 from multitracker.keypoint_detection.roi_segm import get_center
 from multitracker.tracking.tracklets import get_tracklets
 from multitracker.tracking.clustering import get_clustlets
@@ -108,11 +107,14 @@ def main(args):
             objconfig = json.load(json_file)
         objconfig['objectdetection_model'] = config['objectdetection_model']
         detection_model = finetune.load_trained_model(objconfig)
+    
     # load trained autoencoder model for Deep Sort Tracking 
-    encoder_model = deep_sort_app.load_feature_extractor(config)
+    encoder_model = None
+    if config['tracking_method'] == 'DeepSORT':
+        encoder_model = inference.load_autoencoder_feature_extractor(config)
 
     # load trained keypoint model
-    keypoint_model = load_keypoint_model(config['keypoint_model'])
+    keypoint_model = inference.load_keypoint_model(config['keypoint_model'])
     # </load models>
 
     # 3) run bbox tracking deep sort with fixed tracks
@@ -123,9 +125,13 @@ def main(args):
     display = True # dont write vis images
 
     crop_dim = roi_segm.get_roi_crop_dim(config['project_id'], config['video_id'], cv.imread(frame_files[0]).shape[0])
-    deep_sort_app.run(config, detection_model, encoder_model, keypoint_model, output_dir, 
+    if config['tracking_method'] == 'DeepSORT':
+        deep_sort_app.run(config, detection_model, encoder_model, keypoint_model, output_dir, 
             args.min_confidence_boxes, args.min_confidence_keypoints, crop_dim, nms_max_overlap, max_cosine_distance, nn_budget, display)
-    
+    else:
+        # tracktor algorithm
+        tracktor_app.run(config, detection_model, keypoint_model)
+
     video_file = os.path.join(video.get_project_dir(video.base_dir_default, config['project_id']),'tracking_%s_vis%i.mp4' % (config['project_name'],config['video_id']))
     
     convert_video_h265(video_file.replace('.mp4','.avi'), video_file)
