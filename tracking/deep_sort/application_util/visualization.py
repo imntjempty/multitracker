@@ -2,7 +2,7 @@
 import numpy as np
 import colorsys
 from .image_viewer import ImageViewer
-
+import cv2 as cv 
 
 def create_unique_color_float(tag, hue_step=0.41):
     """Create a unique RGB color code for a given track id (tag).
@@ -89,7 +89,7 @@ class Visualization(object):
     def __init__(self, seq_info, update_ms):
         image_shape = seq_info["image_size"][::-1]
         aspect_ratio = float(image_shape[1]) / image_shape[0]
-        image_shape = 1024, int(aspect_ratio * 1024)
+        #image_shape = 1024, int(aspect_ratio * 1024)
         self.viewer = ImageViewer(
             update_ms, image_shape, "Figure %s" % seq_info["sequence_name"])
         self.viewer.thickness = 2
@@ -128,8 +128,15 @@ class Visualization(object):
             if not track.is_confirmed() or track.time_since_update > 0:
                 continue
             self.viewer.color = create_unique_color_uchar(track.track_id)
+            ## draw current rectangle
             self.viewer.rectangle(
                 *track.to_tlwh().astype(np.int), label=str(track.track_id))
             # self.viewer.gaussian(track.mean[:2], track.covariance[:2, :2],
             #                      label="%d" % track.track_id)
-#
+
+            ## draw lines of history 
+            for i in range(1,len(track.last_means)):
+                px, py = track.last_means[i-1][:2]
+                x,   y = track.last_means[i  ][:2]
+                px,py,x,y = [int(round(c)) for c in [px,py,x,y]] 
+                self.viewer.image = cv.line(self.viewer.image,(px,py),(x,y),self.viewer.color,thickness=2)

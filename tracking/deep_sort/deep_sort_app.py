@@ -383,7 +383,7 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
                 for ik, keypoint_name in enumerate(config['keypoint_names']):
                     print('HM',ik,keypoint_name,'minmax',y_kpheatmaps[:,:,ik].min(),y_kpheatmaps[:,:,ik].max(),'meanstd',y_kpheatmaps[:,:,ik].mean(),y_kpheatmaps[:,:,ik].std())
             keypoints = get_heatmaps_keypoints(y_kpheatmaps, thresh_detection=min_confidence_keypoints)
-        print('%i detections. %i keypoints' % (len(detections), len(keypoints)),[kp for kp in keypoints])
+        print('%i - %i detections. %i keypoints' % (count_ok,len(detections), len(keypoints)),[kp for kp in keypoints])
 
         # update tracked keypoints with new detections
         tracked_keypoints = keypoint_tracker.update(keypoints)
@@ -395,7 +395,6 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
             # draw keypoint detections 'whitish'
             im = np.array(frame, copy=True)
             
-            color_offset = 10
             radius_keypoint = 5
             for [x,y,c] in keypoints:
                 x, y = [int(round(x)),int(round(y))]
@@ -403,6 +402,7 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
                 color_keypoint = [c//2 + 64 for c in color_keypoint]
                 im = cv.circle(im, (x,y), radius_keypoint, color_keypoint, 3)
             
+        
             # draw history of track 
             for i in range( len(tracked_keypoints) ):
                 color_keypoint = [int(ss) for ss in colors[tracked_keypoints[i].history_class[-1]%len(colors)]]
@@ -413,12 +413,16 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
                 
             # draw keypoint tracks in full color
             for keypoint_track in keypoint_tracker.get_deadnalive_tracks():
+                should_draw = True 
                 x, y = [ int(round(c)) for c in keypoint_track.position]
                 if keypoint_track.alive:
                     color_keypoint = [int(ss) for ss in colors[keypoint_track.history_class[-1]%len(colors)]]
                 else:
                     color_keypoint = [int(ss)//2+128 for ss in colors[keypoint_track.history_class[-1]%len(colors)]]
-                im = cv.circle(im, (x,y), radius_keypoint, color_keypoint, -1)
+                    if len(keypoint_track.history_class) < 10:
+                        should_draw = False
+                if should_draw:
+                    im = cv.circle(im, (x,y), radius_keypoint, color_keypoint, -1)
 
 
             # crop keypointed vis 
@@ -461,13 +465,13 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
                     channel = np.int32(255.*(channel-channel.min())/(channel.max() - channel.min()))
                     vis_keypoints[:,:,ii%3] = channel 
                 out = np.hstack((vis_keypoints,out))
-            if int(frame_idx)<1000:
+            if 0 and int(frame_idx)<1000:
                 # write image to disk
                 fo = '/tmp/vis/%s.png'  %frame_idx
                 cv.imwrite(fo,out)
                 #print('[*] wrote %s' % fo )
             #video_writer.write(out )
-            print('ok',count_ok,'failed',count_failed,'out',out.shape,out.dtype,out.min(),out.max())
+            #print('ok',count_ok,'failed',count_failed,'out',out.shape,out.dtype,out.min(),out.max())
 
 
 
