@@ -208,11 +208,7 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
     
     [Hframe,Wframe,_] = cv.imread(glob(os.path.join(os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'test'),'*.png'))[0]).shape
     
-    if 'video' in config and config['video'] is not None:
-        video_file_out = os.path.join(video.get_project_dir(video.base_dir_default, config['project_id']),'tracking_%s_%s.avi' % (config['project_name'],'.'.join(config['video'].split('/')[-1].split('.')[:-1])))
-    else:
-        video_file_out = os.path.join(video.get_project_dir(video.base_dir_default, config['project_id']),'tracking_%s_vis%i.avi' % (config['project_name'],config['video_id']))
-    
+    video_file_out = inference.get_video_output_filepath(config)
     if os.path.isfile(video_file_out): os.remove(video_file_out)
     import skvideo.io
     video_writer = skvideo.io.FFmpegWriter(video_file_out, outputdict={
