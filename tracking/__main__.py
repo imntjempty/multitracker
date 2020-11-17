@@ -37,6 +37,7 @@ def main(args):
     config = model.get_config(project_id = args.project_id)
     config['project_id'] = args.project_id
     config['video_id'] = args.video_id
+    config['video'] = args.video
     config['keypoint_model'] = args.keypoint_model
     config['autoencoder_model'] = args.autoencoder_model 
     config['objectdetection_model'] = args.objectdetection_model
@@ -150,6 +151,7 @@ if __name__ == '__main__':
     parser.add_argument('--min_confidence_boxes',required=False,default=0.5,type=float)
     parser.add_argument('--min_confidence_keypoints',required=False,default=0.5,type=float)
     parser.add_argument('--tracking_method',required=False,default='DeepSORT',type=str)
+    parser.add_argument('--video',required=False,default=None)
     
     #parser.add_argument('--fixed_number',required=False,default=4,type=int)
     args = parser.parse_args()

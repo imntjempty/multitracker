@@ -293,28 +293,42 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
 
     if not os.path.isdir('/tmp/vis/'): os.makedirs('/tmp/vis/')
 
+    if 'video' in config and config['video'] is not None:
+        video_reader = cv.VideoCapture( config['video'] )
+    else:
+        video_reader = None 
+    
     [Hframe,Wframe,_] = cv.imread(glob(os.path.join(os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'test'),'*.png'))[0]).shape
-    video_file = os.path.join(video.get_project_dir(video.base_dir_default, config['project_id']),'tracking_%s_vis%i.avi' % (config['project_name'],config['video_id']))
-    if os.path.isfile(video_file): os.remove(video_file)
-    #video_writer = cv.VideoWriter(video_file,cv.VideoWriter_fourcc('D','I','V','X'), 30, (Wframe, Hframe))
+    
+    if 'video' in config and config['video'] is not None:
+        video_file_out = os.path.join(video.get_project_dir(video.base_dir_default, config['project_id']),'tracking_%s_%s.avi' % (config['project_name'],'.'.join(config['video'].split('/')[-1].split('.')[:-1])))
+    else:
+        video_file_out = os.path.join(video.get_project_dir(video.base_dir_default, config['project_id']),'tracking_%s_vis%i.avi' % (config['project_name'],config['video_id']))
+    
+    if os.path.isfile(video_file_out): os.remove(video_file_out)
     import skvideo.io
-    video_writer = skvideo.io.FFmpegWriter(video_file, outputdict={
+    video_writer = skvideo.io.FFmpegWriter(video_file_out, outputdict={
         '-vcodec': 'libx264',  #use the h.264 codec
         '-crf': '0',           #set the constant rate factor to 0, which is lossless
         '-preset':'veryslow'   #the slower the better compression, in princple, try 
                                 #other options see https://trac.ffmpeg.org/wiki/Encode/H.264
     }) 
-    print('[*] writing video file %s' % video_file)
+    print('[*] writing video file %s' % video_file_out)
     
     keypoint_tracker = keypoint_tracking.KeypointTracker()
     
+
     def frame_callback(vis, frame_idx):
         global count_failed
         global count_ok
         #print("Processing frame %05d" % frame_idx)
         frame_directory = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'train')
         frame_file = os.path.join(frame_directory, '%05d.png' % frame_idx)
-        frame = cv.imread(frame_file)
+        
+        if video_reader is not None and video_reader.isOpened():
+            ret, frame = video_reader.read()
+        else:
+            frame = cv.imread(frame_file)
         frame_, detections = detect_frame_boundingboxes(config, detection_model, encoder_model, seq_info, frame, frame_idx)
             
         #print('frame',frame.dtype,frame.shape)
