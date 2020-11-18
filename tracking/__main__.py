@@ -2,7 +2,8 @@
 """
     main program to track animals and their corresponding limbs on a video file
 
-    python3.7 -m multitracker.tracking --project_id 7 --video_id 13 --train_video_ids 9,14 --objectdetection_model ~/checkpoints/bbox_detection/MiceTop_vid9/2020-10-28_01-15-29 --autoencoder_model ~/checkpoints/multitracker_ae_bbox/MiceTop/2020-10-28_08-04-51 --keypoint_model /home/alex/checkpoints/roi_keypoint/MiceTop-2020-11-03_01-02-15
+    python3.7 -m multitracker.tracking --project_id 7 --video_id 13 --train_video_ids 9,14 --objectdetection_model ~/checkpoints/multitracker/bbox/vids9\,14-2020-11-13_07-56-02 --autoencoder_model /home/alex/checkpoints/multitracker/ae/vid_13-2020-11-10_22-34-32 --keypoint_model /home/alex/checkpoints/multitracker/keypoints/vids9,14-2020-11-13_00-24-28 --min_confidence_boxes 0.6 --min_confidence_keypoints 0.7 --tracking_method Tracktor --video /home/alex/data/multitracker/projects/7/videos/from_above_Oct2020_2_12fps.mp4
+
 """
 
 import os
@@ -27,6 +28,7 @@ from multitracker.tracking.tracklets import get_tracklets
 from multitracker.tracking.clustering import get_clustlets
 from multitracker.object_detection import finetune
 from multitracker.tracking.deep_sort import deep_sort_app
+from multitracker.tracking.tracktor import tracktor_app
 from multitracker import autoencoder
 from multitracker.be import dbconnection
 db = dbconnection.DatabaseConnection()
@@ -109,16 +111,13 @@ def main(args):
         detection_model = finetune.load_trained_model(objconfig)
     
     # load trained autoencoder model for Deep Sort Tracking 
-    encoder_model = None
-    if config['tracking_method'] == 'DeepSORT':
-        encoder_model = inference.load_autoencoder_feature_extractor(config)
+    encoder_model = inference.load_autoencoder_feature_extractor(config)
 
     # load trained keypoint model
     keypoint_model = inference.load_keypoint_model(config['keypoint_model'])
     # </load models>
 
     # 3) run bbox tracking deep sort with fixed tracks
-    min_confidence = 0.5 # Detection confidence threshold. Disregard all detections that have a confidence lower than this value.
     nms_max_overlap = 1.0 # Non-maxima suppression threshold: Maximum detection overlap
     max_cosine_distance = 0.2 # Gating threshold for cosine distance metric (object appearance).
     nn_budget = None # Maximum size of the appearance descriptors gallery. If None, no budget is enforced.
@@ -130,7 +129,7 @@ def main(args):
             args.min_confidence_boxes, args.min_confidence_keypoints, crop_dim, nms_max_overlap, max_cosine_distance, nn_budget, display)
     else:
         # tracktor algorithm
-        tracktor_app.run(config, detection_model, keypoint_model)
+        tracktor_app.run(config, detection_model, encoder_model, keypoint_model, crop_dim)
 
     video_file = os.path.join(video.get_project_dir(video.base_dir_default, config['project_id']),'tracking_%s_vis%i.mp4' % (config['project_name'],config['video_id']))
     

@@ -113,7 +113,6 @@ def inference_keypoints(config, frame, detections, keypoint_model, crop_dim, min
             for ik, keypoint_name in enumerate(config['keypoint_names']):
                 print('HM',ik,keypoint_name,'minmax',y_kpheatmaps[:,:,ik].min(),y_kpheatmaps[:,:,ik].max(),'meanstd',y_kpheatmaps[:,:,ik].mean(),y_kpheatmaps[:,:,ik].std())
         keypoints = get_heatmaps_keypoints(y_kpheatmaps, thresh_detection=min_confidence_keypoints)
-    print('%i - %i detections. %i keypoints' % (config['count'],len(detections), len(keypoints)),[kp for kp in keypoints])
     return keypoints
 
 
