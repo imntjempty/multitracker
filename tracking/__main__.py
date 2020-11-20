@@ -129,8 +129,12 @@ def main(args):
             args.min_confidence_boxes, args.min_confidence_keypoints, crop_dim, nms_max_overlap, max_cosine_distance, nn_budget, display)
     else:
         # tracktor algorithm
-        tracktor_app.run(config, detection_model, encoder_model, keypoint_model, crop_dim)
-
+        if config['tracking_method'] == 'Tracktor':
+            tracktor_app.run(config, detection_model, encoder_model, keypoint_model, crop_dim)
+        elif config['tracking_method'] == 'FixedAssigner':
+            from multitracker.tracking import cv_multitracker
+            tracktor_app.run(config, detection_model, encoder_model, keypoint_model, crop_dim, tracker = cv_multitracker.OpenCVMultiTracker(4) )
+            
     video_file = os.path.join(video.get_project_dir(video.base_dir_default, config['project_id']),'tracking_%s_vis%i.mp4' % (config['project_name'],config['video_id']))
     
     convert_video_h265(video_file.replace('.mp4','.avi'), video_file)

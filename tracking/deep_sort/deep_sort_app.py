@@ -155,7 +155,8 @@ def visualize(vis, frame, tracker, detections, keypoint_tracker, keypoints, trac
     radius_keypoint = 5
     # draw history of keypoint track 
     for i in range( len(tracked_keypoints) ):
-        color_keypoint = [int(ss) for ss in colors[tracked_keypoints[i].history_class[-1]%len(colors)]]
+        median_class = int(np.median(np.array(tracked_keypoints[i].history_class)))
+        color_keypoint = [int(ss) for ss in colors[median_class%len(colors)]]
         for j in range( 1, len(tracked_keypoints[i].history_estimated)):
             p1 = tuple(np.int32(np.around(tracked_keypoints[i].history_estimated[j])))
             p2 = tuple(np.int32(np.around(tracked_keypoints[i].history_estimated[j-1])))
@@ -167,27 +168,28 @@ def visualize(vis, frame, tracker, detections, keypoint_tracker, keypoints, trac
         x, y = [ int(round(c)) for c in keypoint_track.position]
         if keypoint_track.alive:
             color_keypoint = [int(ss) for ss in colors[keypoint_track.history_class[-1]%len(colors)]]
-        else:
+        '''else:
             color_keypoint = [int(ss)//2+128 for ss in colors[keypoint_track.history_class[-1]%len(colors)]]
             if len(keypoint_track.history_class) < 10:
                 should_draw = False
         if should_draw:
-            im = cv.circle(im, (x,y), radius_keypoint, color_keypoint, -1)
+            im = cv.circle(im, (x,y), radius_keypoint, color_keypoint, -1)'''
 
     # draw detected keypoint    
     for [x,y,c] in keypoints:
         x, y = [int(round(x)),int(round(y))]
         color_keypoint = [int(ss) for ss in colors[c%len(colors)]]
         color_keypoint = [c//2 + 64 for c in color_keypoint]
-        im = cv.circle(im, (x,y), radius_keypoint, color_keypoint, 3)
+        #im = cv.circle(im, (x,y), radius_keypoint, color_keypoint, 3)
     
     # crop keypointed vis 
     vis_crops = [  ]
     for i, track in enumerate(tracker.tracks):
-        if track.is_confirmed():
+        if 1 or track.is_confirmed():
             x1,y1,x2,y2 = track.to_tlbr()
             center = roi_segm.get_center(x1,y1,x2,y2, frame.shape[0],frame.shape[1], crop_dim)
             vis_crops.append( im[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:] )    
+           
         #vis_crops[-1] = cv.resize(vis_crops[-1], (im.shape[0]//2,im.shape[0]//2))
     
     _shape = [im.shape[0]//2,im.shape[1]//2]

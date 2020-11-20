@@ -125,8 +125,8 @@ class Visualization(object):
     def draw_trackers(self, tracks):
         self.viewer.thickness = 2
         for track in tracks:
-            if not track.is_confirmed() or track.time_since_update > 0:
-                continue
+            #if not track.is_confirmed() or track.time_since_update > 0:
+            #    continue
             self.viewer.color = create_unique_color_uchar(track.track_id)
             ## draw current rectangle
             self.viewer.rectangle(
@@ -135,8 +135,10 @@ class Visualization(object):
             #                      label="%d" % track.track_id)
 
             ## draw lines of history 
-            for i in range(1,len(track.last_means)):
-                px, py = track.last_means[i-1][:2]
-                x,   y = track.last_means[i  ][:2]
-                px,py,x,y = [int(round(c)) for c in [px,py,x,y]] 
-                self.viewer.image = cv.line(self.viewer.image,(px,py),(x,y),self.viewer.color,thickness=2)
+            if len(track.last_means)>2:
+                for i in range(1,len(track.last_means)):
+                    px, py = track.last_means[i-1][:2]
+                    x,   y = track.last_means[i  ][:2]
+                    if np.sqrt( (px-x)**2 + (py-y)**2 ) < 50:
+                        px,py,x,y = [int(round(c)) for c in [px,py,x,y]] 
+                        self.viewer.image = cv.line(self.viewer.image,(px,py),(x,y),self.viewer.color,thickness=2)
