@@ -56,8 +56,8 @@ class OpenCVMultiTracker(object):
         self.fixed_number = fixed_number
         self.thresh_set_inactive = 10
         self.thresh_set_dead = 100
-        self.maximum_other_track_init_distance = 350
-        self.maximum_nearest_inactive_track_distance = self.maximum_other_track_init_distance * 4
+        self.maximum_other_track_init_distance = 150
+        self.maximum_nearest_inactive_track_distance = 500# self.maximum_other_track_init_distance * 4
 
         self.tracks = []
         self.trackers = cv.MultiTracker_create()
@@ -91,7 +91,13 @@ class OpenCVMultiTracker(object):
                 if not matched_detections[j]:
                     iou = calc_iou(tlhw2tlbr(tbox),tlhw2tlbr(dbox))
                     if iou > highest_iou:
-                        highest_iou, highest_iou_idx = iou, j 
+                        # check if no other matched detection has relatively high iou with detection j 
+                        other_detected_box_near = False 
+                        for k in range(len(detected_boxes)):
+                            if matched_detections[k] and not k == j:
+                                other_detected_box_near = other_detected_box_near or ( calc_iou(tlhw2tlbr(dbox),tlhw2tlbr(detected_boxes[k])) > 0.5 )
+                        if not other_detected_box_near:
+                            highest_iou, highest_iou_idx = iou, j 
                 
             #print(i,highest_iou,highest_iou_idx,'coords',x,y,w,h)
             # if prediction matched with detection:
@@ -131,7 +137,7 @@ class OpenCVMultiTracker(object):
         for j in range(min(len(detected_boxes),self.fixed_number)):
             dbox = detected_boxes[j] # boxes are sorted desc as scores!
             if not matched_detections[j]: 
-                if self.active_cnt < self.fixed_number:
+                if len(self.trackers.getObjects()) < self.fixed_number:
                     # check if appropiate minimum distance to other track before initiating
                     other_track_near = False 
                     for tbox in self.trackers.getObjects():
@@ -146,38 +152,45 @@ class OpenCVMultiTracker(object):
                         if debug: print('[*]   added tracker %i with detection %i' % (self.active_cnt,j))
                         self.active_cnt += 1
                 else:
-                    # calc center distance to all inactive tracks, merge with nearest track
-                    nearest_inactive_track_distance, nearest_inactive_track_idx = 1e7,-1
-                    for i, tbox in enumerate(self.trackers.getObjects()):
-                        if not matched_tracks[i]:
-                            (detx, dety, detw, deth) = dbox 
-                            (trackx,tracky,trackw,trackh) = tbox
-                            dist = np.sqrt(((detx+detw/2.)-(trackx+trackw/2.))**2 + ((dety+deth/2.) -(tracky+trackh/2.))**2 )
-                            if nearest_inactive_track_distance > dist:
-                                nearest_inactive_track_distance, nearest_inactive_track_idx = dist, i
-                    
-                    # merge by initing tracker with this detected box
-                    # replace tracker in multilist by init again with new general bounding box
-                    obs = self.trackers.getObjects()
-                    #if nearest_inactive_track_idx >= 0:
-                    if nearest_inactive_track_distance < self.maximum_nearest_inactive_track_distance:
-                        matched_detections[j] = True
-                        matched_tracks[nearest_inactive_track_idx] = True
-                        obs[nearest_inactive_track_idx] = detected_boxes[j]
-                        self.active[nearest_inactive_track_idx] = True
-                        self.alive[nearest_inactive_track_idx] = True 
-                        self.active_cnt += 1 
-                        self.steps_without_detection[nearest_inactive_track_idx] = 0
-                        self.trackers = cv.MultiTracker_create()
-                        for ob in obs:
-                            self.trackers.add(cv.TrackerCSRT_create(), frame, tuple([int(cc) for cc in ob]))
-                        if debug: print('[*]   updated inactive tracker %i with detection %i' % (nearest_inactive_track_idx,j))
+                    # only consider reactivating old track with this detection if detected box not high iou with any track
+                    other_track_overlaps = False 
+                    for k, tbox in enumerate(self.trackers.getObjects()):
+                        other_track_overlaps = other_track_overlaps or calc_iou(tlhw2tlbr(dbox),tlhw2tlbr(self.trackers.getObjects()[k])) > 0.5 
+                    if not other_track_overlaps:
+                        # calc center distance to all inactive tracks, merge with nearest track
+                        nearest_inactive_track_distance, nearest_inactive_track_idx = 1e7,-1
+                        for i, tbox in enumerate(self.trackers.getObjects()):
+                            #if not matched_tracks[i] and 
+                            #if self.steps_without_detection[i]>0:
+                            if not self.active[i]:
+                                (detx, dety, detw, deth) = dbox 
+                                (trackx,tracky,trackw,trackh) = tbox
+                                dist = np.sqrt(((detx+detw/2.)-(trackx+trackw/2.))**2 + ((dety+deth/2.) -(tracky+trackh/2.))**2 )
+                                if nearest_inactive_track_distance > dist:
+                                    nearest_inactive_track_distance, nearest_inactive_track_idx = dist, i
+                        
+                        # merge by initing tracker with this detected box
+                        # replace tracker in multilist by init again with new general bounding box
+                        obs = self.trackers.getObjects()
+                        #if nearest_inactive_track_idx >= 0:
+                        if nearest_inactive_track_distance < self.maximum_nearest_inactive_track_distance:
+                            matched_detections[j] = True
+                            matched_tracks[nearest_inactive_track_idx] = True
+                            obs[nearest_inactive_track_idx] = detected_boxes[j]
+                            self.active[nearest_inactive_track_idx] = True
+                            self.alive[nearest_inactive_track_idx] = True 
+                            self.active_cnt += 1 
+                            self.steps_without_detection[nearest_inactive_track_idx] = 0
+                            self.trackers = cv.MultiTracker_create()
+                            for ob in obs:
+                                self.trackers.add(cv.TrackerCSRT_create(), frame, tuple([int(cc) for cc in ob]))
+                            if debug: print('[*]   updated inactive tracker %i with detection %i' % (nearest_inactive_track_idx,j))
 
         # update internal variables to be compatible with rest
         self.tracks = []
         for i, tbox in enumerate(self.trackers.getObjects()):
             self.tracks.append(OpenCVTrack(i,tbox,self.active[i],self.steps_without_detection[i],self.last_means[i]))
-            
+        
         if debug:
             for i, tbox in enumerate(self.trackers.getObjects()):
                 if len(self.last_means[i])>0:

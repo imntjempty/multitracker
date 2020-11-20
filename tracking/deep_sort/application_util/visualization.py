@@ -129,8 +129,10 @@ class Visualization(object):
             #    continue
             self.viewer.color = create_unique_color_uchar(track.track_id)
             ## draw current rectangle
+
+            label='id: %s misses: %i active: %i'%(str(track.track_id),track.time_since_update,int(track.active))
             self.viewer.rectangle(
-                *track.to_tlwh().astype(np.int), label=str(track.track_id))
+                *track.to_tlwh().astype(np.int), label=label)
             # self.viewer.gaussian(track.mean[:2], track.covariance[:2, :2],
             #                      label="%d" % track.track_id)
 

@@ -418,6 +418,7 @@ def run(config, detection_model, encoder_model, keypoint_model, crop_dim, tracke
     config['count'] = 0
     while video_reader.isOpened():
         ret, frame = video_reader.read()
+        frame = frame[:,:,::-1] # trained on TF RGB, cv2 yields BGR
     
         frame_idx += 1 
         config['count'] = frame_idx
