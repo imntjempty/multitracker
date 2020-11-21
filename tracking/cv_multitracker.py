@@ -30,7 +30,7 @@ import numpy as np
 from multitracker.experiments.roi_curve import calc_iou
 from glob import glob 
 import os
-
+from collections import deque
 
 from multitracker.tracking.deep_sort.application_util import preprocessing
 from multitracker.tracking.deep_sort.application_util import visualization
@@ -94,7 +94,7 @@ class OpenCVMultiTracker(object):
         print('[*] inited OpenCVMultiTracker with fixed number %s'%fixed_number)
 
     def step(self,ob):
-        debug = True 
+        debug = bool(0) 
         frame = ob['img']
         [detected_boxes,scores, features] = ob['detections']
     
@@ -170,6 +170,7 @@ class OpenCVMultiTracker(object):
                     if not other_track_near:
                         # add new track
                         dboxi = tuple([int(cc) for cc in dbox])
+                        print('    ffffframe',frame.shape,dboxi)
                         self.trackers.add(cv.TrackerCSRT_create(), frame, dboxi)
                         self.active[self.active_cnt] = True 
                         self.alive[self.active_cnt] = True
@@ -224,9 +225,9 @@ class OpenCVMultiTracker(object):
             print()
 
 
-def run(config, detection_model, encoder_model, keypoint_model, crop_dim, tracker = None):
-    min_confidence = 0.7
-    min_confidence_keypoints = 0.6
+def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_confidence_boxes, min_confidence_keypoints, tracker = None):
+    #min_confidence_detection = 0.7
+    #min_confidence_keypoints = 0.6
     nms_max_overlap = 1.
 
     if 'video' in config and config['video'] is not None:
@@ -234,7 +235,7 @@ def run(config, detection_model, encoder_model, keypoint_model, crop_dim, tracke
     else:
         video_reader = None 
     total_frame_number = int(video_reader.get(cv.CAP_PROP_FRAME_COUNT))
-    print('total_frame_number',total_frame_number)
+    print('[*] total_frame_number',total_frame_number)
 
     [Hframe,Wframe,_] = cv.imread(glob(os.path.join(os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'test'),'*.png'))[0]).shape
     
@@ -254,21 +255,40 @@ def run(config, detection_model, encoder_model, keypoint_model, crop_dim, tracke
     
     ## initialize tracker for boxes and keypoints
     if tracker is None:
-        tracker = OpenCVMultiTracker(4)
+        tracker = OpenCVMultiTracker(config['fixed_number'])
     keypoint_tracker = keypoint_tracking.KeypointTracker()
-    frame_directory = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'train')
+
     frame_idx = 0
     config['count'] = 0
-    while video_reader.isOpened():
+    frame_buffer = deque()
+    detection_buffer = deque()
+    running = True 
+    scale = None 
+    for ib in range(config['inference_objectdetection_batchsize']):
         ret, frame = video_reader.read()
-        frame = frame[:,:,::-1] # trained on TF RGB, cv2 yields BGR
-    
+        frame_buffer.append(frame[:,:,::-1]) # trained on TF RGB, cv2 yields BGR
+
+    while running: #video_reader.isOpened():
         frame_idx += 1 
         config['count'] = frame_idx
+        # if buffer not empty use preloaded frames and preloaded detections
+        
+        # fill up frame buffer as you take something from it to reduce lag 
+        if video_reader.isOpened():
+            ret, frame = video_reader.read()
+            frame_buffer.append(frame[:,:,::-1]) # trained on TF RGB, cv2 yields BGR
+        else:
+            running = False 
+        
+        if len(detection_buffer) == 0:
+            # fill up frame buffer and then detect boxes for complete frame buffer
+            dettensor = np.array(list(frame_buffer)).astype(np.float32)
+            batch_detections = inference.detect_batch_bounding_boxes(detection_model, dettensor, seq_info, min_confidence_boxes)
+            [detection_buffer.append(batch_detections[ib]) for ib in range(config['inference_objectdetection_batchsize'])]
 
-        frame_, detections = inference.detect_frame_boundingboxes(config, detection_model, encoder_model, seq_info, frame, frame_idx)
-        detections = [d for d in detections if d.confidence >= min_confidence]
-        # Run non-maxima suppression.
+        frame = frame_buffer.popleft()
+        detections = detection_buffer.popleft()
+            
         boxes = np.array([d.tlwh for d in detections])
         scores = np.array([d.confidence for d in detections])
         features = np.array([d.feature for d in detections])

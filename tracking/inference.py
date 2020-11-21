@@ -8,7 +8,7 @@ import time
 from datetime import datetime
 import cv2 as cv 
 import h5py
-
+import multiprocessing as mp 
 
 from multitracker import util 
 from multitracker.keypoint_detection import heatmap_drawing, model 
@@ -145,6 +145,45 @@ def detect_bounding_boxes(detection_model, input_tensor):
     detections['detection_boxes'] = detections['detection_boxes'][0,:,:]
     detections['detection_scores'] = detections['detection_scores'][0]
     return detections
+
+def _downscale_mp(im):
+    scale = 650. / min(im.shape[:2])
+    return cv.resize(im,None,None,fx=scale,fy=scale)
+    
+#@tf.function
+def detect_batch_bounding_boxes(detection_model, frames, seq_info, thresh_detection):
+    scaled = []
+    with mp.Pool(processes=os.cpu_count()) as pool:
+        detresults = []
+        for i in range(frames.shape[0]):
+            detresults.append(pool.apply_async(_downscale_mp,(frames[i,:,:,:],)))
+        for result in detresults:
+            scaled.append(result.get())
+    scaled = np.stack(scaled,axis=0)
+    preprocessed_image, shapes = detection_model.preprocess(tf.convert_to_tensor(scaled))
+    prediction_dict = detection_model.predict(preprocessed_image, shapes)
+    bboxes = detection_model.postprocess(prediction_dict, shapes)
+    results = []
+    for b in range(bboxes['detection_boxes'].shape[0]):
+        result = []
+        for j in range(bboxes['detection_boxes'][b].shape[0]):
+            class_id = 1
+            proba = bboxes['detection_scores'][b][j]
+            if proba > thresh_detection:
+                #print('box',j,bboxes['detection_boxes'][j])
+                top,left,height,width = bboxes['detection_boxes'][b][j]
+                top *= seq_info['image_size'][0]#/scale
+                height *= seq_info['image_size'][0]#/scale
+                left *= seq_info['image_size'][1]#/scale
+                width *= seq_info['image_size'][1]#/scale
+                height = height - top  
+                width = width - left
+
+                detection = Detection([left,top,width,height], proba, np.zeros((1)))
+                
+                result.append(detection)  
+        results.append(result)
+    return results
 
 
 def detect_frame_boundingboxes(config, detection_model, encoder_model, seq_info, frame, frame_idx, thresh_detection = 0.3):

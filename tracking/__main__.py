@@ -4,6 +4,8 @@
 
     python3.7 -m multitracker.tracking --project_id 7 --video_id 13 --train_video_ids 9,14 --objectdetection_model ~/checkpoints/multitracker/bbox/vids9\,14-2020-11-13_07-56-02 --autoencoder_model /home/alex/checkpoints/multitracker/ae/vid_13-2020-11-10_22-34-32 --keypoint_model /home/alex/checkpoints/multitracker/keypoints/vids9,14-2020-11-13_00-24-28 --min_confidence_boxes 0.6 --min_confidence_keypoints 0.7 --tracking_method Tracktor --video /home/alex/data/multitracker/projects/7/videos/from_above_Oct2020_2_12fps.mp4
 
+    python3.7 -m multitracker.tracking --project_id 7 --video_id 13 --train_video_ids 9,14 --objectdetection_model ~/checkpoints/multitracker/bbox/vids9\,14-2020-11-13_07-56-02 --autoencoder_model /home/alex/checkpoints/multitracker/ae/vid_13-2020-11-10_22-34-32 --keypoint_model /home/alex/checkpoints/multitracker/keypoints/vids9,14-2020-11-13_00-24-28 --min_confidence_boxes 0.7 --min_confidence_keypoints 0.5 --tracking_method FixedAssigner --video /home/alex/data/multitracker/projects/7/videos/from_above_Oct2020_2_12fps.mp4
+
 """
 
 import os
@@ -49,8 +51,9 @@ def main(args):
     config['train_video_ids'] = args.train_video_ids
     config['minutes'] = args.minutes
     config['fixed_number'] = db.get_video_fixednumber(args.video_id) #args.fixed_number
-    config['fixed_number'] = None
+    #config['fixed_number'] = None
     config['n_blocks'] = 4
+    config['inference_objectdetection_batchsize'] = args.inference_objectdetection_batchsize
     config['tracking_method'] = args.tracking_method
     
     # <load frames>
@@ -115,7 +118,9 @@ def main(args):
         detection_model = finetune.load_trained_model(objconfig)
     
     # load trained autoencoder model for Deep Sort Tracking 
-    encoder_model = inference.load_autoencoder_feature_extractor(config)
+    encoder_model = None 
+    if config['tracking_method']=='DeepSORT':
+        encoder_model = inference.load_autoencoder_feature_extractor(config)
 
     # load trained keypoint model
     keypoint_model = inference.load_keypoint_model(config['keypoint_model'])
@@ -136,7 +141,7 @@ def main(args):
         if config['tracking_method'] == 'Tracktor':
             tracktor_app.run(config, detection_model, encoder_model, keypoint_model, crop_dim)
         elif config['tracking_method'] == 'FixedAssigner':
-            cv_multitracker.run(config, detection_model, encoder_model, keypoint_model, crop_dim )
+            cv_multitracker.run(config, detection_model, encoder_model, keypoint_model, crop_dim, args.min_confidence_boxes, args.min_confidence_keypoints  )
 
     video_file = os.path.join(video.get_project_dir(video.base_dir_default, config['project_id']),'tracking_%s_vis%i.mp4' % (config['project_name'],config['video_id']))
     
@@ -162,6 +167,7 @@ if __name__ == '__main__':
     parser.add_argument('--minutes',required=False,default=0.0,type=float)
     parser.add_argument('--min_confidence_boxes',required=False,default=0.5,type=float)
     parser.add_argument('--min_confidence_keypoints',required=False,default=0.5,type=float)
+    parser.add_argument('--inference_objectdetection_batchsize',required=False,default=4,type=int)
     parser.add_argument('--tracking_method',required=False,default='DeepSORT',type=str)
     parser.add_argument('--video',required=False,default=None)
     
