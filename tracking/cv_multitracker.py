@@ -28,6 +28,29 @@ import time
 import cv2 as cv 
 import numpy as np 
 from multitracker.experiments.roi_curve import calc_iou
+from glob import glob 
+import os
+
+
+from multitracker.tracking.deep_sort.application_util import preprocessing
+from multitracker.tracking.deep_sort.application_util import visualization
+from multitracker.tracking.deep_sort.deep_sort import nn_matching
+from multitracker.tracking.deep_sort import deep_sort_app
+from multitracker.tracking.deep_sort.deep_sort.detection import Detection
+from multitracker.tracking.deep_sort.deep_sort.tracker import Tracker
+
+from multitracker import autoencoder
+from multitracker.keypoint_detection import roi_segm, unet
+from multitracker.tracking.inference import get_heatmaps_keypoints
+from multitracker.tracking.keypoint_tracking import tracker as keypoint_tracking
+from multitracker.be import video
+from multitracker import util 
+from multitracker.experiments.roi_curve import calc_iou
+from multitracker.tracking import inference
+
+colors = util.get_colors()
+
+
 
 def tlbr2tlhw(tlbr):
     return [tlbr[0],tlbr[1], tlbr[2]-tlbr[0], tlbr[3]-tlbr[1]]
@@ -134,7 +157,8 @@ class OpenCVMultiTracker(object):
 
         
         # e) reassign: check if unmatched detection is a new track or gets assigned to inactive track (depending on barrier fixed number)
-        for j in range(min(len(detected_boxes),self.fixed_number)):
+        #for j in range(min(len(detected_boxes),self.fixed_number)):
+        for j in range(len(detected_boxes)):
             dbox = detected_boxes[j] # boxes are sorted desc as scores!
             if not matched_detections[j]: 
                 if len(self.trackers.getObjects()) < self.fixed_number:
@@ -199,63 +223,82 @@ class OpenCVMultiTracker(object):
                 print('Detect',j,str(scores[j])[1:4],dbox)
             print()
 
-def example(file_video):
-    # initialize a dictionary that maps strings to their corresponding
-    # OpenCV object tracker implementations
-    OPENCV_OBJECT_TRACKERS = {
-        "csrt": cv.TrackerCSRT_create,
-        "kcf": cv.TrackerKCF_create,
-        "boosting": cv.TrackerBoosting_create,
-        "mil": cv.TrackerMIL_create,
-        "tld": cv.TrackerTLD_create,
-        "medianflow": cv.TrackerMedianFlow_create,
-        "mosse": cv.TrackerMOSSE_create
-    }
-    tracker_name = "csrt"
 
-    # initialize OpenCV's special multi-object tracker
-    trackers = cv.MultiTracker_create()
+def run(config, detection_model, encoder_model, keypoint_model, crop_dim, tracker = None):
+    min_confidence = 0.7
+    min_confidence_keypoints = 0.6
+    nms_max_overlap = 1.
 
-    video_reader = cv.VideoCapture(file_video)
+    if 'video' in config and config['video'] is not None:
+        video_reader = cv.VideoCapture( config['video'] )
+    else:
+        video_reader = None 
+    total_frame_number = int(video_reader.get(cv.CAP_PROP_FRAME_COUNT))
+    print('total_frame_number',total_frame_number)
 
+    [Hframe,Wframe,_] = cv.imread(glob(os.path.join(os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'test'),'*.png'))[0]).shape
+    
+    video_file_out = inference.get_video_output_filepath(config)
+    if os.path.isfile(video_file_out): os.remove(video_file_out)
+    import skvideo.io
+    video_writer = skvideo.io.FFmpegWriter(video_file_out, outputdict={
+        '-vcodec': 'libx264',  #use the h.264 codec
+        '-crf': '0',           #set the constant rate factor to 0, which is lossless
+        '-preset':'veryslow'   #the slower the better compression, in princple, try 
+                                #other options see https://trac.ffmpeg.org/wiki/Encode/H.264
+    }) 
+
+    seq_info = deep_sort_app.gather_sequence_info(config)
+    visualizer = visualization.Visualization(seq_info, update_ms=5)
+    print('[*] writing video file %s' % video_file_out)
+    
+    ## initialize tracker for boxes and keypoints
+    if tracker is None:
+        tracker = OpenCVMultiTracker(4)
+    keypoint_tracker = keypoint_tracking.KeypointTracker()
+    frame_directory = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'train')
+    frame_idx = 0
+    config['count'] = 0
     while video_reader.isOpened():
         ret, frame = video_reader.read()
-        frame = cv.resize(frame,None,None,fx=0.5,fy=0.5)
-
-        # grab the updated bounding box coordinates (if any) for each
-        # object that is being tracked
-        (success, boxes) = trackers.update(frame)
-        # loop over the bounding boxes and draw then on the frame
-        for i,box in enumerate(boxes):
-            (x, y, w, h) = [int(v) for v in box]
-            c = 255 // (i+1)
-            color = (255-c, c, 0)
-            cv.rectangle(frame, (x, y), (x + w, y + h), color, 2)
-
-        # show the output frame
-        cv.imshow("Frame", frame)
-        key = cv.waitKey(1) & 0xFF
-        # if the 's' key is selected, we are going to "select" a bounding
-        # box to track
-        if key == ord("s"):
-            # select the bounding box of the object we want to track (make
-            # sure you press ENTER or SPACE after selecting the ROI)
-            box = cv.selectROI("Frame", frame, fromCenter=False,
-                showCrosshair=True)
-            # create a new object tracker for the bounding box and add it
-            # to our multi-object tracker
-            tracker = OPENCV_OBJECT_TRACKERS[tracker_name]()
-            trackers.add(tracker, frame, box)
+        frame = frame[:,:,::-1] # trained on TF RGB, cv2 yields BGR
     
-        # if the `q` key was pressed, break from the loop
-        elif key == ord("q"):
-            break
-    
-    video_reader.release()
-    # close all windows
-    cv.destroyAllWindows()
+        frame_idx += 1 
+        config['count'] = frame_idx
 
+        frame_, detections = inference.detect_frame_boundingboxes(config, detection_model, encoder_model, seq_info, frame, frame_idx)
+        detections = [d for d in detections if d.confidence >= min_confidence]
+        # Run non-maxima suppression.
+        boxes = np.array([d.tlwh for d in detections])
+        scores = np.array([d.confidence for d in detections])
+        features = np.array([d.feature for d in detections])
+        indices = preprocessing.non_max_suppression(
+            boxes, nms_max_overlap, scores)
+        detections = [detections[i] for i in indices]
+        #print('[*] found %i detections' % len(detections))
+        # Update tracker
+        tracker.step({'img':frame,'detections':[boxes, scores, features]})
 
-if __name__ == '__main__':
-    file_video = '/home/alex/data/multitracker/projects/7/videos/from_above_Oct2020_2_12fps.mp4'
-    example(file_video)
+        keypoints = inference.inference_keypoints(config, frame, detections, keypoint_model, crop_dim, min_confidence_keypoints)
+        # update tracked keypoints with new detections
+        tracked_keypoints = keypoint_tracker.update(keypoints)
+
+        print('%i - %i detections. %i keypoints' % (config['count'],len(detections), len(keypoints)),[kp for kp in keypoints])
+        out = deep_sort_app.visualize(visualizer, frame, tracker, detections, keypoint_tracker, keypoints, tracked_keypoints, crop_dim)
+        video_writer.writeFrame(cv.cvtColor(out, cv.COLOR_BGR2RGB)) #out[:,:,::-1])
+        
+        if 1:
+            cv.imshow("tracking visualization", cv.resize(out,None,None,fx=0.75,fy=0.75))
+            cv.waitKey(5)
+        # Store results.
+        # write results to disk
+        #for track in tracker.tracks:
+        #    result_txt
+        
+        '''for track in tracker.tracks:
+            if not track.is_confirmed() or track.time_since_update > 1:
+                continue
+            bbox = track.to_tlwh()
+            results.append([
+                frame_idx, track.track_id, bbox[0], bbox[1], bbox[2], bbox[3]])'''
+

@@ -22,14 +22,18 @@ from multitracker import util
 from multitracker.be import video
 from multitracker.keypoint_detection import heatmap_drawing, model , roi_segm
 from multitracker.keypoint_detection import predict 
+from multitracker.object_detection import finetune
 from multitracker.tracking import inference 
 from multitracker.keypoint_detection.roi_segm import get_center
+from multitracker import autoencoder
+
 from multitracker.tracking.tracklets import get_tracklets
 from multitracker.tracking.clustering import get_clustlets
-from multitracker.object_detection import finetune
+
 from multitracker.tracking.deep_sort import deep_sort_app
 from multitracker.tracking.tracktor import tracktor_app
-from multitracker import autoencoder
+from multitracker.tracking import cv_multitracker
+
 from multitracker.be import dbconnection
 db = dbconnection.DatabaseConnection()
 
@@ -132,9 +136,8 @@ def main(args):
         if config['tracking_method'] == 'Tracktor':
             tracktor_app.run(config, detection_model, encoder_model, keypoint_model, crop_dim)
         elif config['tracking_method'] == 'FixedAssigner':
-            from multitracker.tracking import cv_multitracker
-            tracktor_app.run(config, detection_model, encoder_model, keypoint_model, crop_dim, tracker = cv_multitracker.OpenCVMultiTracker(4) )
-            
+            cv_multitracker.run(config, detection_model, encoder_model, keypoint_model, crop_dim )
+
     video_file = os.path.join(video.get_project_dir(video.base_dir_default, config['project_id']),'tracking_%s_vis%i.mp4' % (config['project_name'],config['video_id']))
     
     convert_video_h265(video_file.replace('.mp4','.avi'), video_file)
