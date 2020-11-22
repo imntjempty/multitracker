@@ -147,9 +147,62 @@ def append_crop_mosaic(frame, vis_crops):
     out = np.hstack((frame, mosaic))
     return out
 
-#def run(config, detection_file, output_file, min_confidence,
-#        nms_max_overlap, max_cosine_distance,
-#        nn_budget, display):
+
+def visualize(vis, frame, tracker, detections, keypoint_tracker, keypoints, tracked_keypoints, crop_dim):
+    # draw keypoint detections 'whitish'
+    im = np.array(frame, copy=True)
+    
+    radius_keypoint = 5
+    # draw history of keypoint track 
+    for i in range( len(tracked_keypoints) ):
+        median_class = int(np.median(np.array(tracked_keypoints[i].history_class)))
+        color_keypoint = [int(ss) for ss in colors[median_class%len(colors)]]
+        for j in range( 1, len(tracked_keypoints[i].history_estimated)):
+            p1 = tuple(np.int32(np.around(tracked_keypoints[i].history_estimated[j])))
+            p2 = tuple(np.int32(np.around(tracked_keypoints[i].history_estimated[j-1])))
+            im = cv.line(im, p1, p2, color_keypoint, 2)
+
+    # draw keypoint tracks in full color
+    for keypoint_track in keypoint_tracker.get_deadnalive_tracks():
+        should_draw = True 
+        x, y = [ int(round(c)) for c in keypoint_track.position]
+        if keypoint_track.alive:
+            color_keypoint = [int(ss) for ss in colors[keypoint_track.history_class[-1]%len(colors)]]
+        '''else:
+            color_keypoint = [int(ss)//2+128 for ss in colors[keypoint_track.history_class[-1]%len(colors)]]
+            if len(keypoint_track.history_class) < 10:
+                should_draw = False
+        if should_draw:
+            im = cv.circle(im, (x,y), radius_keypoint, color_keypoint, -1)'''
+
+    # draw detected keypoint    
+    for [x,y,c] in keypoints:
+        x, y = [int(round(x)),int(round(y))]
+        color_keypoint = [int(ss) for ss in colors[c%len(colors)]]
+        color_keypoint = [c//2 + 64 for c in color_keypoint]
+        #im = cv.circle(im, (x,y), radius_keypoint, color_keypoint, 3)
+    
+    # crop keypointed vis 
+    vis_crops = [  ]
+    for i, track in enumerate(tracker.tracks):
+        if 1 or track.is_confirmed():
+            x1,y1,x2,y2 = track.to_tlbr()
+            center = roi_segm.get_center(x1,y1,x2,y2, frame.shape[0],frame.shape[1], crop_dim)
+            vis_crops.append( im[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:] )    
+           
+        #vis_crops[-1] = cv.resize(vis_crops[-1], (im.shape[0]//2,im.shape[0]//2))
+    
+    _shape = [im.shape[0]//2,im.shape[1]//2]
+    if len(vis_crops)>0:
+        _shape = vis_crops[0].shape[:2]
+    
+    vis.set_image(frame.copy())
+    vis.draw_detections(detections)
+    vis.draw_trackers(tracker.tracks)
+    
+    out = append_crop_mosaic(vis.viewer.image,vis_crops)
+    return out 
+
 def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_confidence, min_confidence_keypoints, crop_dim, 
         nms_max_overlap, max_cosine_distance,
         nn_budget, display):
@@ -186,20 +239,13 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
     config['count'] = 0 
     metric = nn_matching.NearestNeighborDistanceMetric(
         "cosine", max_cosine_distance, nn_budget)
-    if 'tracking_method' in config or config['tracking_method'] == 'DeepSORT':
-        if 'fixed_number' in config and config['fixed_number'] is not None:
-            tracker = Tracker(metric,fixed_number=config['fixed_number'])
-        else:
-            tracker = Tracker(metric)
-    elif config['tracking_method'] == 'Tracktor++':
-        #if 'fixed_number' in config and config['fixed_number'] is not None:
-        tracker = tracktor.Tracker()
+    #if 'tracking_method' in config or config['tracking_method'] == 'DeepSORT':
+    if 'fixed_number' in config and config['fixed_number'] is not None:
+        tracker = Tracker(metric,fixed_number=config['fixed_number'])
     else:
-        raise Exception("Please give a method for tracking (supported DeepSORT and Tracktor++)")
-
+        tracker = Tracker(metric)
+    
     results = []
-
-    if not os.path.isdir('/tmp/vis/'): os.makedirs('/tmp/vis/')
 
     if 'video' in config and config['video'] is not None:
         video_reader = cv.VideoCapture( config['video'] )
@@ -208,11 +254,7 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
     
     [Hframe,Wframe,_] = cv.imread(glob(os.path.join(os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'test'),'*.png'))[0]).shape
     
-    if 'video' in config and config['video'] is not None:
-        video_file_out = os.path.join(video.get_project_dir(video.base_dir_default, config['project_id']),'tracking_%s_%s.avi' % (config['project_name'],'.'.join(config['video'].split('/')[-1].split('.')[:-1])))
-    else:
-        video_file_out = os.path.join(video.get_project_dir(video.base_dir_default, config['project_id']),'tracking_%s_vis%i.avi' % (config['project_name'],config['video_id']))
-    
+    video_file_out = inference.get_video_output_filepath(config)
     if os.path.isfile(video_file_out): os.remove(video_file_out)
     import skvideo.io
     video_writer = skvideo.io.FFmpegWriter(video_file_out, outputdict={
@@ -260,68 +302,17 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
         tracked_keypoints = keypoint_tracker.update(keypoints)
 
         # Update visualization.
-        if len(seq_info["image_filenames"][1])>int(frame_idx):
-            #image = cv.imread(seq_info["image_filenames"][1][int(frame_idx)], cv.IMREAD_COLOR)
-            image=frame
-            # draw keypoint detections 'whitish'
-            im = np.array(frame, copy=True)
-            
-            radius_keypoint = 5
-            # draw history of keypoint track 
-            for i in range( len(tracked_keypoints) ):
-                color_keypoint = [int(ss) for ss in colors[tracked_keypoints[i].history_class[-1]%len(colors)]]
-                for j in range( 1, len(tracked_keypoints[i].history_estimated)):
-                    p1 = tuple(np.int32(np.around(tracked_keypoints[i].history_estimated[j])))
-                    p2 = tuple(np.int32(np.around(tracked_keypoints[i].history_estimated[j-1])))
-                    im = cv.line(im, p1, p2, color_keypoint, 2)
-
-            # draw keypoint tracks in full color
-            for keypoint_track in keypoint_tracker.get_deadnalive_tracks():
-                should_draw = True 
-                x, y = [ int(round(c)) for c in keypoint_track.position]
-                if keypoint_track.alive:
-                    color_keypoint = [int(ss) for ss in colors[keypoint_track.history_class[-1]%len(colors)]]
-                else:
-                    color_keypoint = [int(ss)//2+128 for ss in colors[keypoint_track.history_class[-1]%len(colors)]]
-                    if len(keypoint_track.history_class) < 10:
-                        should_draw = False
-                if should_draw:
-                    im = cv.circle(im, (x,y), radius_keypoint, color_keypoint, -1)
-
-            # draw detected keypoint    
-            for [x,y,c] in keypoints:
-                x, y = [int(round(x)),int(round(y))]
-                color_keypoint = [int(ss) for ss in colors[c%len(colors)]]
-                color_keypoint = [c//2 + 64 for c in color_keypoint]
-                im = cv.circle(im, (x,y), radius_keypoint, color_keypoint, 3)
-            
-            # crop keypointed vis 
-            vis_crops = [  ]
-            for i, track in enumerate(tracker.tracks):
-                if track.is_confirmed():
-                    x1,y1,x2,y2 = track.to_tlbr()
-                    center = roi_segm.get_center(x1,y1,x2,y2, image.shape[0],image.shape[1], crop_dim)
-                    vis_crops.append( im[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:] )    
-                #vis_crops[-1] = cv.resize(vis_crops[-1], (im.shape[0]//2,im.shape[0]//2))
-            
-            _shape = [im.shape[0]//2,im.shape[1]//2]
-            if len(vis_crops)>0:
-                _shape = vis_crops[0].shape[:2]
-            
-            vis.set_image(image.copy())
-            vis.draw_detections(detections)
-            vis.draw_trackers(tracker.tracks)
-            
-            out = append_crop_mosaic(vis.viewer.image,vis_crops)
+        out = visualize(vis, frame, tracker, detections, keypoint_tracker, keypoints, tracked_keypoints, crop_dim)
         
-            try:
-                video_writer.writeFrame(cv.cvtColor(out, cv.COLOR_BGR2RGB)) #out[:,:,::-1])
-                count_ok += 1
-                config['count'] += 1
-            except Exception as e:
-                count_failed += 1 
-                print('[*] Video Writing for frame_idx %s failed. image shape'%frame_idx,out.shape)
-                print(e)
+        # write visualization as frame to video
+        try:
+            video_writer.writeFrame(cv.cvtColor(out, cv.COLOR_BGR2RGB)) #out[:,:,::-1])
+            count_ok += 1
+            config['count'] += 1
+        except Exception as e:
+            count_failed += 1 
+            print('[*] Video Writing for frame_idx %s failed. image shape'%frame_idx,out.shape)
+            print(e)
 
         # Store results.
         for track in tracker.tracks:
@@ -339,14 +330,7 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
         visualizer = visualization.NoVisualization(seq_info)
     visualizer.run(frame_callback)
 
-    if 0 and display:
-        print('[*] finished frames, writing video ...')
-        file_video = '/tmp/tracking.mp4'
-        subprocess.call(['ffmpeg','-framerate','30','-i','/tmp/vis/%d.png', '-vf', 'format=yuv420p','-vcodec','libx265', file_video])
-        subprocess.call(['rm','/tmp/vis/*.png'])
-        print('[*] wrote video to %s' % file_video)
-    #video_writer.release() 
-
+    
 def bool_string(input_string):
     if input_string not in {"True","False"}:
         raise ValueError("Please Enter a valid Ture/False choice")

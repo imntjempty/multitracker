@@ -243,8 +243,6 @@ def get_bbox_data_ram(config, vis_input_data=0):
     
     return train_image_tensors, train_gt_box_tensors, train_gt_classes_one_hot_tensors, test_image_tensors, test_gt_box_tensors, test_gt_classes_one_hot_tensors
 
-#def get_pipeline_config(config, pipeline_dir = os.path.expanduser('~/github/models/research/object_detection/configs/tf2')):
-#    return  os.path.join(pipeline_dir, config['object_detection_backbonepath'])
 def get_pipeline_config(config, pipeline_dir = os.path.join(dbconnection.base_data_dir, 'object_detection')):
     return  os.path.join(pipeline_dir, config['object_detection_backbonepath'], 'pipeline.config')
     

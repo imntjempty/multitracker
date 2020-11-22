@@ -8,7 +8,7 @@ import time
 from datetime import datetime
 import cv2 as cv 
 import h5py
-
+import multiprocessing as mp 
 
 from multitracker import util 
 from multitracker.keypoint_detection import heatmap_drawing, model 
@@ -17,6 +17,14 @@ from multitracker.keypoint_detection.blurpool import BlurPool2D
 from multitracker import autoencoder
 from multitracker.tracking.deep_sort.deep_sort.detection import Detection
 from multitracker.keypoint_detection import roi_segm, unet
+from multitracker.be import video
+
+def get_video_output_filepath(config):
+    if 'video' in config and config['video'] is not None:
+        video_file_out = os.path.join(video.get_project_dir(video.base_dir_default, config['project_id']),'tracking_%s_%s_%s.avi' % (config['project_name'],config['tracking_method'],'.'.join(config['video'].split('/')[-1].split('.')[:-1])))
+    else:
+        video_file_out = os.path.join(video.get_project_dir(video.base_dir_default, config['project_id']),'tracking_%s_%s_vis%i.avi' % (config['project_name'],config['tracking_method'],config['video_id']))
+    return video_file_out
 
 def load_keypoint_model(path_model):
     t0 = time.time()
@@ -105,7 +113,6 @@ def inference_keypoints(config, frame, detections, keypoint_model, crop_dim, min
             for ik, keypoint_name in enumerate(config['keypoint_names']):
                 print('HM',ik,keypoint_name,'minmax',y_kpheatmaps[:,:,ik].min(),y_kpheatmaps[:,:,ik].max(),'meanstd',y_kpheatmaps[:,:,ik].mean(),y_kpheatmaps[:,:,ik].std())
         keypoints = get_heatmaps_keypoints(y_kpheatmaps, thresh_detection=min_confidence_keypoints)
-    print('%i - %i detections. %i keypoints' % (config['count'],len(detections), len(keypoints)),[kp for kp in keypoints])
     return keypoints
 
 
@@ -138,6 +145,45 @@ def detect_bounding_boxes(detection_model, input_tensor):
     detections['detection_boxes'] = detections['detection_boxes'][0,:,:]
     detections['detection_scores'] = detections['detection_scores'][0]
     return detections
+
+def _downscale_mp(im):
+    scale = 650. / min(im.shape[:2])
+    return cv.resize(im,None,None,fx=scale,fy=scale)
+    
+#@tf.function
+def detect_batch_bounding_boxes(detection_model, frames, seq_info, thresh_detection):
+    scaled = []
+    with mp.Pool(processes=os.cpu_count()) as pool:
+        detresults = []
+        for i in range(frames.shape[0]):
+            detresults.append(pool.apply_async(_downscale_mp,(frames[i,:,:,:],)))
+        for result in detresults:
+            scaled.append(result.get())
+    scaled = np.stack(scaled,axis=0)
+    preprocessed_image, shapes = detection_model.preprocess(tf.convert_to_tensor(scaled))
+    prediction_dict = detection_model.predict(preprocessed_image, shapes)
+    bboxes = detection_model.postprocess(prediction_dict, shapes)
+    results = []
+    for b in range(bboxes['detection_boxes'].shape[0]):
+        result = []
+        for j in range(bboxes['detection_boxes'][b].shape[0]):
+            class_id = 1
+            proba = bboxes['detection_scores'][b][j]
+            if proba > thresh_detection:
+                #print('box',j,bboxes['detection_boxes'][j])
+                top,left,height,width = bboxes['detection_boxes'][b][j]
+                top *= seq_info['image_size'][0]#/scale
+                height *= seq_info['image_size'][0]#/scale
+                left *= seq_info['image_size'][1]#/scale
+                width *= seq_info['image_size'][1]#/scale
+                height = height - top  
+                width = width - left
+
+                detection = Detection([left,top,width,height], proba, np.zeros((1)))
+                
+                result.append(detection)  
+        results.append(result)
+    return results
 
 
 def detect_frame_boundingboxes(config, detection_model, encoder_model, seq_info, frame, frame_idx, thresh_detection = 0.3):

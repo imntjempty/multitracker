@@ -12,8 +12,10 @@ def experiment_b(args, max_steps = 50000):
 
     config['experiment'] = 'B'
     config['mixup']=False
+    config['cutmix'] = False
     config['hflips']=False 
     config['vflips']=False 
+    config['rot90s'] = False
     config['blurpool'] = False
     config['backbone'] = 'hourglass2'
     config['train_loss'] = 'focal'
