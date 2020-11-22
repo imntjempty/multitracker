@@ -1,0 +1,132 @@
+<html>
+<head>
+    <title>Multitracker labeling</title>
+    <script src="/static/js/konva.min.js"></script>
+    <meta charset="utf-8">
+    <link rel="stylesheet" type="text/css" href="https://semantic-ui.com/dist/semantic.min.css">
+    <script
+        src="https://code.jquery.com/jquery-3.1.1.min.js"
+        integrity="sha256-hVVnYaiADRTO2PzUGmuLJr8BLUSjGIZsDYGmIJLv2b8="
+        crossorigin="anonymous"></script>
+    <script src="https://semantic-ui.com/dist/semantic.min.js"></script>
+    <style>
+        body {
+          margin: 0;
+          /*overflow: hidden;*/
+          padding: 0;
+          background-color: #999999;
+        }
+        [data-tip] {
+            position:relative;
+
+        }
+        [data-tip]:before {
+            content:'';
+            /* hides the tooltip when not hovered */
+            display:none;
+            content:'';
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-bottom: 5px solid #1a1a1a;	
+            position:absolute;
+            top:30px;
+            left:35px;
+            z-index:8;
+            font-size:0;
+            line-height:0;
+            width:0;
+            height:0;
+        }
+        [data-tip]:after {
+            display:none;
+            content:attr(data-tip);
+            position:absolute;
+            top:35px;
+            left:-200px;
+            padding:5px 8px;
+            background:#1a1a1a;
+            color:#fff;
+            z-index:9;
+            font-size: 0.75em;
+            height:18px;
+            line-height:18px;
+            -webkit-border-radius: 3px;
+            -moz-border-radius: 3px;
+            border-radius: 3px;
+            white-space:nowrap;
+            word-wrap:normal;
+        }
+        [data-tip]:hover:before,
+        [data-tip]:hover:after {
+            display:block;
+        }
+        .button {
+            width: 204px
+        }
+    </style>
+    <script src="/static/js/network.js"></script>
+    <script src="/static/js/util.js"></script>
+</head>
+<body>
+{% if labeling_mode == 'keypoint' %}
+    <dialog id="gui" style="position:fixed;top:75px; left:75%; background-color:lightgrey;padding: 10px 10px 10px 10px; z-index:1000001; width: 240px;" open>
+        <table>
+        <tr><td><h2 id="gui_title">0</h2></td></tr>
+        <tr><td><input type="button" id="bu_skip_keypoint" value="skip key point" class="ui button"></td></tr>
+        
+        <tr><td><input type="button" id="bu_send" value="next frame" class="positive ui button"></td></tr>
+        <tr><td><input type="button" id="bu_skip" value="skip frame" class="negative ui button"></td></tr>
+            <table class="ui celled table">
+                <thead><tr><th>keypoint names</th></tr></thead>
+                <tbody>
+                    {% for keypoint_name in keypoint_names.split(sep) %}
+                        <tr><td data-label="keypoint name" name="kpname">{{keypoint_name}}</td></tr>
+                    {% endfor %}
+                </tbody>
+            <tr><td><div id="container_gui"></div></td></tr>
+        </table>
+    </dialog>
+{% endif %}
+{% if labeling_mode == 'bbox' %}
+    <input type="button" id="bu_undobbox" value="delete last bounding box" class="negative ui button">    
+    <input type="button" id="bu_send" value="next frame" class="positive ui button">
+{% endif %}
+<div id="container" style="height: 100%;"></div>
+
+<script src="/static/js/labeling.js"></script>
+<script src="/static/js/gui.js"></script>
+<script>
+    let project_id = {{project_id}};
+    let video_id = {{video_id}};
+    let frame_idx = "{{frame_idx}}";
+    let num_db_frames = {{num_db_frames}};
+    let keypoint_names = "{{keypoint_names}}".split("{{sep}}");
+    let labeling_mode = "{{labeling_mode}}";
+    
+
+    init_fe();
+    
+    document.getElementById("bu_send").onclick = function(){
+        let url = "/labeling";
+        let package = get_labeling_data();
+        if(package !== null){
+            post(url,package,redirect_next_task);
+        }
+    };
+    
+    if(labeling_mode=='keypoint'){ 
+        init_gui();
+    }else{
+        document.getElementById("bu_undobbox").onclick = function(){
+            stage.findOne("#layer").findOne('#bbox_'+(num_indiv-1).toString()).destroy();
+            stage.draw();
+            num_indiv--;
+        };
+
+        document.getElementById('bu_send').value += " "+num_db_frames.toString();
+
+        init_pointer_cross();
+    }
+    //gui.showModal();
+</script>
+</body></html>
