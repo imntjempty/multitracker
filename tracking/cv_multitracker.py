@@ -4,23 +4,21 @@
 
 
     simple idea:
-        setup by init tracker for each detection of first frame
-        a) for each frame always first update old tracker
-        b) then find for each tracker detection with highest iou (at least 0.5)
-        c) if prediction matched with detection:
-              new general position is average of tracker prediction and matched detection
-              replace tracker in multilist by init again with new general bounding box
+        a) for each frame always first update all old trackers with CSR-DCF https://arxiv.org/pdf/1611.08461.pdf
+        b) for each tracker find detection with highest iou (at least 0.5)
+        c) if tracker matched with detection:
+              new general position is average of tracker position and matched detection
+              replace tracker in multilist by init again with new averaged bounding box
               steps_without_detection = 0
               set active
         d) else:
-              new general position is tracker prediction
               steps_without_detection++
               if steps_without_detection>thresh: set inactive
-        e) reassign: for each unmatched detection
+        e) reassign: for each unmatched detection, that doesn't has high iou with any track
             if len(active tracks)==fixed_number:
                 calc center distance to all inactive tracks, merge with nearest track
             else:
-                add new track
+                add new track if position not close to other track
 """
 
 import argparse
@@ -53,11 +51,11 @@ colors = util.get_colors()
 
 
 def tlbr2tlhw(tlbr):
-    return [tlbr[0],tlbr[1], tlbr[2]-tlbr[0], tlbr[3]-tlbr[1]]
+    return [tlbr[0], tlbr[1], tlbr[2]-tlbr[0], tlbr[3]-tlbr[1]]
 def tlhw2tlbr(tlhw):
-    return [tlhw[0],tlhw[1], tlhw[0]+tlhw[2],tlhw[1]+tlhw[3]]
+    return [tlhw[0], tlhw[1], tlhw[0]+tlhw[2], tlhw[1]+tlhw[3]]
 def tlhw2chw(tlhw):
-    return [ tlhw[0]+tlhw[2]/2. , tlhw[1]+tlhw[3]/2., tlhw[2],tlhw[3] ]
+    return [ tlhw[0]+tlhw[2]/2. , tlhw[1]+tlhw[3]/2., tlhw[2], tlhw[3] ]
 
 class OpenCVTrack(object):
     def __init__(self,track_id,tlhw,active,steps_without_detection,last_means,score):
@@ -294,9 +292,9 @@ def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_co
         boxes = np.array([d.tlwh for d in detections])
         scores = np.array([d.confidence for d in detections])
         features = np.array([d.feature for d in detections])
-        indices = preprocessing.non_max_suppression(
-            boxes, nms_max_overlap, scores)
-        detections = [detections[i] for i in indices]
+        #indices = preprocessing.non_max_suppression(
+        #    boxes, nms_max_overlap, scores)
+        #detections = [detections[i] for i in indices]
         #print('[*] found %i detections' % len(detections))
         # Update tracker
         tracker.step({'img':frame,'detections':[boxes, scores, features]})
@@ -314,13 +312,10 @@ def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_co
             cv.waitKey(5)
         # Store results.
         # write results to disk
-        #for track in tracker.tracks:
-        #    result_txt
-        
-        '''for track in tracker.tracks:
-            if not track.is_confirmed() or track.time_since_update > 1:
-                continue
-            bbox = track.to_tlwh()
-            results.append([
-                frame_idx, track.track_id, bbox[0], bbox[1], bbox[2], bbox[3]])'''
+        """with open( file_result, 'a+') as f:
+            for track in tracker.tracks:
+                bbox = track.to_tlwh()
+                center0, center1, _, _ = tlhw2chw(bbox)
+                result = [frame_idx, track.track_id, center0, center1, bbox[0], bbox[1], bbox[2], bbox[3], track.is_confirmed(), track.time_since_update]
+                results.append(result)"""
 
