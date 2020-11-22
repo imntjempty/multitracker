@@ -7,15 +7,20 @@ from multitracker.keypoint_detection import model, roi_segm
 from multitracker.object_detection.finetune import finetune
 from datetime import datetime
 
-def experiment_f(args):
+def experiment_f(args, train_video_ids = None):
     print('[*] starting experiment F: object detection test loss SSD vs FasterRCNN')
     config = model.get_config(args.project_id)
     config['video_id'] = int(args.video_id)
+    if train_video_ids is not None:
+        config['train_video_ids'] = train_video_ids
+    else:
+        config['train_video_ids'] = args.train_video_ids
+    
     config['experiment'] = 'F'
     config['maxsteps_objectdetection'] = 50000
 
     #for od_backbone in ['fasterrcnn','ssd']:
-    for od_backbone in ['fasterrcnn']:
+    for od_backbone in ['ssd']:
         print('[*] starting subexperiment for backbone type',od_backbone)
         config['object_detection_backbone'] = od_backbone
         config['object_detection_backbonepath'] = {
@@ -26,7 +31,7 @@ def experiment_f(args):
         
         print(config,'\n')
         now = str(datetime.now()).replace(' ','_').replace(':','-').split('.')[0]
-        checkpoint_directory = os.path.expanduser("~/experiments/%s/F/%s-%s" % (config['project_name'],od_backbone,now))
+        checkpoint_directory = os.path.expanduser("~/checkpoints/experiments/%s/F/%s-%s" % (config['project_name'],od_backbone,now))
         finetune(config, checkpoint_directory)
 
         clear_session()
