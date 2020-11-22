@@ -60,10 +60,10 @@ def tlhw2chw(tlhw):
     return [ tlhw[0]+tlhw[2]/2. , tlhw[1]+tlhw[3]/2., tlhw[2],tlhw[3] ]
 
 class OpenCVTrack(object):
-    def __init__(self,track_id,tlhw,active,steps_without_detection,last_means):
+    def __init__(self,track_id,tlhw,active,steps_without_detection,last_means,score):
         self.tlhw,self.active,self.steps_without_detection = tlhw,active,steps_without_detection
         self.track_id, self.time_since_update = track_id, steps_without_detection
-        
+        self.score = score
         self.last_means = last_means
         self.last_means = [ tlhw2chw(p) for p in self.last_means ]
         
@@ -77,10 +77,10 @@ class OpenCVTrack(object):
 class OpenCVMultiTracker(object):
     def __init__(self, fixed_number):
         self.fixed_number = fixed_number
-        self.thresh_set_inactive = 10
+        self.thresh_set_inactive = 15
         self.thresh_set_dead = 100
         self.maximum_other_track_init_distance = 150
-        self.maximum_nearest_inactive_track_distance = 500# self.maximum_other_track_init_distance * 4
+        self.maximum_nearest_inactive_track_distance = 1000#500# self.maximum_other_track_init_distance * 4
 
         self.tracks = []
         self.trackers = cv.MultiTracker_create()
@@ -104,6 +104,7 @@ class OpenCVMultiTracker(object):
         # b) then find for each tracker unmatched detection with highest iou (at least 0.5)
         matched_detections = [False for _ in detected_boxes]
         matched_tracks = [False for _ in range(self.fixed_number)]
+        matched_track_scores = [False for _ in range(self.fixed_number)]
         #print('tracked_boxes',len(tracked_boxes))
         #print('detected_boxes',len(detected_boxes))
 
@@ -133,6 +134,7 @@ class OpenCVMultiTracker(object):
                 # replace tracker in multilist by init again with new general bounding box
                 obs = self.trackers.getObjects()
                 obs[i] = box
+                matched_track_scores[i] = scores[highest_iou_idx]
                 self.trackers = cv.MultiTracker_create()
                 for ob in obs:
                     self.trackers.add(cv.TrackerCSRT_create(), frame, tuple([int(cc) for cc in ob]))
@@ -170,7 +172,6 @@ class OpenCVMultiTracker(object):
                     if not other_track_near:
                         # add new track
                         dboxi = tuple([int(cc) for cc in dbox])
-                        print('    ffffframe',frame.shape,dboxi)
                         self.trackers.add(cv.TrackerCSRT_create(), frame, dboxi)
                         self.active[self.active_cnt] = True 
                         self.alive[self.active_cnt] = True
@@ -180,7 +181,7 @@ class OpenCVMultiTracker(object):
                     # only consider reactivating old track with this detection if detected box not high iou with any track
                     other_track_overlaps = False 
                     for k, tbox in enumerate(self.trackers.getObjects()):
-                        other_track_overlaps = other_track_overlaps or calc_iou(tlhw2tlbr(dbox),tlhw2tlbr(self.trackers.getObjects()[k])) > 0.5 
+                        other_track_overlaps = other_track_overlaps or calc_iou(tlhw2tlbr(dbox),tlhw2tlbr(tbox)) > 0.5 
                     if not other_track_overlaps:
                         # calc center distance to all inactive tracks, merge with nearest track
                         nearest_inactive_track_distance, nearest_inactive_track_idx = 1e7,-1
@@ -214,7 +215,7 @@ class OpenCVMultiTracker(object):
         # update internal variables to be compatible with rest
         self.tracks = []
         for i, tbox in enumerate(self.trackers.getObjects()):
-            self.tracks.append(OpenCVTrack(i,tbox,self.active[i],self.steps_without_detection[i],self.last_means[i]))
+            self.tracks.append(OpenCVTrack(i,tbox,self.active[i],self.steps_without_detection[i],self.last_means[i],matched_track_scores[i]))
         
         if debug:
             for i, tbox in enumerate(self.trackers.getObjects()):
@@ -229,6 +230,7 @@ def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_co
     #min_confidence_detection = 0.7
     #min_confidence_keypoints = 0.6
     nms_max_overlap = 1.
+    nms_max_overlap = .25
 
     if 'video' in config and config['video'] is not None:
         video_reader = cv.VideoCapture( config['video'] )
