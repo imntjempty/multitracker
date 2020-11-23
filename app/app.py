@@ -178,22 +178,32 @@ def get_next_bbox_frame(project_id, video_id):
     
     # load frame files from disk
     frames_dir = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, project_id), video_id),'train')
-    frames = [os.path.join(frames_dir, '%s.png' % ff) for ff in labeled_frames_keypoints]
-    shuffle(frames)
+    frames = sorted(glob(os.path.join(frames_dir, '*.png')))
+    frames_keypoints = [os.path.join(frames_dir, '%s.png' % ff) for ff in labeled_frames_keypoints]
+    shuffle(frames_keypoints)
     
     unlabeled_frame_found = False 
+    # first try to label bounding boxes where keypoints are labeled but bboxes not
+    tries = 0
+    while not unlabeled_frame_found and tries < 50:
+        ridx = int(np.random.uniform(len(frames_keypoints)))
+        frame_idx = frames_keypoints[ridx]
+        frame_idx = '.'.join(frame_idx.split('/')[-1].split('.')[:-1])
+        unlabeled_frame_found = not (frame_idx in labeled_frame_idxs)
+        tries += 1 
+
+    # then take random unlabeled frame
     tries = 0
     while not unlabeled_frame_found and tries < 50:
         ridx = int(np.random.uniform(len(frames)))
-        if ridx > 0 and ridx < len(frames):
-            frame_idx = frames[ridx]
-            #frame_idx = frames[int(len(frames)*np.random.random())] # random sampling
-            frame_idx = '.'.join(frame_idx.split('/')[-1].split('.')[:-1])
-            unlabeled_frame_found = not (frame_idx in labeled_frame_idxs)
-            if not unlabeled_frame_found:
-                tries += 1 
+        frame_idx = frames[ridx]
+        frame_idx = '.'.join(frame_idx.split('/')[-1].split('.')[:-1])
+        unlabeled_frame_found = not (frame_idx in labeled_frame_idxs)
+        tries += 1 
+
     if unlabeled_frame_found:
-        print('[*] serving bbox label job for frame %s.'%(frame_idx))
+        nearest_labeled_frame_diff = np.min(np.abs(np.array([int(idx) for idx in labeled_frame_idxs]) - int(frame_idx)))
+        print('[*] serving bounding box label job for frame %s %s. nearest frame already labeled %i frames away'%(frame_idx,get_frame_time(frame_idx),nearest_labeled_frame_diff))       
         return render_template('labeling.html',project_id = int(project_id), video_id = int(video_id), frame_idx = frame_idx, num_db_frames = num_db_frames, keypoint_names = db.list_sep.join(config['keypoint_names']), sep = db.list_sep, labeling_mode = 'bbox')
     else:
         print('[*] redirecting to keypoint labeling')
