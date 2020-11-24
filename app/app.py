@@ -117,10 +117,12 @@ def render_labeling(project_id,video_id):
             while len(unlabeled) < nn:
                 frame_f = frames[int(len(frames)*np.random.random())]
                 frame_idx = '.'.join(frame_f.split('/')[-1].split('.')[:-1])
-                if frame_f not in unlabeled and frame_idx not in labeled_frame_idxs and int(frame_idx)<3000:
+                nearest_labeled_frame_diff = np.min(np.abs(np.array([int(idx) for idx in labeled_frame_idxs]) - int(frame_idx)))
+                if frame_f not in unlabeled and frame_idx not in labeled_frame_idxs and nearest_labeled_frame_diff > 20:
                     unlabeled.append(frame_f)
+
             if training_model is not None:
-                '' # active learning: load some unlabeled frames, inference multiple time, take one with biggest std variation
+                # active learning: load some unlabeled frames, inference multiple time, take one with biggest std variation
                 
                 # predict whole image, height like trained height and variable width 
                 # to keep aspect ratio and relative size        
@@ -155,7 +157,6 @@ def render_labeling(project_id,video_id):
         print('frame_candidates',frame_candidates)
         
     nearest_labeled_frame_diff = np.min(np.abs(np.array([int(idx) for idx in labeled_frame_idxs]) - int(frame_idx)))
-    
     print('[*] serving keypoint label job for frame %s %s. nearest frame already labeled %i frames away'%(frame_idx,get_frame_time(frame_idx),nearest_labeled_frame_diff))       
     
     if args.open_gallery:
@@ -193,16 +194,18 @@ def get_next_bbox_frame(project_id, video_id):
         tries += 1 
 
     # then take random unlabeled frame
-    tries = 0
+    tries, nearest_labeled_frame_diff = 0, 0
     while not unlabeled_frame_found and tries < 50:
         ridx = int(np.random.uniform(len(frames)))
         frame_idx = frames[ridx]
         frame_idx = '.'.join(frame_idx.split('/')[-1].split('.')[:-1])
-        unlabeled_frame_found = not (frame_idx in labeled_frame_idxs)
+        nearest_labeled_frame_diff = np.min(np.abs(np.array([int(idx) for idx in labeled_frame_idxs]) - int(frame_idx)))
+        if nearest_labeled_frame_diff > 20:
+            unlabeled_frame_found = not (frame_idx in labeled_frame_idxs)
         tries += 1 
 
+    nearest_labeled_frame_diff = np.min(np.abs(np.array([int(idx) for idx in labeled_frame_idxs]) - int(frame_idx)))
     if unlabeled_frame_found:
-        nearest_labeled_frame_diff = np.min(np.abs(np.array([int(idx) for idx in labeled_frame_idxs]) - int(frame_idx)))
         print('[*] serving bounding box label job for frame %s %s. nearest frame already labeled %i frames away'%(frame_idx,get_frame_time(frame_idx),nearest_labeled_frame_diff))       
         return render_template('labeling.html',project_id = int(project_id), video_id = int(video_id), frame_idx = frame_idx, num_db_frames = num_db_frames, keypoint_names = db.list_sep.join(config['keypoint_names']), sep = db.list_sep, labeling_mode = 'bbox')
     else:
