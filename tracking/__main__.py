@@ -56,6 +56,8 @@ def main(args):
     config['inference_objectdetection_batchsize'] = args.inference_objectdetection_batchsize
     config['tracking_method'] = args.tracking_method
     
+    config['file_tracking_results'] = args.output_tracking_results
+
     # <load frames>
     output_dir = '/tmp/multitracker/object_detection/predictions/%i' % (config['video_id'])
     if not os.path.isdir(output_dir):
@@ -169,6 +171,7 @@ if __name__ == '__main__':
     parser.add_argument('--min_confidence_keypoints',required=False,default=0.5,type=float)
     parser.add_argument('--inference_objectdetection_batchsize',required=False,default=4,type=int)
     parser.add_argument('--tracking_method',required=False,default='DeepSORT',type=str)
+    parser.add_argument('--output_tracking_results',required=False,default=None)
     parser.add_argument('--video',required=False,default=None)
     
     #parser.add_argument('--fixed_number',required=False,default=4,type=int)

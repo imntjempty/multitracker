@@ -240,6 +240,9 @@ def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_co
     [Hframe,Wframe,_] = cv.imread(glob(os.path.join(os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'test'),'*.png'))[0]).shape
     
     video_file_out = inference.get_video_output_filepath(config)
+    if config['file_tracking_results'] is None:
+        config['file_tracking_results'] = video_file_out.replace('.%s'%video_file_out.split('.')[-1],'.csv')
+
     if os.path.isfile(video_file_out): os.remove(video_file_out)
     import skvideo.io
     video_writer = skvideo.io.FFmpegWriter(video_file_out, outputdict={
@@ -258,8 +261,7 @@ def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_co
         tracker = OpenCVMultiTracker(config['fixed_number'])
     keypoint_tracker = keypoint_tracking.KeypointTracker()
 
-    frame_idx = 0
-    config['count'] = 0
+    frame_idx = -1
     frame_buffer = deque()
     detection_buffer = deque()
     running = True 
@@ -270,7 +272,6 @@ def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_co
 
     while running: #video_reader.isOpened():
         frame_idx += 1 
-        config['count'] = frame_idx
         # if buffer not empty use preloaded frames and preloaded detections
         
         # fill up frame buffer as you take something from it to reduce lag 
@@ -313,10 +314,15 @@ def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_co
             cv.waitKey(5)
         # Store results.
         # write results to disk
-        """with open( file_result, 'a+') as f:
-            for track in tracker.tracks:
-                bbox = track.to_tlwh()
-                center0, center1, _, _ = tlhw2chw(bbox)
-                result = [frame_idx, track.track_id, center0, center1, bbox[0], bbox[1], bbox[2], bbox[3], track.is_confirmed(), track.time_since_update]
-                results.append(result)"""
+        
+        for track in tracker.tracks:
+            bbox = track.to_tlwh()
+            center0, center1, _, _ = tlhw2chw(bbox)
+            result = [frame_idx, track.track_id, center0, center1, bbox[0], bbox[1], bbox[2], bbox[3], track.is_confirmed(), track.time_since_update]
+            results.append(result)
+        
+        if frame_idx % 30 == 0:
+            with open( config['file_tracking_results'], 'w') as f:
+                for result in results:
+                    f.write(','.join([str(r) for r in result])+'\n')
 

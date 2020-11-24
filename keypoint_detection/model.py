@@ -504,12 +504,13 @@ def get_config(project_id = 3):
     }[config['object_detection_backbone']]
     config['object_detection_batch_size'] = {'ssd': 4, 'fasterrcnn': 4}[config['object_detection_backbone']]
     config['lr_objectdetection'] = 0.0005 
-    config['maxsteps_objectdetection'] = 50000
-    config['minsteps_objectdetection'] = 25000
-    config['object_augm_flip'] = bool(0)
-    config['object_augm_rot90'] = bool(0)
-    config['object_augm_gaussian'] = bool(0)
-    config['object_augm_crop'] = bool(1)
+    config['maxsteps_objectdetection'] = 250000 #50000
+    config['minsteps_objectdetection'] = 50000 #25000
+    config['object_augm_flip'] = bool(1)
+    config['object_augm_rot90'] = bool(1)
+    config['object_augm_gaussian'] = bool(1)
+    config['object_augm_image'] = bool(1)
+    config['object_augm_crop'] = bool(0)
 
     config['train_loss'] = ['cce','focal'][1]
     config['test_losses'] = ['focal'] #['cce','focal']
