@@ -390,11 +390,10 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
             # Use tf.function for a bit of speed.
             # Comment out the tf.function decorator if you want the inside of the
             # function to run eagerly.
-            @tf.function
+            @tf.function(experimental_relax_shapes=True)
             def train_step_fn(image_tensors,
                             groundtruth_boxes_list,
-                            groundtruth_classes_list,
-                            update_weights = True):
+                            groundtruth_classes_list):
                 """A single training iteration.
 
                 Args:
@@ -416,27 +415,52 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
                 image_tensors = tf.concat(image_tensors,axis=0)
                 preprocessed_images, shapes = detection_model.preprocess(image_tensors) 
 
-                if update_weights:
-                    with tf.GradientTape() as tape:
-                        prediction_dict = model.predict(preprocessed_images, shapes)
-                        losses_dict = model.loss(prediction_dict, shapes)
-                        total_loss = 0.0
-                        for v in losses_dict.values():
-                            total_loss += v 
-                        gradients = tape.gradient(total_loss, vars_to_fine_tune)
-                        optimizer.apply_gradients(zip(gradients, vars_to_fine_tune))
-                else:
+                with tf.GradientTape() as tape:
                     prediction_dict = model.predict(preprocessed_images, shapes)
                     losses_dict = model.loss(prediction_dict, shapes)
                     total_loss = 0.0
                     for v in losses_dict.values():
                         total_loss += v 
+                    gradients = tape.gradient(total_loss, vars_to_fine_tune)
+                    optimizer.apply_gradients(zip(gradients, vars_to_fine_tune))
                 return prediction_dict, shapes, total_loss
 
-            return train_step_fn
+            @tf.function(experimental_relax_shapes=True)
+            def test_step_fn(image_tensors,
+                            groundtruth_boxes_list,
+                            groundtruth_classes_list):
+                """A single training iteration.
+
+                Args:
+                    image_tensors: A list of [B, height, width, 3] Tensor of type tf.float32.
+                    Note that the height and width can vary across images, as they are
+                    reshaped within this function to be 640x640.
+                    groundtruth_boxes_list: A list of Tensors of shape [N_i, 4] with type
+                    tf.float32 representing groundtruth boxes for each image in the batch.
+                    groundtruth_classes_list: A list of Tensors of shape [N_i, num_classes]
+                    with type tf.float32 representing groundtruth boxes for each image in
+                    the batch.
+
+                Returns:
+                    A scalar tensor representing the total loss for the input batch.
+                """
+                model.provide_groundtruth(
+                    groundtruth_boxes_list=groundtruth_boxes_list,
+                    groundtruth_classes_list=groundtruth_classes_list)
+                image_tensors = tf.concat(image_tensors,axis=0)
+                preprocessed_images, shapes = detection_model.preprocess(image_tensors) 
+
+                prediction_dict = model.predict(preprocessed_images, shapes)
+                losses_dict = model.loss(prediction_dict, shapes)
+                total_loss = 0.0
+                for v in losses_dict.values():
+                    total_loss += v 
+                return prediction_dict, shapes, total_loss
+
+            return train_step_fn, test_step_fn
 
         optimizer = tf.keras.optimizers.SGD(learning_rate=learning_rate, momentum=0.9)
-        train_step_fn = get_model_train_step_function(detection_model, optimizer, to_fine_tune)
+        train_step_fn, test_step_fn = get_model_train_step_function(detection_model, optimizer, to_fine_tune)
         writer_train = tf.summary.create_file_writer(checkpoint_directory+'/train')
         writer_test = tf.summary.create_file_writer(checkpoint_directory+'/test')
         csv_train = os.path.join(checkpoint_directory,'train_log.csv')
@@ -494,7 +518,7 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
                 # </augmentation>
 
                 # Training step (forward pass + backwards pass)
-                prediction_dict, shapes, total_loss = train_step_fn(image_tensors, gt_boxes, gt_classes, update_weights = True)
+                prediction_dict, shapes, total_loss = train_step_fn(image_tensors, gt_boxes, gt_classes)
 
                 if idx % 100 == 0:
                     # write tensorboard summary
@@ -518,7 +542,7 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
                             gt_boxes_test.append(tf.convert_to_tensor(frame_bboxes[str(frame_idx[ii].numpy().decode("utf-8") )], dtype=tf.float32))
                             gt_classes_test.append(tf.one_hot(tf.convert_to_tensor(np.ones(shape=[frame_bboxes[str(frame_idx[ii].numpy().decode("utf-8") )].shape[0]], dtype=np.int32) - label_id_offset), num_classes))
                         # Test step (forward pass only)
-                        prediction_dict_test, shapes, _loss_test = train_step_fn(image_tensors_test, gt_boxes_test, gt_classes_test, update_weights = False)
+                        prediction_dict_test, shapes, _loss_test = test_step_fn(image_tensors_test, gt_boxes_test, gt_classes_test)
                         test_loss = test_loss + _loss_test/num_test_batches
                     with open(csv_test,'a+') as ftest:
                         ftest.write('%i,%f\n' % (idx, test_loss))

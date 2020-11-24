@@ -22,7 +22,7 @@ def hflip(image_tensors, gt_boxes):
     return image_tensors, gt_boxes
 
 def gaussian_noise(image_tensors, gt_boxes):
-    image_tensors = tf.keras.layers.GaussianNoise(100)(image_tensors)
+    image_tensors = tf.keras.layers.GaussianNoise(np.random.uniform(50))(image_tensors)
     return image_tensors, gt_boxes
 
 def rot90(image_tensors, gt_boxes): # counter clockwise
@@ -69,8 +69,8 @@ def random_image_transformation(image_tensors, gt_boxes):
         image_tensors = tf.image.random_contrast(image_tensors,0.5,2)
     if np.random.uniform() > 0.5:
         image_tensors = tf.image.random_hue(image_tensors,0.25)
-    if np.random.uniform() > 0.5:
-        image_tensors = tf.image.random_jpeg_quality(image_tensors,30,100)
+    #if np.random.uniform() > 0.5:
+    #    image_tensors = tf.image.random_jpeg_quality(image_tensors,30,100)
             
     return image_tensors, gt_boxes
 
@@ -88,7 +88,7 @@ def augment(config, image_tensors, gt_boxes):
         image_tensors, gt_boxes = random_crop(image_tensors, gt_boxes)
     if config['object_augm_image'] and np.random.uniform() > 0.5:
         image_tensors, gt_boxes = random_image_transformation(image_tensors, gt_boxes)
-    object_augm_image
+    
     return image_tensors, gt_boxes
 
 def test():
