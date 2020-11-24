@@ -514,7 +514,7 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
                     gt_classes.append(tf.one_hot(tf.convert_to_tensor(np.ones(shape=[frame_bboxes[str(frame_idx[ii].numpy().decode("utf-8") )].shape[0]], dtype=np.int32) - label_id_offset), num_classes))
                 
                 # <augmentation>
-                image_tensors, gt_boxes = augmentation.augment(config, image_tensors, gt_boxes)
+                image_tensors, gt_boxes, gt_classes = augmentation.augment(config, image_tensors, gt_boxes, gt_classes)
                 # </augmentation>
 
                 # Training step (forward pass + backwards pass)
