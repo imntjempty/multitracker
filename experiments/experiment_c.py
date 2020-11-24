@@ -13,10 +13,10 @@ def experiment_c(args, max_steps = 50000):
     config['experiment'] = 'C'
     config['mixup']=False
     config['cutmix'] = False
-    config['hflips']=False 
-    config['vflips']=False 
+    config['kp_hflips']=False 
+    config['kp_vflips']=False 
+    config['kp_rot90s'] = False
     config['blurpool'] = False
-    config['rot90s'] = False
 
     config['train_loss'] = 'focal'
     config['test_losses'] = ['focal'] #['cce','focal']

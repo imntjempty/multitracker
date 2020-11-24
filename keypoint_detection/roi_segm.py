@@ -454,11 +454,11 @@ def train(config):
         if 1:#try:
             for x,y in dataset_train:
             
-                if np.random.random() < 0.5 and config['hflips']:
+                if np.random.random() < 0.5 and config['kp_hflips']:
                     x,y = model.hflip(swaps,x,y)
-                if np.random.random() < 0.5 and config['vflips']:
+                if np.random.random() < 0.5 and config['kp_vflips']:
                     x,y = model.vflip(swaps,x,y)
-                if np.random.random() < 0.5 and 'rot90s' in config and config['rot90s']:
+                if np.random.random() < 0.5 and 'kp_rot90s' in config and config['kp_rot90s']:
                     _num_rots = 1+int(np.random.uniform(3))
                     for ir in range(_num_rots):
                         x = tf.image.rot90(x)

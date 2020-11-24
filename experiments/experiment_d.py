@@ -19,9 +19,9 @@ def experiment_d(args, max_steps = 50000, train_video_ids = None):
     config['experiment'] = 'D'
     config['mixup']=False
     config['cutmix']=False
-    config['rot90s'] = False
-    config['hflips']=False 
-    config['vflips']=False 
+    config['kp_rot90s'] = False
+    config['kp_hflips']=False 
+    config['kp_vflips']=False 
     config['blurpool'] = False
     config['max_steps'] = max_steps
     config['backbone'] = 'hourglass2'

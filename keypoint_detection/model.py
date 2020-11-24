@@ -477,10 +477,10 @@ def get_config(project_id = 3):
 
     config['mixup'] = [False, True][0]
     config['cutmix'] = [False, True][1]
-    config['hflips'] = [False,True][1]
-    config['vflips'] = [False,True][1]
+    config['kp_hflips'] = [False,True][1]
+    config['kp_vflips'] = [False,True][1]
     config['rotation_augmentation'] = bool(1)
-    config['rot90s'] = bool(1)
+    config['kp_rot90s'] = bool(1)
     config['num_hourglass'] = 2 #8
     config['fov'] = 0.75 # default 0.5
     config['selftrain_start_step'] = 10000
@@ -502,11 +502,15 @@ def get_config(project_id = 3):
         'ssd': 'ssd_resnet50_v1_fpn_640x640_coco17_tpu-8',
         'fasterrcnn': 'faster_rcnn_inception_resnet_v2_640x640_coco17_tpu-8'
     }[config['object_detection_backbone']]
-    config['object_detection_batch_size'] = {'ssd': 16, 'fasterrcnn': 4}[config['object_detection_backbone']]
+    config['object_detection_batch_size'] = {'ssd': 4, 'fasterrcnn': 4}[config['object_detection_backbone']]
     config['lr_objectdetection'] = 0.0005 
     config['maxsteps_objectdetection'] = 50000
     config['minsteps_objectdetection'] = 25000
-    config['object_flip'] = bool(0)
+    config['object_augm_flip'] = bool(0)
+    config['object_augm_rot90'] = bool(0)
+    config['object_augm_gaussian'] = bool(0)
+    config['object_augm_crop'] = bool(1)
+
     config['train_loss'] = ['cce','focal'][1]
     config['test_losses'] = ['focal'] #['cce','focal']
 
