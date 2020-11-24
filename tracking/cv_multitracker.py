@@ -305,7 +305,8 @@ def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_co
 
         print('%i - %i detections. %i keypoints' % (config['count'],len(detections), len(keypoints)),[kp for kp in keypoints])
         out = deep_sort_app.visualize(visualizer, frame, tracker, detections, keypoint_tracker, keypoints, tracked_keypoints, crop_dim)
-        video_writer.writeFrame(cv.cvtColor(out, cv.COLOR_BGR2RGB)) #out[:,:,::-1])
+        video_writer.writeFrame(out)
+        #video_writer.writeFrame(cv.cvtColor(out, cv.COLOR_BGR2RGB)) #out[:,:,::-1])
         
         if 1:
             cv.imshow("tracking visualization", cv.resize(out,None,None,fx=0.75,fy=0.75))
