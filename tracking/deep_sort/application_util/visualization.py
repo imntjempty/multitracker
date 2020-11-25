@@ -86,7 +86,7 @@ class Visualization(object):
     This class shows tracking output in an OpenCV image viewer.
     """
 
-    def __init__(self, seq_info, update_ms):
+    def __init__(self, seq_info, update_ms, config):
         image_shape = seq_info["image_size"][::-1]
         aspect_ratio = float(image_shape[1]) / image_shape[0]
         #image_shape = 1024, int(aspect_ratio * 1024)
@@ -95,6 +95,7 @@ class Visualization(object):
         self.viewer.thickness = 2
         self.frame_idx = int(seq_info["min_frame_idx"])
         self.last_idx = int(seq_info["max_frame_idx"])
+        self.config = config
 
     def run(self, frame_callback):
         self.viewer.run(lambda: self._update_fun(frame_callback))
@@ -138,7 +139,10 @@ class Visualization(object):
 
             ## draw lines of history 
             if len(track.last_means)>2:
-                for i in range(1,len(track.last_means)):
+                _stop = -1 
+                if 'track_tail' in self.config and self.config['track_tail'] > 0:
+                    _stop = max(1,len(track.last_means) - self.config['track_tail'])
+                for i in range(len(track.last_means)-1, _stop, -1):
                     px, py = track.last_means[i-1][:2]
                     x,   y = track.last_means[i  ][:2]
                     if np.sqrt( (px-x)**2 + (py-y)**2 ) < 50:

@@ -253,7 +253,7 @@ def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_co
     }) 
 
     seq_info = deep_sort_app.gather_sequence_info(config)
-    visualizer = visualization.Visualization(seq_info, update_ms=5)
+    visualizer = visualization.Visualization(seq_info, update_ms=5, config=config)
     print('[*] writing video file %s' % video_file_out)
     
     ## initialize tracker for boxes and keypoints
@@ -264,6 +264,7 @@ def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_co
     frame_idx = -1
     frame_buffer = deque()
     detection_buffer = deque()
+    results = []
     running = True 
     scale = None 
     for ib in range(config['inference_objectdetection_batchsize']):
@@ -272,6 +273,7 @@ def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_co
 
     while running: #video_reader.isOpened():
         frame_idx += 1 
+        config['count'] = frame_idx
         # if buffer not empty use preloaded frames and preloaded detections
         
         # fill up frame buffer as you take something from it to reduce lag 
@@ -304,22 +306,21 @@ def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_co
         # update tracked keypoints with new detections
         tracked_keypoints = keypoint_tracker.update(keypoints)
 
+        # Store results.        
+        for track in tracker.tracks:
+            bbox = track.to_tlwh()
+            center0, center1, _, _ = tlhw2chw(bbox)
+            result = [frame_idx, track.track_id, center0, center1, bbox[0], bbox[1], bbox[2], bbox[3], track.is_confirmed(), track.time_since_update]
+            results.append(result)
+        
         print('%i - %i detections. %i keypoints' % (config['count'],len(detections), len(keypoints)),[kp for kp in keypoints])
-        out = deep_sort_app.visualize(visualizer, frame, tracker, detections, keypoint_tracker, keypoints, tracked_keypoints, crop_dim)
+        out = deep_sort_app.visualize(visualizer, frame, tracker, detections, keypoint_tracker, keypoints, tracked_keypoints, crop_dim, results, sketch_file=config['sketch_file'])
         video_writer.writeFrame(out)
         #video_writer.writeFrame(cv.cvtColor(out, cv.COLOR_BGR2RGB)) #out[:,:,::-1])
         
         if 1:
             cv.imshow("tracking visualization", cv.resize(out,None,None,fx=0.75,fy=0.75))
             cv.waitKey(5)
-        # Store results.
-        # write results to disk
-        
-        for track in tracker.tracks:
-            bbox = track.to_tlwh()
-            center0, center1, _, _ = tlhw2chw(bbox)
-            result = [frame_idx, track.track_id, center0, center1, bbox[0], bbox[1], bbox[2], bbox[3], track.is_confirmed(), track.time_since_update]
-            results.append(result)
         
         if frame_idx % 30 == 0:
             with open( config['file_tracking_results'], 'w') as f:

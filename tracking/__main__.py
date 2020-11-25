@@ -6,6 +6,9 @@
 
     python3.7 -m multitracker.tracking --project_id 7 --video_id 13 --train_video_ids 9,14 --objectdetection_model ~/checkpoints/multitracker/bbox/vids9\,14-2020-11-13_07-56-02 --autoencoder_model /home/alex/checkpoints/multitracker/ae/vid_13-2020-11-10_22-34-32 --keypoint_model /home/alex/checkpoints/multitracker/keypoints/vids9,14-2020-11-13_00-24-28 --min_confidence_boxes 0.7 --min_confidence_keypoints 0.5 --tracking_method FixedAssigner --video /home/alex/data/multitracker/projects/7/videos/from_above_Oct2020_2_12fps.mp4
 
+
+    python3.7 -m multitracker.tracking --project_id 7 --video_id 13 --train_video_ids 9,14 --autoencoder_model /home/alex/checkpoints/multitracker/ae/vid_13-2020-11-10_22-34-32 --keypoint_model /home/alex/checkpoints/multitracker/keypoints/vids9,14-2020-11-13_00-24-28 --min_confidence_boxes 0.5 --min_confidence_keypoints 0.5 --tracking_method FixedAssigner --video /home/alex/data/multitracker/projects/7/videos/from_above_Oct2020_2_12fps.mp4 --objectdetection_model /home/alex/checkpoints/multitracker/bbox/flips,rot90,gauss,noise-vids9,14-2020-11-25_07-15-17 --sketch_file /home/alex/data/multitracker/projects/7/13/sketch.png
+
 """
 
 import os
@@ -55,6 +58,8 @@ def main(args):
     config['n_blocks'] = 4
     config['inference_objectdetection_batchsize'] = args.inference_objectdetection_batchsize
     config['tracking_method'] = args.tracking_method
+    config['track_tail'] = args.track_tail
+    config['sketch_file'] = args.sketch_file
     
     config['file_tracking_results'] = args.output_tracking_results
 
@@ -172,6 +177,8 @@ if __name__ == '__main__':
     parser.add_argument('--inference_objectdetection_batchsize',required=False,default=4,type=int)
     parser.add_argument('--tracking_method',required=False,default='DeepSORT',type=str)
     parser.add_argument('--output_tracking_results',required=False,default=None)
+    parser.add_argument('--track_tail',required=False,default=-1,type=int,help="How many steps back in the past should the path of each animal be drawn? defaults to -1 -> draw complete path")
+    parser.add_argument('--sketch_file',required=False,default=None, help="Black and White Sketch of the frame without animals")
     parser.add_argument('--video',required=False,default=None)
     
     #parser.add_argument('--fixed_number',required=False,default=4,type=int)

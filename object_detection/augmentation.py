@@ -129,7 +129,7 @@ def hflip(image_tensors, gt_boxes):
 
 def gaussian_noise(image_tensors, gt_boxes):
     """ gaussian noise """
-    image_tensors = tf.keras.layers.GaussianNoise(np.random.uniform(50))(image_tensors)
+    image_tensors = tf.keras.layers.GaussianNoise(np.random.uniform(25))(image_tensors)
     return image_tensors, gt_boxes
 
 def rot90(image_tensors, gt_boxes): # counter clockwise

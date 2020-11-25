@@ -24,6 +24,7 @@ from multitracker.tracking.deep_sort.deep_sort.tracker import Tracker
 from multitracker.keypoint_detection import roi_segm
 from multitracker.tracking import inference
 from multitracker.tracking.keypoint_tracking import tracker as keypoint_tracking
+from multitracker.tracking.cv_multitracker import tlhw2chw
 from multitracker.be import video
 from multitracker import util 
 
@@ -147,8 +148,31 @@ def append_crop_mosaic(frame, vis_crops):
     out = np.hstack((frame, mosaic))
     return out
 
+def draw_heatmap(frame, results, sketch_file):
+    ##   results is list of [frame_idx, track.track_id, center0, center1, bbox[0], bbox[1], bbox[2], bbox[3], track.is_confirmed(), track.time_since_update]
 
-def visualize(vis, frame, tracker, detections, keypoint_tracker, keypoints, tracked_keypoints, crop_dim):
+    grid_num_y = 32
+    grid_height = int(frame.shape[0]/grid_num_y)
+    grid_num_x = int(frame.shape[1]/grid_height)
+    history_heatmap = np.zeros((grid_num_y, grid_num_x),'float32')
+    for result in results:
+        c0,c1 = result[2], result[3]
+        history_heatmap[min(int(c1/grid_height),grid_num_x)][min(int(c0/grid_height),grid_num_y-1)] += 1. 
+    
+    history_heatmap = (history_heatmap-history_heatmap.min()) / (history_heatmap.max()-history_heatmap.min())
+    history_heatmap = np.uint8(np.around(255. * history_heatmap))
+    history_heatmap = cv.resize(history_heatmap,(256,256))
+    
+    vis_history_heatmap = cv.applyColorMap(history_heatmap, cv.COLORMAP_JET)
+
+    if sketch_file is not None:
+        sketch = cv.imread(sketch_file)
+        sketch = cv.cvtColor(sketch, cv.COLOR_BGR2GRAY)
+        vis_history_heatmap[:,:,1] = 255 - cv.resize(sketch,(256,256))
+
+    return vis_history_heatmap 
+
+def visualize(vis, frame, tracker, detections, keypoint_tracker, keypoints, tracked_keypoints, crop_dim, results, sketch_file = None):
     # draw keypoint detections 'whitish'
     im = np.array(frame, copy=True)
     
@@ -182,8 +206,9 @@ def visualize(vis, frame, tracker, detections, keypoint_tracker, keypoints, trac
         color_keypoint = [c//2 + 64 for c in color_keypoint]
         #im = cv.circle(im, (x,y), radius_keypoint, color_keypoint, 3)
     
+    history_heatmap = draw_heatmap(frame, results, sketch_file)
     # crop keypointed vis 
-    vis_crops = [  ]
+    vis_crops = [ history_heatmap ]
     for i, track in enumerate(tracker.tracks):
         if 1 or track.is_confirmed():
             x1,y1,x2,y2 = track.to_tlbr()
@@ -301,8 +326,15 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
         # update tracked keypoints with new detections
         tracked_keypoints = keypoint_tracker.update(keypoints)
 
+        # Store results.
+        for track in tracker.tracks:
+            bbox = track.to_tlwh()
+            center0, center1, _, _ = tlhw2chw(bbox)
+            result = [frame_idx, track.track_id, center0, center1, bbox[0], bbox[1], bbox[2], bbox[3], track.is_confirmed(), track.time_since_update]
+            results.append(result)
+        
         # Update visualization.
-        out = visualize(vis, frame, tracker, detections, keypoint_tracker, keypoints, tracked_keypoints, crop_dim)
+        out = visualize(vis, frame, tracker, detections, keypoint_tracker, keypoints, tracked_keypoints, crop_dim, results)
         
         # write visualization as frame to video
         try:
@@ -314,13 +346,6 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
             print('[*] Video Writing for frame_idx %s failed. image shape'%frame_idx,out.shape)
             print(e)
 
-        # Store results.
-        for track in tracker.tracks:
-            if not track.is_confirmed() or track.time_since_update > 1:
-                continue
-            bbox = track.to_tlwh()
-            results.append([
-                frame_idx, track.track_id, bbox[0], bbox[1], bbox[2], bbox[3]])
 
         return True
     # Run tracker.
