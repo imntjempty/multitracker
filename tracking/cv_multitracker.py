@@ -57,6 +57,12 @@ def tlhw2tlbr(tlhw):
 def tlhw2chw(tlhw):
     return [ tlhw[0]+tlhw[2]/2. , tlhw[1]+tlhw[3]/2., tlhw[2], tlhw[3] ]
 
+class IoUTracker(object):
+    """ http://elvera.nue.tu-berlin.de/files/1517Bochinski2017.pdf """
+    pass
+
+class VIoUTracker(object):
+    """ http://elvera.nue.tu-berlin.de/files/1547Bochinski2018.pdf """
 class OpenCVTrack(object):
     def __init__(self,track_id,tlhw,active,steps_without_detection,last_means,score):
         self.tlhw,self.active,self.steps_without_detection = tlhw,active,steps_without_detection
