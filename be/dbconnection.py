@@ -148,8 +148,8 @@ class DatabaseConnection(object):
                 self.insert(query, values)
         if len(data['keypoints']) == 0:
             query = """ insert into keypoint_positions (video_id, frame_idx, keypoint_name, individual_id, keypoint_x, keypoint_y) values (?,?,NULL,NULL,NULL,NULL); """
-            values = (int(data['video_id']), str(data['frame_idx']), keypoint_names[0], 1, 0, 0)
-            #self.insert(query, values)
+            values = (int(data['video_id']), str(data['frame_idx']))
+            self.insert(query, values)
         print('[*] saved keypoint labeling data to database for video %i, frame %s.' %(int(data['video_id']),str(data['frame_idx'])))
 
     def save_bbox_labeling(self, data):
