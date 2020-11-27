@@ -127,32 +127,28 @@ def get_bbox_data(config, vis_input_data=0):
 
     H,W,_ = cv.imread( sample_fim ).shape
     frames = list(frame_bboxes.keys())
-    random.Random(4).shuffle(frames)
-    for i, _key in enumerate(frames):
+    #random.Random(4).shuffle(frames)
+    frames = sorted(frames)
+    for i, _key in enumerate(frames): # key is video_id_frame_idx 
         frame_bboxes[_key] = frame_bboxes[_key] / np.array([H,W,H,W]) 
         bboxes = frame_bboxes[_key]
         
         if i % 10 > 0: #np.random.uniform() > 0.2:
-            #train_image_tensors.append(tf.expand_dims(tf.convert_to_tensor(image_np, dtype=tf.float32), axis=0))
             train_image_tensors.append(_key) # str(frame_idx).zfill(5)
             train_gt_box_tensors.append(tf.convert_to_tensor(bboxes, dtype=tf.float32))
             train_gt_classes_one_hot_tensors.append(tf.one_hot(tf.convert_to_tensor(np.ones(shape=[bboxes.shape[0]], dtype=np.int32) - label_id_offset), num_classes))
         else:
-            #test_image_tensors.append(tf.expand_dims(tf.convert_to_tensor(image_np, dtype=tf.float32), axis=0))
             test_image_tensors.append(_key)
             test_gt_box_tensors.append(tf.convert_to_tensor(bboxes, dtype=tf.float32))
             test_gt_classes_one_hot_tensors.append(tf.one_hot(tf.convert_to_tensor(np.ones(shape=[bboxes.shape[0]], dtype=np.int32) - label_id_offset), num_classes))
     
+    # maybe use only a part of the train set
     ddata_train, ddata_test = [], []
     for i in range(len(train_image_tensors)):
-        add = True 
-        if 'data_ratio' in config:
-            if np.random.uniform() > config['data_ratio']:
-                add = False 
-        if add:
+        if not ('data_ratio' in config and np.random.uniform() > config['data_ratio']):
             ddata_train.append(train_image_tensors[i])
+
     for i in range(len(test_image_tensors)):
-        #ddata_test.append([test_image_tensors[i], test_gt_box_tensors[i], test_gt_classes_one_hot_tensors[i]])
         ddata_test.append(test_image_tensors[i])
     print('[*] loaded object detection %s data: training on %i samples, testing on %i samples' % (config['object_detection_backbone'], len(ddata_train),len(ddata_test)))
     labeling_list_train = tf.data.Dataset.from_tensor_slices(ddata_train)
@@ -172,6 +168,7 @@ def get_bbox_data(config, vis_input_data=0):
     data_train = labeling_list_train.map(load_im, num_parallel_calls = tf.data.experimental.AUTOTUNE).batch(config['object_detection_batch_size']).prefetch(4*config['object_detection_batch_size'])#.cache()
     data_test = labeling_list_test.map(load_im, num_parallel_calls = tf.data.experimental.AUTOTUNE).batch(config['object_detection_batch_size']).prefetch(4*config['object_detection_batch_size'])#.cache()
     data_train = data_train.shuffle(256)
+    data_test = data_test.shuffle(256)
     return frame_bboxes, data_train, data_test  
     
 
@@ -256,8 +253,10 @@ def load_trained_model(config):
     
     if config['object_detection_backbone'] == 'ssd':
         model_config.ssd.num_classes = 1
-    else:
+    elif config['object_detection_backbone'] == 'fasterrcnn':
         model_config.faster_rcnn.num_classes = 1
+    else:
+        model_config.ssd.num_classes = 1
     detection_model = model_builder.build(model_config=model_config, is_training=False)
     ckpt = tf.compat.v2.train.Checkpoint(detection_model=detection_model)
     ckpt.restore(tf.train.latest_checkpoint(config['objectdetection_model'])).expect_partial()
@@ -296,6 +295,8 @@ def restore_weights(config, checkpoint_path = None, gt_boxes = None, gt_classes 
     elif config['object_detection_backbone'] == 'fasterrcnn':
         model_config.faster_rcnn.num_classes = num_classes
         #model_config.faster_rcnn.freeze_batchnorm = True
+    else:
+        model_config.ssd.num_classes = num_classes
 
     detection_model = model_builder.build(
         model_config=model_config, is_training=True)
@@ -327,6 +328,19 @@ def restore_weights(config, checkpoint_path = None, gt_boxes = None, gt_classes 
         ckpt = tf.train.Checkpoint(model=fake_model)
         ckpt.restore(checkpoint_path).expect_partial()
 
+    elif config['object_detection_backbone'] == 'efficient':
+        fake_box_predictor = tf.compat.v2.train.Checkpoint(
+            _base_tower_layers_for_heads=detection_model._box_predictor._base_tower_layers_for_heads,
+            # _prediction_heads=detection_model._box_predictor._prediction_heads,
+            #    (i.e., the classification head that we *will not* restore)
+            _box_prediction_head=detection_model._box_predictor._box_prediction_head,
+        )
+        
+        fake_model = tf.compat.v2.train.Checkpoint(
+                _feature_extractor=detection_model._feature_extractor,
+                _box_predictor=fake_box_predictor)
+        ckpt = tf.compat.v2.train.Checkpoint(model=fake_model)
+        ckpt.restore(checkpoint_path).expect_partial()
     detection_model.provide_groundtruth(
                     groundtruth_boxes_list=[tf.zeros((7,4))],
                     groundtruth_classes_list=[tf.zeros((7,1))])

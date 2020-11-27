@@ -267,6 +267,11 @@ def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_co
     results = []
     running = True 
     scale = None 
+    # ignore first 5 frames
+    for _ in range(5):
+        _, _ = video_reader.read()
+    
+    # fill up initial frame buffer for batch inference
     for ib in range(config['inference_objectdetection_batchsize']):
         ret, frame = video_reader.read()
         frame_buffer.append(frame[:,:,::-1]) # trained on TF RGB, cv2 yields BGR
@@ -315,7 +320,7 @@ def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_co
         
         print('%i - %i detections. %i keypoints' % (config['count'],len(detections), len(keypoints)),[kp for kp in keypoints])
         out = deep_sort_app.visualize(visualizer, frame, tracker, detections, keypoint_tracker, keypoints, tracked_keypoints, crop_dim, results, sketch_file=config['sketch_file'])
-        video_writer.writeFrame(out)
+        video_writer.writeFrame(cv.cvtColor(out, cv.COLOR_BGR2RGB))
         #video_writer.writeFrame(cv.cvtColor(out, cv.COLOR_BGR2RGB)) #out[:,:,::-1])
         
         if 1:

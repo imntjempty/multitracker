@@ -210,11 +210,20 @@ def visualize(vis, frame, tracker, detections, keypoint_tracker, keypoints, trac
     # crop keypointed vis 
     vis_crops = [ history_heatmap ]
     for i, track in enumerate(tracker.tracks):
-        if 1 or track.is_confirmed():
-            x1,y1,x2,y2 = track.to_tlbr()
-            center = roi_segm.get_center(x1,y1,x2,y2, frame.shape[0],frame.shape[1], crop_dim)
-            vis_crops.append( im[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:] )    
-           
+        # crop image around track center
+        x1,y1,x2,y2 = track.to_tlbr()
+        center = roi_segm.get_center(x1,y1,x2,y2, frame.shape[0],frame.shape[1], crop_dim)
+        vis_crops.append( im[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:] )    
+
+    for i, track in enumerate(tracker.tracks):    
+        # draw visualization of this tracker complete history
+        vis_history_track = np.zeros(frame.shape,'uint8')
+        for j in range(1,len(track.last_means)):
+            p = tuple([int(round(cc)) for cc in track.last_means[j-1][:2]])
+            q = tuple([int(round(cc)) for cc in track.last_means[j  ][:2]])
+            vis_history_track = cv.line(vis_history_track, p, q, tuple(visualization.create_unique_color_uchar(track.track_id)),3) 
+        vis_crops.append(cv.resize(vis_history_track,(256,256)))
+
         #vis_crops[-1] = cv.resize(vis_crops[-1], (im.shape[0]//2,im.shape[0]//2))
     
     _shape = [im.shape[0]//2,im.shape[1]//2]
