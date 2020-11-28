@@ -77,7 +77,7 @@ class OpenCVTrack(object):
 class Tracker(object):
     def __init__(self):
         self.tracks = [] 
-        self.sigma_iou = 0.5
+        self.sigma_iou = 0.25
 
     def associate(self, tracked_boxes, detected_boxes):
         """ perform association between tracks and detections in a frame.
@@ -141,7 +141,7 @@ class UpperBoundTracker(Tracker):
     def __init__(self, fixed_number):
         super().__init__()
         self.fixed_number = fixed_number
-        self.thresh_set_inactive = 15
+        self.thresh_set_inactive = 12
         self.thresh_set_dead = 100
         self.maximum_other_track_init_distance = 150
         self.maximum_nearest_inactive_track_distance = 1000#500# self.maximum_other_track_init_distance * 4
@@ -170,56 +170,90 @@ class UpperBoundTracker(Tracker):
         #print('tracked_boxes',len(tracked_boxes))
         #print('detected_boxes',len(detected_boxes))
 
-        for i,tbox in enumerate(self.trackers.getObjects()):
-            (x, y, w, h) = [int(v) for v in tbox]
-            highest_iou, highest_iou_idx = -1.,-1
-            for j, dbox in enumerate(detected_boxes):
-                if not matched_detections[j]:
-                    iou = calc_iou(tlhw2tlbr(tbox),tlhw2tlbr(dbox))
-                    if iou > highest_iou:
-                        # check if no other matched detection has relatively high iou with detection j 
-                        other_detected_box_near = False 
-                        for k in range(len(detected_boxes)):
-                            if matched_detections[k] and not k == j:
-                                other_detected_box_near = other_detected_box_near or ( calc_iou(tlhw2tlbr(dbox),tlhw2tlbr(detected_boxes[k])) > 0.5 )
-                        if not other_detected_box_near:
-                            highest_iou, highest_iou_idx = iou, j 
-                
-            #print(i,highest_iou,highest_iou_idx,'coords',x,y,w,h)
-            # if prediction matched with detection:
-            if highest_iou > 0.5:
+        matching_method = ["greedy","linear_assignment"][1]
+        if matching_method == "greedy":
+            for i,tbox in enumerate(self.trackers.getObjects()):
+                (x, y, w, h) = [int(v) for v in tbox]
+                highest_iou, highest_iou_idx = -1.,-1
+                for j, dbox in enumerate(detected_boxes):
+                    if not matched_detections[j]:
+                        iou = calc_iou(tlhw2tlbr(tbox),tlhw2tlbr(dbox))
+                        if iou > highest_iou:
+                            # check if no other matched detection has relatively high iou with detection j 
+                            other_detected_box_near = False 
+                            for k in range(len(detected_boxes)):
+                                if matched_detections[k] and not k == j:
+                                    other_detected_box_near = other_detected_box_near or ( calc_iou(tlhw2tlbr(dbox),tlhw2tlbr(detected_boxes[k])) > 0.5 )
+                            if not other_detected_box_near:
+                                highest_iou, highest_iou_idx = iou, j 
+                    
+                #print(i,highest_iou,highest_iou_idx,'coords',x,y,w,h)
+                # if prediction matched with detection:
+                if highest_iou > 0.5:
+                    # new general position is average of tracker prediction and matched detection
+                    alpha = 0.5
+                    box = alpha * tbox + (1.-alpha) * detected_boxes[highest_iou_idx]
+                    self.last_means[i].append(box)
+                    
+                    # replace tracker in multilist by init again with new general bounding box
+                    obs = self.trackers.getObjects()
+                    obs[i] = box
+                    matched_track_scores[i] = scores[highest_iou_idx]
+                    self.trackers = cv.MultiTracker_create()
+                    for ob in obs:
+                        self.trackers.add(cv.TrackerCSRT_create(), frame, tuple([int(cc) for cc in ob]))
+                    if debug: print('[*]   updated active tracker %i with detection %i' % (i,highest_iou_idx))
+                    
+                    self.steps_without_detection[i] = 0
+                    if not self.active[i]:
+                        self.active[i] = True
+                        self.alive[i] = True
+                        self.active_cnt += 1
+                    matched_tracks[i] = True
+                    matched_detections[highest_iou_idx] = True
+                else:
+                    #print(i,'steps_without_detection',self.steps_without_detection)
+                    self.last_means[i].append(tbox)
+                    self.steps_without_detection[i] += 1
+                    if self.steps_without_detection[i] > self.thresh_set_inactive and self.active[i]:
+                        self.active[i] = False
+                        self.active_cnt -= 1 
+                    if self.steps_without_detection[i] > self.thresh_set_dead and self.alive[i]:
+                        self.alive[i] = False
+
+        elif matching_method == "linear_assignment":
+            track_ids, det_ids = self.associate(tracked_boxes, detected_boxes)
+            for i, (track_id, det_id) in enumerate(zip(track_ids, det_ids)):
+                matched_detections[det_id] = True 
+                matched_tracks[track_id] = True 
+
                 # new general position is average of tracker prediction and matched detection
                 alpha = 0.5
-                box = alpha * tbox + (1.-alpha) * detected_boxes[highest_iou_idx]
+                box = alpha * tracked_boxes[track_id] + (1.-alpha) * detected_boxes[det_id]
                 self.last_means[i].append(box)
                 
                 # replace tracker in multilist by init again with new general bounding box
                 obs = self.trackers.getObjects()
-                obs[i] = box
-                matched_track_scores[i] = scores[highest_iou_idx]
+                obs[track_id] = box
+                matched_track_scores[track_id] = scores[det_id]
                 self.trackers = cv.MultiTracker_create()
                 for ob in obs:
                     self.trackers.add(cv.TrackerCSRT_create(), frame, tuple([int(cc) for cc in ob]))
-                if debug: print('[*]   updated active tracker %i with detection %i' % (i,highest_iou_idx))
+                if debug: print('[*]   updated active tracker %i with detection %i' % (track_id, det_id))
                 
-                self.steps_without_detection[i] = 0
-                if not self.active[i]:
-                    self.active[i] = True
-                    self.alive[i] = True
+                self.steps_without_detection[track_id] = 0
+                if not self.active[track_id]:
+                    self.active[track_id] = True
+                    self.alive[track_id] = True
                     self.active_cnt += 1
-                matched_tracks[i] = True
-                matched_detections[highest_iou_idx] = True
-            else:
-                #print(i,'steps_without_detection',self.steps_without_detection)
-                self.last_means[i].append(tbox)
-                self.steps_without_detection[i] += 1
-                if self.steps_without_detection[i] > self.thresh_set_inactive and self.active[i]:
-                    self.active[i] = False
-                    self.active_cnt -= 1 
-                if self.steps_without_detection[i] > self.thresh_set_dead and self.alive[i]:
-                    self.alive[i] = False 
 
-        
+            for i in range(len(tracked_boxes)):
+                if not matched_tracks[i]:
+                    self.steps_without_detection[i] += 1 
+                    if self.steps_without_detection[i] > self.thresh_set_inactive and self.active[i]:
+                        self.active[i] = False
+                        self.active_cnt -= 1
+
         # e) reassign: check if unmatched detection is a new track or gets assigned to inactive track (depending on barrier fixed number)
         #for j in range(min(len(detected_boxes),self.fixed_number)):
         for j in range(len(detected_boxes)):
