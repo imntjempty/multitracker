@@ -30,6 +30,8 @@ from glob import glob
 import os
 from collections import deque
 
+from lapsolver import solve_dense
+
 from multitracker.tracking.deep_sort.application_util import preprocessing
 from multitracker.tracking.deep_sort.application_util import visualization
 from multitracker.tracking.deep_sort.deep_sort import nn_matching
@@ -57,12 +59,6 @@ def tlhw2tlbr(tlhw):
 def tlhw2chw(tlhw):
     return [ tlhw[0]+tlhw[2]/2. , tlhw[1]+tlhw[3]/2., tlhw[2], tlhw[3] ]
 
-class IoUTracker(object):
-    """ http://elvera.nue.tu-berlin.de/files/1517Bochinski2017.pdf """
-    pass
-
-class VIoUTracker(object):
-    """ http://elvera.nue.tu-berlin.de/files/1547Bochinski2018.pdf """
 class OpenCVTrack(object):
     def __init__(self,track_id,tlhw,active,steps_without_detection,last_means,score):
         self.tlhw,self.active,self.steps_without_detection = tlhw,active,steps_without_detection
@@ -78,8 +74,72 @@ class OpenCVTrack(object):
     def to_tlwh(self):
         return self.tlhw
 
-class OpenCVMultiTracker(object):
+class Tracker(object):
+    def __init__(self):
+        self.tracks = [] 
+        self.sigma_iou = 0.5
+
+    def associate(self, tracked_boxes, detected_boxes):
+        """ perform association between tracks and detections in a frame.
+        Args:
+            tracks (list): input tracks
+            detected_boxes (list): input detections
+            sigma_iou (float): minimum intersection-over-union of a valid association
+        Returns:
+            (tuple): tuple containing:
+            track_ids (numpy.array): 1D array with indexes of the tracks
+            det_ids (numpy.array): 1D array of the associated indexes of the detections
+        """
+        costs = np.empty(shape=(len(tracked_boxes), len(detected_boxes)), dtype=np.float32)
+        for row, track in enumerate(tracked_boxes):
+            for col, dbox in enumerate(detected_boxes):
+                iou = calc_iou(tlhw2tlbr(track),tlhw2tlbr(dbox))
+                costs[row, col] = 1. - iou
+
+        np.nan_to_num(costs)
+        costs[costs > 1 - self.sigma_iou] = np.nan
+        track_ids, det_ids = solve_dense(costs)
+        return track_ids, det_ids
+
+class VIoUTracker(Tracker):
+    """ IoUTracker http://elvera.nue.tu-berlin.de/files/1517Bochinski2017.pdf 
+        VIoUTracker http://elvera.nue.tu-berlin.de/files/1547Bochinski2018.pdf 
+        official implementation https://github.com/bochinski/iou-tracker/blob/master/viou_tracker.py """
+
+    def __init__(self):
+        super().__init__()
+        self.tracks = []
+        self.trackers = cv.MultiTracker_create()
+        # sigma_l (float): low detection threshold.
+        # sigma_h (float): high detection threshold.
+        # sigma_iou (float): IOU threshold.
+        # t_min (float): minimum track length in frames.
+        # ttl (float): maximum number of frames to perform visual tracking.
+        #              this can fill 'gaps' of up to 2*ttl frames (ttl times forward and backward).
+        self.sigma_l = 0
+        self.sigma_h = 0.5
+        self.t_min = 5
+        self.ttl = 10
+        
+        print('[*] inited VIoUTracker')
+
+    def step(self,ob):
+        debug = bool(0) 
+        frame = ob['img']
+        [detected_boxes,scores, features] = ob['detections']
+    
+        # a) update all trackers of last frame
+        (success, tracked_boxes) = self.trackers.update(frame)
+        
+        # linear cost assignment
+        track_ids, det_ids = self.associate(tracked_boxes, detected_boxes)
+
+        for track_id, det_id in zip(track_ids, det_ids):
+            print('   assign',track_id, det_id)
+        
+class UpperBoundTracker(Tracker):
     def __init__(self, fixed_number):
+        super().__init__()
         self.fixed_number = fixed_number
         self.thresh_set_inactive = 15
         self.thresh_set_dead = 100
@@ -88,14 +148,12 @@ class OpenCVMultiTracker(object):
 
         self.tracks = []
         self.trackers = cv.MultiTracker_create()
-        #self.tracker_func = cv.TrackerCSRT_create
         self.active = [False for _ in range(fixed_number)]
         self.alive = [False for _ in range(fixed_number)]
         self.active_cnt = 0
         self.steps_without_detection = [0 for _ in range(fixed_number)]
         self.last_means = [[] for _ in range(fixed_number)]
-
-        print('[*] inited OpenCVMultiTracker with fixed number %s'%fixed_number)
+        print('[*] inited UpperBoundTracker with fixed number %s' % fixed_number)
 
     def step(self,ob):
         debug = bool(0) 
@@ -231,8 +289,8 @@ class OpenCVMultiTracker(object):
 
 
 def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_confidence_boxes, min_confidence_keypoints, tracker = None):
-    #min_confidence_detection = 0.7
-    #min_confidence_keypoints = 0.6
+    #config['fixed_number'] = None # ---> force VIOU tracker
+    
     nms_max_overlap = 1.
     nms_max_overlap = .25
 
@@ -264,7 +322,10 @@ def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_co
     
     ## initialize tracker for boxes and keypoints
     if tracker is None:
-        tracker = OpenCVMultiTracker(config['fixed_number'])
+        if 'fixed_number' in config and config['fixed_number'] is not None:
+            tracker = UpperBoundTracker(config['fixed_number'])
+        else:
+            tracker = VIoUTracker()
     keypoint_tracker = keypoint_tracking.KeypointTracker()
 
     frame_idx = -1
@@ -324,7 +385,7 @@ def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_co
             result = [frame_idx, track.track_id, center0, center1, bbox[0], bbox[1], bbox[2], bbox[3], track.is_confirmed(), track.time_since_update]
             results.append(result)
         
-        print('%i - %i detections. %i keypoints' % (config['count'],len(detections), len(keypoints)),[kp for kp in keypoints])
+        print('[%i/%i] - %i detections. %i keypoints' % (config['count'], total_frame_number, len(detections), len(keypoints)),[kp for kp in keypoints])
         out = deep_sort_app.visualize(visualizer, frame, tracker, detections, keypoint_tracker, keypoints, tracked_keypoints, crop_dim, results, sketch_file=config['sketch_file'])
         video_writer.writeFrame(cv.cvtColor(out, cv.COLOR_BGR2RGB))
         #video_writer.writeFrame(cv.cvtColor(out, cv.COLOR_BGR2RGB)) #out[:,:,::-1])
