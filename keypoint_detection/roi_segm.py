@@ -94,6 +94,10 @@ def write_crop_to_disk(obj):
         f = f.replace('/train/','/test/')
         im = cv.imread( f )
         _mode = 'test'
+    if im is None:
+        print('[* ERROR] could not find keypoints data for frame_idx',obj['frame_idx'],' please label!')
+        return 0
+
     parts = [ im[:,ii*w:(ii+1)*w,:] for ii in range(obj['len_parts'] )]
     #print(i,frame_idx,'boxes',frame_bboxes[frame_idx])
     # scale to fit max_height
