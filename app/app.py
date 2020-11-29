@@ -72,6 +72,8 @@ def render_labeling(project_id,video_id):
     
     # load labeled frame idxs
     labeled_frame_idxs = db.get_labeled_frames(video_id)
+    labeled_frame_idxs_boundingboxes = db.get_labeled_bbox_frames(video_id)
+    
     num_db_frames = len(labeled_frame_idxs)
     
     # load frame files from disk
@@ -97,53 +99,63 @@ def render_labeling(project_id,video_id):
         db.commit()
 
     else:
-        if num_db_frames < args.num_labeling_base:
-            '' # randomly sample frame 
-            # choose random frame that is not already labeled
-            unlabeled_frame_found = False 
-            while not unlabeled_frame_found:
-                ridx = int( len(frames) * num_db_frames / float(args.num_labeling_base) ) + int(np.random.uniform(-5,5))
-                if ridx > 0 and ridx < len(frames):
-                    frame_idx = frames[ridx]
-                    #frame_idx = frames[int(len(frames)*np.random.random())] # random sampling
-                    frame_idx = '.'.join(frame_idx.split('/')[-1].split('.')[:-1])
-                    unlabeled_frame_found = not (frame_idx in labeled_frame_idxs)
-
-            print('[*] serving keypoint label job for frame %s %s.'%(frame_idx,get_frame_time(frame_idx)))
+        ## first check if labeled bounding box data with unlabeled keypoint data is in db
+        unlabeled_labeled_boxes_frame_idx = []
+        for frame_idx_bbox in labeled_frame_idxs_boundingboxes:
+            if frame_idx_bbox not in labeled_frame_idxs:
+                unlabeled_labeled_boxes_frame_idx.append(frame_idx_bbox)
+        if len(unlabeled_labeled_boxes_frame_idx) > 0:
+            print('[*] found %i labeled boxes frames, where no keypoints are annotated. here is one of them' % len(unlabeled_labeled_boxes_frame_idx))
+            shuffle(unlabeled_labeled_boxes_frame_idx)
+            frame_idx = unlabeled_labeled_boxes_frame_idx[0]
         else:
-            shuffle(frames)
-            nn = 1#32
-            unlabeled = []
-            while len(unlabeled) < nn:
-                frame_f = frames[int(len(frames)*np.random.random())]
-                frame_idx = '.'.join(frame_f.split('/')[-1].split('.')[:-1])
-                nearest_labeled_frame_diff = np.min(np.abs(np.array([int(idx) for idx in labeled_frame_idxs]) - int(frame_idx)))
-                if frame_f not in unlabeled and frame_idx not in labeled_frame_idxs and nearest_labeled_frame_diff > 20:
-                    unlabeled.append(frame_f)
+            if num_db_frames < args.num_labeling_base:
+                '' # randomly sample frame 
+                # choose random frame that is not already labeled
+                unlabeled_frame_found = False 
+                while not unlabeled_frame_found:
+                    ridx = int( len(frames) * num_db_frames / float(args.num_labeling_base) ) + int(np.random.uniform(-5,5))
+                    if ridx > 0 and ridx < len(frames):
+                        frame_idx = frames[ridx]
+                        #frame_idx = frames[int(len(frames)*np.random.random())] # random sampling
+                        frame_idx = '.'.join(frame_idx.split('/')[-1].split('.')[:-1])
+                        unlabeled_frame_found = not (frame_idx in labeled_frame_idxs)
 
-            if training_model is not None:
-                # active learning: load some unlabeled frames, inference multiple time, take one with biggest std variation
-                
-                # predict whole image, height like trained height and variable width 
-                # to keep aspect ratio and relative size        
-                w = 1+int(2*config['img_height']/(float(cv.imread(unlabeled[0]).shape[0]) / cv.imread(unlabeled[0]).shape[1]))
-                batch = np.array( [cv.resize(cv.imread(f), (w,2*config['img_height'])) for f in unlabeled] ).astype(np.float32)
-                
-                # inference multiple times
-                ni = 5
-                pred = np.array([ training_model(batch,training=True)[-1].numpy() for _ in range(ni)])
-                pred = pred[:,:,:,:,:-1] # cut background channel
-                
-                # calculate max std item
-                stds = np.std(pred,axis=(0,2,3,4))
-                maxidx = np.argmax(stds)
-                frame_idx = '.'.join(unlabeled[maxidx].split('/')[-1].split('.')[:-1])
-                print('[*] serving keypoint label job for frame %s with std %f %s.'%(frame_idx,stds[maxidx],get_frame_time(frame_idx)))
+                print('[*] serving keypoint label job for frame %s %s.'%(frame_idx,get_frame_time(frame_idx)))
             else:
-                if len(unlabeled) ==0:
-                    return "<h1>You have labeled all frames for this video! :)</h1>"
-                shuffle(unlabeled)
-                frame_idx = '.'.join(unlabeled[0].split('/')[-1].split('.')[:-1])
+                shuffle(frames)
+                nn = 1#32
+                unlabeled = []
+                while len(unlabeled) < nn:
+                    frame_f = frames[int(len(frames)*np.random.random())]
+                    frame_idx = '.'.join(frame_f.split('/')[-1].split('.')[:-1])
+                    nearest_labeled_frame_diff = np.min(np.abs(np.array([int(idx) for idx in labeled_frame_idxs]) - int(frame_idx)))
+                    if frame_f not in unlabeled and frame_idx not in labeled_frame_idxs and nearest_labeled_frame_diff > 20:
+                        unlabeled.append(frame_f)
+
+                if training_model is not None:
+                    # active learning: load some unlabeled frames, inference multiple time, take one with biggest std variation
+                    
+                    # predict whole image, height like trained height and variable width 
+                    # to keep aspect ratio and relative size        
+                    w = 1+int(2*config['img_height']/(float(cv.imread(unlabeled[0]).shape[0]) / cv.imread(unlabeled[0]).shape[1]))
+                    batch = np.array( [cv.resize(cv.imread(f), (w,2*config['img_height'])) for f in unlabeled] ).astype(np.float32)
+                    
+                    # inference multiple times
+                    ni = 5
+                    pred = np.array([ training_model(batch,training=True)[-1].numpy() for _ in range(ni)])
+                    pred = pred[:,:,:,:,:-1] # cut background channel
+                    
+                    # calculate max std item
+                    stds = np.std(pred,axis=(0,2,3,4))
+                    maxidx = np.argmax(stds)
+                    frame_idx = '.'.join(unlabeled[maxidx].split('/')[-1].split('.')[:-1])
+                    print('[*] serving keypoint label job for frame %s with std %f %s.'%(frame_idx,stds[maxidx],get_frame_time(frame_idx)))
+                else:
+                    if len(unlabeled) ==0:
+                        return "<h1>You have labeled all frames for this video! :)</h1>"
+                    shuffle(unlabeled)
+                    frame_idx = '.'.join(unlabeled[0].split('/')[-1].split('.')[:-1])
 
     frame_candidates = []
     if 0:
