@@ -385,48 +385,52 @@ def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_co
         # fill up frame buffer as you take something from it to reduce lag 
         if video_reader.isOpened():
             ret, frame = video_reader.read()
-            frame_buffer.append(frame[:,:,::-1]) # trained on TF RGB, cv2 yields BGR
+            if frame is not None:
+                frame_buffer.append(frame[:,:,::-1]) # trained on TF RGB, cv2 yields BGR
+            else:
+                running = False 
         else:
             running = False 
         
-        if len(detection_buffer) == 0:
-            # fill up frame buffer and then detect boxes for complete frame buffer
-            dettensor = np.array(list(frame_buffer)).astype(np.float32)
-            batch_detections = inference.detect_batch_bounding_boxes(detection_model, dettensor, seq_info, min_confidence_boxes)
-            [detection_buffer.append(batch_detections[ib]) for ib in range(config['inference_objectdetection_batchsize'])]
+        if running:
+            if len(detection_buffer) == 0:
+                # fill up frame buffer and then detect boxes for complete frame buffer
+                dettensor = np.array(list(frame_buffer)).astype(np.float32)
+                batch_detections = inference.detect_batch_bounding_boxes(detection_model, dettensor, seq_info, min_confidence_boxes)
+                [detection_buffer.append(batch_detections[ib]) for ib in range(config['inference_objectdetection_batchsize'])]
 
-        frame = frame_buffer.popleft()
-        detections = detection_buffer.popleft()
+            frame = frame_buffer.popleft()
+            detections = detection_buffer.popleft()
+                
+            boxes = np.array([d.tlwh for d in detections])
+            scores = np.array([d.confidence for d in detections])
+            features = np.array([d.feature for d in detections])
+            #indices = preprocessing.non_max_suppression(
+            #    boxes, nms_max_overlap, scores)
+            #detections = [detections[i] for i in indices]
+            #print('[*] found %i detections' % len(detections))
+            # Update tracker
+            tracker.step({'img':frame,'detections':[boxes, scores, features]})
+
+            keypoints = inference.inference_keypoints(config, frame, detections, keypoint_model, crop_dim, min_confidence_keypoints)
+            # update tracked keypoints with new detections
+            tracked_keypoints = keypoint_tracker.update(keypoints)
+
+            # Store results.        
+            for track in tracker.tracks:
+                bbox = track.to_tlwh()
+                center0, center1, _, _ = tlhw2chw(bbox)
+                result = [frame_idx, track.track_id, center0, center1, bbox[0], bbox[1], bbox[2], bbox[3], track.is_confirmed(), track.time_since_update]
+                results.append(result)
             
-        boxes = np.array([d.tlwh for d in detections])
-        scores = np.array([d.confidence for d in detections])
-        features = np.array([d.feature for d in detections])
-        #indices = preprocessing.non_max_suppression(
-        #    boxes, nms_max_overlap, scores)
-        #detections = [detections[i] for i in indices]
-        #print('[*] found %i detections' % len(detections))
-        # Update tracker
-        tracker.step({'img':frame,'detections':[boxes, scores, features]})
-
-        keypoints = inference.inference_keypoints(config, frame, detections, keypoint_model, crop_dim, min_confidence_keypoints)
-        # update tracked keypoints with new detections
-        tracked_keypoints = keypoint_tracker.update(keypoints)
-
-        # Store results.        
-        for track in tracker.tracks:
-            bbox = track.to_tlwh()
-            center0, center1, _, _ = tlhw2chw(bbox)
-            result = [frame_idx, track.track_id, center0, center1, bbox[0], bbox[1], bbox[2], bbox[3], track.is_confirmed(), track.time_since_update]
-            results.append(result)
-        
-        print('[%i/%i] - %i detections. %i keypoints' % (config['count'], total_frame_number, len(detections), len(keypoints)),[kp for kp in keypoints])
-        out = deep_sort_app.visualize(visualizer, frame, tracker, detections, keypoint_tracker, keypoints, tracked_keypoints, crop_dim, results, sketch_file=config['sketch_file'])
-        video_writer.writeFrame(cv.cvtColor(out, cv.COLOR_BGR2RGB))
-        #video_writer.writeFrame(cv.cvtColor(out, cv.COLOR_BGR2RGB)) #out[:,:,::-1])
-        
-        if 1:
-            cv.imshow("tracking visualization", cv.resize(out,None,None,fx=0.75,fy=0.75))
-            cv.waitKey(5)
+            print('[%i/%i] - %i detections. %i keypoints' % (config['count'], total_frame_number, len(detections), len(keypoints)),[kp for kp in keypoints])
+            out = deep_sort_app.visualize(visualizer, frame, tracker, detections, keypoint_tracker, keypoints, tracked_keypoints, crop_dim, results, sketch_file=config['sketch_file'])
+            video_writer.writeFrame(cv.cvtColor(out, cv.COLOR_BGR2RGB))
+            #video_writer.writeFrame(cv.cvtColor(out, cv.COLOR_BGR2RGB)) #out[:,:,::-1])
+            
+            if 1:
+                cv.imshow("tracking visualization", cv.resize(out,None,None,fx=0.75,fy=0.75))
+                cv.waitKey(5)
         
         if frame_idx % 30 == 0:
             with open( config['file_tracking_results'], 'w') as f:
