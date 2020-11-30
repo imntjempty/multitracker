@@ -20,10 +20,12 @@ from multitracker.keypoint_detection import roi_segm, unet
 from multitracker.be import video
 
 def get_video_output_filepath(config):
+    if not 'num_hourglass' in config:
+        config['num_hourglass'] = 1 
     if 'video' in config and config['video'] is not None:
-        video_file_out = os.path.join(video.get_project_dir(video.base_dir_default, config['project_id']),'tracking_%s_%s_%s.avi' % (config['project_name'],config['tracking_method'],'.'.join(config['video'].split('/')[-1].split('.')[:-1])))
+        video_file_out = os.path.join(video.get_project_dir(video.base_dir_default, config['project_id']),'tracking_%s_%s_%s_%istack_%s_%s.avi' % (config['project_name'],config['tracking_method'],config['object_detection_backbone'],config['num_hourglass'], config['backbone'],'.'.join(config['video'].split('/')[-1].split('.')[:-1])))
     else:
-        video_file_out = os.path.join(video.get_project_dir(video.base_dir_default, config['project_id']),'tracking_%s_%s_vis%i.avi' % (config['project_name'],config['tracking_method'],config['video_id']))
+        video_file_out = os.path.join(video.get_project_dir(video.base_dir_default, config['project_id']),'tracking_%s_%s_%s_%istack_%s_vid%i.avi' % (config['project_name'],config['tracking_method'],config['object_detection_backbone'],config['num_hourglass'], config['backbone'],config['video_id']))
     return video_file_out
 
 def load_keypoint_model(path_model):
