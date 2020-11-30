@@ -157,7 +157,7 @@ def draw_heatmap(frame, results, sketch_file):
     history_heatmap = np.zeros((grid_num_y, grid_num_x),'float32')
     for result in results:
         c0,c1 = result[2], result[3]
-        history_heatmap[min(int(c1/grid_height),grid_num_x)][min(int(c0/grid_height),grid_num_y-1)] += 1. 
+        history_heatmap[min(int(c1/grid_height),grid_num_y-1)][min(int(c0/grid_height),grid_num_x-1)] += 1. 
     
     history_heatmap = (history_heatmap-history_heatmap.min()) / (history_heatmap.max()-history_heatmap.min())
     history_heatmap = np.uint8(np.around(255. * history_heatmap))
@@ -359,7 +359,8 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
         return True
     # Run tracker.
     if display:
-        visualizer = visualization.Visualization(seq_info, update_ms=5)
+        update_ms = 2
+        visualizer = visualization.Visualization(seq_info, update_ms, config)
     else:
         visualizer = visualization.NoVisualization(seq_info)
     visualizer.run(frame_callback)

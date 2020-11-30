@@ -210,12 +210,13 @@ def load_roi_dataset(config,mode='train',batch_size=None):
             # check homogenous image sizes
             results_shapefilter = []
             sampled_shapes = []
-            _roicrops = glob(os.path.join(config['roi_dir'],'train','*.png'))
-            for ii in range(min(100,len(_roicrops))):
-                sampled_shapes.append(cv.imread(_roicrops[int(np.random.uniform() * len(_roicrops))]).shape[:2])
-            sampled_H, sampled_W = np.median(np.array(sampled_shapes)[:,0]), np.median(np.array(sampled_shapes)[:,1])
-            for ii,ff in enumerate(glob(os.path.join(config['roi_dir'],mode,'*.png'))): 
-                results_shapefilter.append( pool.apply_async(filter_crop_shape,({'f':ff,'H':sampled_H, 'W':sampled_W},)) )
+            for _mode in ['train','test']:
+                _roicrops = glob(os.path.join(config['roi_dir'],_mode,'*.png'))
+                for ii in range(min(100,len(_roicrops))):
+                    sampled_shapes.append(cv.imread(_roicrops[int(np.random.uniform() * len(_roicrops))]).shape[:2])
+                sampled_H, sampled_W = np.median(np.array(sampled_shapes)[:,0]), np.median(np.array(sampled_shapes)[:,1])
+                for ii,ff in enumerate(glob(os.path.join(config['roi_dir'],_mode,'*.png'))): 
+                    results_shapefilter.append( pool.apply_async(filter_crop_shape,({'f':ff,'H':sampled_H, 'W':sampled_W},)) )
             results_shapefilter = [result.get() for result in results_shapefilter]
         # </bboxes>weights='imagenet'
     
@@ -259,7 +260,7 @@ def load_roi_dataset(config,mode='train',batch_size=None):
         comp = tf.image.resize(comp,[int(config['img_height']*crop_dim_extended_ratio),int(config['img_width']*crop_dim_extended_ratio)])
         # random crop to counteract imperfect bounding box centers
         crop = tf.image.random_crop( comp, [config['img_height'],config['img_width'],1+3+len(config['keypoint_names'])])
-    
+       
         # split stack into images and heatmaps
         image = crop[:,:,:3]
         

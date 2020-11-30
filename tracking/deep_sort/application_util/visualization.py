@@ -130,8 +130,13 @@ class Visualization(object):
             #    continue
             self.viewer.color = create_unique_color_uchar(track.track_id)
             ## draw current rectangle
-
-            label = 'id: %s M: %i A: %i S: %s'%(str(track.track_id),track.time_since_update,int(track.active),str(track.score)[:4])
+            try:
+                _active = int(track.active)
+                _score = str(track.score)[:4]
+            except:
+                _active = int(track.is_confirmed())
+                _score = ""
+            label = 'id: %s M: %i A: %i S: %s' % (str(track.track_id), track.time_since_update, _active, _score)
             self.viewer.rectangle(
                 *track.to_tlwh().astype(np.int), label=label)
             # self.viewer.gaussian(track.mean[:2], track.covariance[:2, :2],
