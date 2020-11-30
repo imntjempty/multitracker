@@ -53,16 +53,24 @@ def main(args):
     config['objectdetection_model'] = args.objectdetection_model
     config['train_video_ids'] = args.train_video_ids
     config['minutes'] = args.minutes
-    config['fixed_number'] = db.get_video_fixednumber(args.video_id) #args.fixed_number
+    #config['fixed_number'] = db.get_video_fixednumber(args.video_id) 
     #config['fixed_number'] = None
+    config['fixed_number'] = args.fixed_number
     config['n_blocks'] = 4
-    config['inference_objectdetection_batchsize'] = args.inference_objectdetection_batchsize
+    if args.inference_objectdetection_batchsize > 0:
+        config['inference_objectdetection_batchsize'] = args.inference_objectdetection_batchsize
     config['tracking_method'] = args.tracking_method
     config['track_tail'] = args.track_tail
     config['sketch_file'] = args.sketch_file
-    
     config['file_tracking_results'] = args.output_tracking_results
-
+    
+    config['object_detection_backbone'] = args.objectdetection_method
+    config = model.update_config_object_detection(config)
+    config['backbone'] = args.keypoint_method
+    if 'hourglass' in args.keypoint_method:
+        config['num_hourglass'] = int(args.keypoint_method[9:])
+        config['backbone'] = 'efficientnetLarge'
+    
     # <load frames>
     output_dir = '/tmp/multitracker/object_detection/predictions/%i' % (config['video_id'])
     if not os.path.isdir(output_dir):
@@ -174,14 +182,15 @@ if __name__ == '__main__':
     parser.add_argument('--minutes',required=False,default=0.0,type=float)
     parser.add_argument('--min_confidence_boxes',required=False,default=0.5,type=float)
     parser.add_argument('--min_confidence_keypoints',required=False,default=0.5,type=float)
-    parser.add_argument('--inference_objectdetection_batchsize',required=False,default=4,type=int)
-    parser.add_argument('--tracking_method',required=False,default='DeepSORT',type=str)
+    parser.add_argument('--inference_objectdetection_batchsize',required=False,default=0,type=int)
     parser.add_argument('--output_tracking_results',required=False,default=None)
     parser.add_argument('--track_tail',required=False,default=800,type=int,help="How many steps back in the past should the path of each animal be drawn? -1 -> draw complete path")
     parser.add_argument('--sketch_file',required=False,default=None, help="Black and White Sketch of the frame without animals")
     parser.add_argument('--video',required=False,default=None)
-    
-    #parser.add_argument('--fixed_number',required=False,default=4,type=int)
+    parser.add_argument('--tracking_method',required=False,default='DeepSORT',type=str,help="Tracking Algorithm to use: [DeepSORT, VIoU, FixedAssigner] defaults to DeepSORT")
+    parser.add_argument('--objectdetection_method',required=False,default="fasterrcnn", help="Object Detection Algorithm to use [fasterrcnn, ssd] defaults to fasterrcnn") 
+    parser.add_argument('--keypoint_method',required=False,default="hourglass2", help="Keypoint Detection Algorithm to use [hourglass2, hourglass4, vgg16, efficientnet, efficientnetLarge, psp]. defaults to hourglass2") 
+
+    parser.add_argument('--fixed_number',required=False,default=0,type=int)
     args = parser.parse_args()
-    
     main(args)
