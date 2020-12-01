@@ -183,7 +183,7 @@ def random_image_transformation(image_tensors, gt_boxes):
     return image_tensors, gt_boxes
 
 def mixup(image_tensors, gt_boxes, gt_classes):
-    alpha = np.random.uniform(0.25,0.75)
+    alpha = np.random.uniform(0.33,0.66)
     B = image_tensors.shape[0]
     image_tensors = image_tensors * alpha + image_tensors[::-1,:,:,:] * (1. - alpha)
     for i in range(B//2):

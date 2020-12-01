@@ -165,10 +165,8 @@ def get_bbox_data(config, vis_input_data=0):
         image = tf.image.resize(image,[H//2,W//2])
         return _key, image
 
-    data_train = labeling_list_train.map(load_im, num_parallel_calls = tf.data.experimental.AUTOTUNE).batch(config['object_detection_batch_size']).prefetch(4*config['object_detection_batch_size'])#.cache()
-    data_test = labeling_list_test.map(load_im, num_parallel_calls = tf.data.experimental.AUTOTUNE).batch(config['object_detection_batch_size']).prefetch(4*config['object_detection_batch_size'])#.cache()
-    data_train = data_train.shuffle(256)
-    data_test = data_test.shuffle(256)
+    data_train = labeling_list_train.map(load_im, num_parallel_calls = tf.data.experimental.AUTOTUNE).shuffle(256).batch(config['object_detection_batch_size']).prefetch(4*config['object_detection_batch_size'])#.cache()
+    data_test = labeling_list_test.map(load_im, num_parallel_calls = tf.data.experimental.AUTOTUNE).shuffle(256).batch(config['object_detection_batch_size']).prefetch(4*config['object_detection_batch_size'])#.cache()
     return frame_bboxes, data_train, data_test  
     
 
