@@ -1,4 +1,4 @@
-# Fixed Multitracker
+# Upper Bound Multitracker
 
 This is a framework for tracking animals and their corresponding limbs. It assumes, that the number of objects visible in the video is fixed and known. It uses Faster-RCNN or SSD for object detection and Stacked Hourglasses for keypoint detection. A FixedAssigner Tracker keeps track of their positions. These mice were tracked with Fixed Multitracker https://www.youtube.com/watch?v=mQenxsiJWBQ
 
@@ -58,17 +58,11 @@ Each predicted bounding box and keypoint comes with its own confidence score ind
 
 ## Troubleshooting
 ### No boxes are detected
-- Have you labeled enough? 
-Check out tensorboard images called 'object detection'. If the train predictions look great, but the test predictions are aweful, label more bounding boxes!
-- Are there very small boxes?
-Faster R-CNN sometimes fails on very small boxes, try changing the backbone to SSD
-
-```--objectdetection_method ssd``` 
-
-- try to lower the threshold for bounding boxes `--min_confidence_boxes 0.25`
+- Check out tensorboard images called 'object detection'. If the train predictions look great, but the test predictions are aweful, label more bounding boxes!
+- Faster R-CNN sometimes fails on very small boxes, try changing the backbone to SSD ```--objectdetection_method ssd``` 
+- try to lower the threshold for bounding boxes ```--min_confidence_boxes 0.25```
 
 ### No keypoints are detected
-- Have you labeled enough? 
-Check out tensorboard images. If the train predictions look great, but the test predictions are aweful, label more keypoints and bounding boxes!
+- Check out tensorboard images. If the train predictions look great, but the test predictions are aweful, label more keypoints and bounding boxes!
 - change the backbone ```--keypoint_method psp```
 - lower the threshold ```--min_confidence_keypoints 0.25```
