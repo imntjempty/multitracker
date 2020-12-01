@@ -182,6 +182,17 @@ def random_image_transformation(image_tensors, gt_boxes):
             
     return image_tensors, gt_boxes
 
+def mixup(image_tensors, gt_boxes, gt_classes):
+    alpha = np.random.uniform(0.25,0.75)
+    B = image_tensors.shape[0]
+    image_tensors = image_tensors * alpha + image_tensors[::-1,:,:,:] * (1. - alpha)
+    for i in range(B//2):
+        gt_boxes[i] = tf.concat((gt_boxes[i], gt_boxes[B-i-1]),0)
+        gt_classes[i] = tf.concat((gt_classes[i], gt_classes[B-i-1]),0)
+        gt_boxes[B-i-1] = tf.concat((gt_boxes[i], gt_boxes[B-i-1]),0)
+        gt_classes[B-i-1] = tf.concat((gt_classes[i], gt_classes[B-i-1]),0)
+    return image_tensors, gt_boxes, gt_classes
+
 def augment(config, image_tensors, gt_boxes, gt_classes):
     if config['object_augm_flip']:
         if np.random.uniform() > 0.5:
@@ -194,6 +205,9 @@ def augment(config, image_tensors, gt_boxes, gt_classes):
             image_tensors, gt_boxes, gt_classes = stitch_collision_free_hori(image_tensors, gt_boxes, gt_classes)
         else:
             image_tensors, gt_boxes, gt_classes = stitch_collision_free_verti(image_tensors, gt_boxes, gt_classes)
+
+    if config['object_augm_mixup'] and np.random.uniform() < 0.5:
+        image_tensors, gt_boxes, gt_classes = mixup(image_tensors, gt_boxes, gt_classes)
 
     if config['object_augm_gaussian'] and np.random.uniform() > 0.5:
         image_tensors, gt_boxes = gaussian_noise(image_tensors, gt_boxes)

@@ -569,7 +569,7 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
 
                         prediction_dict_test = detection_model.postprocess(prediction_dict_test, shapes)
                         vis_test = get_vis(tf.cast(tf.concat(image_tensors_test,axis=0),tf.uint8), gt_boxes_test, prediction_dict_test)
-                        tf.summary.image('prediction',vis_test/255.,step=idx)
+                        tf.summary.image('object detection',vis_test/255.,step=idx)
                         writer_test.flush()
 
                     # check for early stopping -> stop training if test loss is increasing
