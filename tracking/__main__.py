@@ -158,8 +158,8 @@ def main(args):
         elif config['tracking_method'] == 'FixedAssigner':
             cv_multitracker.run(config, detection_model, encoder_model, keypoint_model, crop_dim, args.min_confidence_boxes, args.min_confidence_keypoints  )
 
-    video_file = os.path.join(video.get_project_dir(video.base_dir_default, config['project_id']),'tracking_%s_vis%i.mp4' % (config['project_name'],config['video_id']))
-    
+    video_file_out = inference.get_video_output_filepath(config)
+
     convert_video_h265(video_file.replace('.mp4','.avi'), video_file)
     print('[*] done tracking')
     
@@ -190,7 +190,7 @@ if __name__ == '__main__':
     parser.add_argument('--tracking_method',required=False,default='DeepSORT',type=str,help="Tracking Algorithm to use: [DeepSORT, VIoU, FixedAssigner] defaults to DeepSORT")
     parser.add_argument('--objectdetection_method',required=False,default="fasterrcnn", help="Object Detection Algorithm to use [fasterrcnn, ssd] defaults to fasterrcnn") 
     parser.add_argument('--keypoint_method',required=False,default="hourglass2", help="Keypoint Detection Algorithm to use [hourglass2, hourglass4, vgg16, efficientnet, efficientnetLarge, psp]. defaults to hourglass2") 
-
     parser.add_argument('--fixed_number',required=False,default=0,type=int)
     args = parser.parse_args()
+
     main(args)

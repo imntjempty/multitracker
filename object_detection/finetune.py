@@ -541,7 +541,7 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
                         
                         prediction_dict = detection_model.postprocess(prediction_dict, shapes)
                         vis = get_vis(tf.cast(tf.concat(image_tensors,axis=0),tf.uint8), gt_boxes, prediction_dict)
-                        tf.summary.image('prediction',vis/255.,step=idx)
+                        tf.summary.image('object detection',vis/255.,step=idx)
                         writer_train.flush()
                         with open(csv_train,'a+') as ftrain:
                             ftrain.write('%i,%f\n' % (idx, total_loss))
