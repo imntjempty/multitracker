@@ -34,17 +34,22 @@ Multitracker is a top-down pipeline, that first uses Google's Object Detection f
 
 ### Track with pretrained models
 If no paths to the three possible model types are given with arguments `--objectdetection_model`, `--keypoint_model`, `--autoencoder_model`
+
 ```python3.7 -m multitracker.tracking --project_id 7 --video_id 13 --train_video_ids 9,14 --video /path/to/target_video.mp4 --objectdetection_model /path/to/objdetect --keypoint_model /path/to/keypoint --autoencoder_model /path/to/ae```
 
 ### Arguments to choose tracking receipe
 There are several options for object detection, keypoint estimation and tracking. Each combination might give different results and can be easily changed.
 
 `--objectdetection_method` options: fasterrcnn, ssd. fasterrcnn is slower but usually achieves higher accuracy. ssd is faster but might fail to generalize to new videos
+
 `--keypoint_method` options: hourglass2, hourglass4, hourglass8, vgg16, efficientnet, efficientnetLarge, psp. defaults to hourglass2
+
 `--tracking_method` options: DeepSORT, VIoU, FixedAssigner
 
 Each predicted bounding box and keypoint comes with its own confidence score indicating how sure the algorithm is the object or keypoint to actually be there. We filter these predictions based on two thresholds, that can be changed:
+
 `--min_confidence_boxes` minimum confidence for an detected animal bounding box, defaults to 0.5
+
 `--min_confidence_keypoints` minimum confidence for an detected limb keypoint, defaults to 0.5
 ## Troubleshooting
 ### No boxes are detected
