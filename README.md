@@ -30,7 +30,8 @@ Now you can call the actual tracking algorithm . If not provided with pretrained
 This will create a video showing the results of the tracking process.
 
 ## Advanced Usage
-Multitracker is a top-down pipeline, that first uses Google's Object Detection framework to detect and crop all animals, followed by a custom semantic segmentation for keypoint detection on these crops. The tracking method DeepSORT also needs an autoencoder to extract visual features for reidentification. Therefore two or three models are needed for tracking. Multitracker implements a variety of different neural networks for solving object detection and keypoint estimation. Trained models can be supplied as command line arguments to avoid retraining and allow easy recombination of different model checkpoints. Trained models can be found in the directory `~/checkpoints/multitracker`
+Multitracker is a top-down pipeline, that first uses Google's Object Detection framework to detect and crop all animals, followed by a custom semantic segmentation for keypoint detection on these crops. The tracking method DeepSORT also needs an autoencoder to extract visual features for reidentification. Therefore two or three models are needed for tracking. Multitracker implements a variety of different neural networks for solving object detection and keypoint estimation. 
+Trained models can be supplied as command line arguments to avoid retraining and allow easy recombination of different model checkpoints. Trained models can be found in the directory `~/checkpoints/multitracker`. This is also very helpful if multiple videos should be tracked with one set of pretrained models.
 
 ### Monitor training progress
 Tensorboard summaries and images are logged periodically while training. Start the server and monitor it by opening http://localhost:6006
