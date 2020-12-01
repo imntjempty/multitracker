@@ -183,10 +183,10 @@ def update_config_object_detection(config):
     config['object_augm_flip'] = bool(1)
     config['object_augm_rot90'] = bool(1)
     config['object_augm_gaussian'] = bool(1)
-    config['object_augm_stitch'] = bool(0)
+    config['object_augm_image'] = bool(0)
     config['object_augm_mixup'] = bool(1)
-    config['object_augm_image'] = bool(1)
     config['object_augm_crop'] = bool(0)
+    config['object_augm_stitch'] = bool(0)
     return config 
 
 # </train>

@@ -37,7 +37,7 @@ class Tracker:
 
     """
 
-    def __init__(self, metric, max_iou_distance=0.5, max_age=300, n_init=3, fixed_number = None): # default 0.7 ; 30; 3 
+    def __init__(self, metric, max_iou_distance=0.7, max_age=30, n_init=3, fixed_number = None): # default 0.7 ; 30; 3 
         self.metric = metric
         self.max_iou_distance = max_iou_distance
         self.max_age = max_age
@@ -75,7 +75,7 @@ class Tracker:
         for track_idx in unmatched_tracks:
             self.tracks[track_idx].mark_missed()
         for detection_idx in unmatched_detections:
-            if self.fixed_number is None or len(self.tracks) < self.fixed_number:
+            if self.fixed_number is None or self.fixed_number==0 or len(self.tracks) < self.fixed_number:
                 self._initiate_track(detections[detection_idx])
         self.tracks = [t for t in self.tracks if not t.is_deleted()]
         
