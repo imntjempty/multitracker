@@ -32,6 +32,10 @@ This will create a video showing the results of the tracking process.
 ## Advanced Usage
 Multitracker is a top-down pipeline, that first uses Google's Object Detection framework to detect and crop all animals, followed by a custom semantic segmentation for keypoint detection on these crops. The tracking method DeepSORT also needs an autoencoder to extract visual features for reidentification. Therefore two or three models are needed for tracking. Multitracker implements a variety of different neural networks for solving object detection and keypoint estimation. Trained models can be supplied as command line arguments to avoid retraining and allow easy recombination of different model checkpoints. Trained models can be found in the directory `~/checkpoints/multitracker`
 
+### Monitor training progress
+Tensorboard summaries and images are logged periodically while training. Start the server and monitor it by opening http://localhost:6006
+`tensorboard --logdir ~/checkpoints/multitracker`
+
 ### Track with pretrained models
 If no paths to the three possible model types are given with arguments `--objectdetection_model`, `--keypoint_model`, `--autoencoder_model`
 
@@ -51,7 +55,20 @@ Each predicted bounding box and keypoint comes with its own confidence score ind
 `--min_confidence_boxes` minimum confidence for an detected animal bounding box, defaults to 0.5
 
 `--min_confidence_keypoints` minimum confidence for an detected limb keypoint, defaults to 0.5
+
 ## Troubleshooting
 ### No boxes are detected
-### No keypoints are detected
+- Have you labeled enough? 
+Check out tensorboard images called 'object detection'. If the train predictions look great, but the test predictions are aweful, label more bounding boxes!
+- Are there very small boxes?
+Faster R-CNN sometimes fails on very small boxes, try changing the backbone to SSD
 
+```--objectdetection_method ssd``` 
+
+- try to lower the threshold for bounding boxes `--min_confidence_boxes 0.25`
+
+### No keypoints are detected
+- Have you labeled enough? 
+Check out tensorboard images. If the train predictions look great, but the test predictions are aweful, label more keypoints and bounding boxes!
+- change the backbone ```--keypoint_method psp```
+- lower the threshold ```--min_confidence_keypoints 0.25```
