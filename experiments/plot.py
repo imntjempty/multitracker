@@ -16,12 +16,52 @@ db = dbconnection.DatabaseConnection()
 config = model.get_config(project_id=7)
 video_id = 9
 
-config['max_steps'] = 50000
+config['max_steps'] = 25000
 dpi=300
 figsize = (12,8)
 output_dir = os.path.expanduser('~/Documents/Multitracker_experiments')
 if not os.path.isdir(output_dir):
     os.makedirs(output_dir)
+
+def plot_experiment_a_roi(args):
+    num_train_samples = len(db.get_labeled_bbox_frames(args.video_id))
+    title = 'Experiment A - Keypoint Estimation: using fractions of training data ({0} samples total)'.format(num_train_samples)
+    experiment_dirs = [
+        '/home/alex/checkpoints/experiments/MiceTop/A/1-2020-11-14_11-30-28',
+        '/home/alex/checkpoints/experiments/MiceTop/A/10-2020-11-14_14-16-35',
+        '/home/alex/checkpoints/experiments/MiceTop/A/50-2020-11-14_17-08-45',
+        '/home/alex/checkpoints/experiments/MiceTop/A/100-2020-11-14_20-04-06'
+    ]
+    experiment_names = ['1%','10%','50%','100%']
+    output_file = os.path.join(output_dir,'A_prec_recall_curve.png')
+    roi_curve.keypoints_draw_predicision_recall_curves(str(args.video_id), title, experiment_dirs, experiment_names, output_file)
+
+def plot_experiment_b_roi(args):
+    num_train_samples = len(db.get_labeled_bbox_frames(args.video_id))
+    title = 'Experiment B - Keypoint Estimation: ImageNet pretrained backbone vs random initialised network'
+    experiment_dirs = [
+        '/home/alex/checkpoints/experiments/MiceTop/A/100-2020-11-14_20-04-06',
+        '/home/alex/checkpoints/experiments/MiceTop/B/random-2020-11-14_23-01-54'
+    ]
+    experiment_names = ['pretrained','random init']
+    output_file = os.path.join(output_dir,'B_prec_recall_curve.png')
+    roi_curve.keypoints_draw_predicision_recall_curves(str(args.video_id), title, experiment_dirs, experiment_names, output_file)
+
+def plot_experiment_c_roi(args):
+    num_train_samples = len(db.get_labeled_bbox_frames(args.video_id))
+    title = 'Experiment C - Keypoint Estimation: different architecture backbones'
+    experiment_dirs = [
+        '/home/alex/checkpoints/experiments/MiceTop/C/vgg16-2020-11-15_12-33-53',
+        '/home/alex/checkpoints/experiments/MiceTop/C/efficientnetLarge-2020-11-15_14-32-57',
+        '/home/alex/checkpoints/experiments/MiceTop/A/100-2020-11-14_20-04-06',
+        '/home/alex/checkpoints/experiments/MiceTop/C/hourglass-4-efficientnetLarge-2020-11-15_19-16-22',
+        '/home/alex/checkpoints/experiments/MiceTop/C/hourglass-8-efficientnetLarge-2020-11-15_23-57-27',
+        '/home/alex/checkpoints/experiments/MiceTop/C/psp-2020-11-15_17-12-42'
+    ]
+    experiment_names = ['U-Net VGG16', 'U-Net Efficientnet','Stacked Hourglass 2','Stacked Hourglass 4','Stacked Hourglass 8','PSP']
+    output_file = os.path.join(output_dir,'C_prec_recall_curve.png')
+    roi_curve.keypoints_draw_predicision_recall_curves(str(args.video_id), title, experiment_dirs, experiment_names, output_file)
+
 
 def plot_experiment_a(args, plot=True):
     print('plot',args)
@@ -91,7 +131,7 @@ def plot_experiment_a(args, plot=True):
     fig.tight_layout()
     #plt.show()
     if plt:
-        plt.savefig(os.path.join(output_dir,'A.png'), dpi=dpi)
+        plt.savefig(os.path.join(output_dir,'A_loss.png'), dpi=dpi)
     reset_figures()
     return train_dataset, test_dataset
 
@@ -148,7 +188,7 @@ def plot_experiment_b(args):
 
 
     fig.tight_layout()
-    plt.savefig(os.path.join(output_dir,'B.png'), dpi=dpi)
+    plt.savefig(os.path.join(output_dir,'B_loss.png'), dpi=dpi)
 
 def plot_experiment_c(args):
     num_test_samples = len(glob(os.path.join(config['roi_dir'],'test','*.png')))
@@ -210,11 +250,9 @@ def plot_experiment_c(args):
     plt.savefig(os.path.join(output_dir,'C_loss.png'), dpi=dpi)
 
 def plot_experiment_e(args):
-
     if 1:
         plot_experiment_e_roi(args)
-
-    if 0:
+    if 1:
         plot_experiment_e_loss(args)
 
 def plot_experiment_e_roi(args):
@@ -227,7 +265,7 @@ def plot_experiment_e_roi(args):
         '/home/alex/checkpoints/experiments/MiceTop/E/100-2020-12-03_08-42-30'
     ]
     experiment_names = ['1%','10%','50%','100%']
-    output_file = os.path.join(output_dir,'EE.png')
+    output_file = os.path.join(output_dir,'E_prec_recall_curve.png')
     roi_curve.objectdetection_draw_predicision_recall_curves(str(args.video_id), title, experiment_dirs, experiment_names, output_file)
 
 def plot_experiment_e_loss(args):
@@ -242,7 +280,7 @@ def plot_experiment_e_loss(args):
     axs[0].set_title('Experiment E - object detection: using fractions of training data ({0} samples total)'.format(num_train_samples))
     axs[0].set_xlabel('steps')
     axs[0].set_ylabel('loss')
-    axs[0].set_ylim([0.0,2.])
+    axs[0].set_ylim([0.0,5.5])
     #axs[0].hlines(bg_accuracy.mice_bg_focal_loss, 0, config['max_steps'], colors='k', linestyles='solid', label='baseline - no keypoints')
     axs[0].grid(True)
     
@@ -258,9 +296,27 @@ def plot_experiment_e_loss(args):
     
     axs[0].legend()
     fig.tight_layout()
-    plt.savefig(os.path.join(output_dir,'E.png'), dpi=dpi)
+    plt.savefig(os.path.join(output_dir,'E_loss.png'), dpi=dpi)
 
 def plot_experiment_f(args):
+    if 1:
+        plot_experiment_f_roi(args)
+    if 0:
+        plot_experiment_f_loss(args)
+
+def plot_experiment_f_roi(args):
+    num_train_samples = len(db.get_labeled_bbox_frames(args.video_id))
+    title = 'Experiment F - Faster R-CNN vs SSD'
+    experiment_dirs = [
+        '/home/alex/checkpoints/experiments/MiceTop/E/100-2020-12-03_08-42-30',
+        '/home/alex/checkpoints/experiments/MiceTop/F/ssd-2020-12-04_02-37-21'
+    ]
+    experiment_names = ['Faster R-CNN','SSD']
+    output_file = os.path.join(output_dir,'F_prec_recall_curve.png')
+    roi_curve.objectdetection_draw_predicision_recall_curves(str(args.video_id), title, experiment_dirs, experiment_names, output_file)
+
+
+def plot_experiment_f_loss(args):
     #num_test_samples = len(glob(os.path.join(config['roi_dir'],'test','*.png')))
     base_dir = os.path.expanduser('~/checkpoints/experiments/MiceTop/F')
     num_train_samples = len(db.get_labeled_bbox_frames(video_id))
@@ -269,7 +325,7 @@ def plot_experiment_f(args):
     fig, axs = plt.subplots(1)
     axs = [axs]
     fig.set_size_inches(figsize[0],figsize[1])
-    axs[0].set_title('Experiment F - object detection: SSD vs MaskRCNN')
+    axs[0].set_title('Experiment F - object detection: SSD vs Faster R-CNN')
     axs[0].set_xlabel('steps')
     axs[0].set_ylabel('loss')
     axs[0].set_ylim([0.0,2.])
@@ -288,7 +344,7 @@ def plot_experiment_f(args):
     
     axs[0].legend()
     fig.tight_layout()
-    plt.savefig(os.path.join(output_dir,'F.png'), dpi=dpi)
+    plt.savefig(os.path.join(output_dir,'F_loss.png'), dpi=dpi)
 
 def reset_figures():
     try:
@@ -308,15 +364,24 @@ if __name__ == '__main__':
     parser.add_argument('--video_id', type=int, required=True)
     args = parser.parse_args()
     if 0:
+        plot_experiment_a_roi(args)
+        reset_figures()
+    if 0:
         plot_experiment_a(args)
+        reset_figures()
+    if 0:
+        plot_experiment_b_roi(args)
         reset_figures()
     if 0:
         plot_experiment_b(args)
         reset_figures()
+    if 1:
+        plot_experiment_c_roi(args)
+        reset_figures()
     if 0:
         plot_experiment_c(args)
         reset_figures()
-    if 1:
+    if 0:
         plot_experiment_e(args)
         reset_figures()
     if 0:

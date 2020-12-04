@@ -151,7 +151,10 @@ def filter_crop_shape(obj):
         return True 
     return False 
 
-def load_roi_dataset(config,mode='train',batch_size=None):
+def load_roi_dataset(config,mode='train',batch_size=None, video_ids = None):
+    if video_ids is None:
+        video_ids = config['train_video_ids']
+
     if mode=='train' or mode == 'test':
         image_directory = os.path.join(config['data_dir'],'%s' % mode)
     [Hframe,Wframe,_] = cv.imread(glob(os.path.join(os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'test'),'*.png'))[0]).shape
@@ -182,7 +185,7 @@ def load_roi_dataset(config,mode='train',batch_size=None):
         print('[*] creating cropped regions for each animal to train keypoint prediction ...')
         # extract bounding boxes of animals
         # <bboxes>
-        for _video_id in config['train_video_ids'].split(','):
+        for _video_id in video_ids.split(','):
             _video_id = int(_video_id)
             frame_bboxes = {}
             db.execute("select * from bboxes where video_id=%i;" % _video_id)

@@ -39,7 +39,7 @@ def objectdetection_draw_predicision_recall_curves(video_id, title, experiment_d
     assert len(experiment_dirs) == len(experiment_names)
 
     figsize = (12,8)
-    colors = {1: 'tab:brown', 10: 'tab:blue',20: 'tab:orange', 50: 'tab:green', 100: 'tab:red'}
+    colors = {1: 'tab:brown', 10: 'tab:blue',20: 'tab:orange', 50: 'tab:green', 100: 'tab:red',200: 'tab:black',300: 'tab:yellow', 400: 'tab:gray'}
     fig, axs = plt.subplots(1)
     fig.set_size_inches(figsize[0],figsize[1])
     axs.set_title(title)
@@ -110,7 +110,7 @@ def objectdetection_draw_predicision_recall_curves(video_id, title, experiment_d
             recalls[thresh_detection] = cnt_true_positives[thresh_detection] / max(1e-5,cnt_true_positives[thresh_detection] + cnt_false_negatives[thresh_detection])
             print('exp',experiment_names[i],thresh_detection,'->',precisions[thresh_detection],recalls[thresh_detection])
                 
-        axs.plot([recalls[th] for th in thresh_detections],[precisions[th] for th in thresh_detections],color=colors[[1,10,50,100][i%4]],linestyle='-',label=experiment_names[i])
+        axs.plot([recalls[th] for th in thresh_detections],[precisions[th] for th in thresh_detections],color=colors[[1,10,50,100,200,300,400][i%7]],linestyle='-',label=experiment_names[i])
         #axs[0].plot([c[0] for c in test_random],[c[1] for c in test_random],color=colors[50],linestyle='-',label='test  randomly initialised backbone')
 
     print('[*] %s time took %f seconds' % (output_file,time.time()-ts))
@@ -120,7 +120,7 @@ def objectdetection_draw_predicision_recall_curves(video_id, title, experiment_d
     return precisions, recalls, output_file
 
 
-def keypoints_draw_predicision_recall_curves(title, experiment_dirs, experiment_names, output_file, max_neighbor_dist = 10):
+def keypoints_draw_predicision_recall_curves(video_id, title, experiment_dirs, experiment_names, output_file, max_neighbor_dist = 10):
     """
         draw a graph that compares precision and recall curves for thresholds in [0.1,0.2,...,0.9] of different keypoint prediction experiments
 
@@ -150,6 +150,7 @@ def keypoints_draw_predicision_recall_curves(title, experiment_dirs, experiment_
     axs.set_ylim([.5,1.])
     axs.grid(True)
 
+
     thresh_detections = np.arange(0.1,1.,step=.1)
     for i, experiment_dir in enumerate(experiment_dirs):
         ts = time.time()
@@ -159,6 +160,8 @@ def keypoints_draw_predicision_recall_curves(title, experiment_dirs, experiment_
             config = json.load(json_file)
         config['batch_size'] = 128
         print(config)
+        
+        test_dataset = roi_segm.load_roi_dataset(config,mode='test',video_ids=str(video_id))
 
         # load net 
         net = model.get_model(config) # outputs: keypoints + background
@@ -179,7 +182,6 @@ def keypoints_draw_predicision_recall_curves(title, experiment_dirs, experiment_
             cnt_false_negatives[thresh_detection] = 0
             cnt_false_positives[thresh_detection] = 0 
         
-        test_dataset = roi_segm.load_roi_dataset(config,mode='test')
         cnt_batches = -1
         for xt,yt in test_dataset:
             cnt_batches += 1 
@@ -219,10 +221,10 @@ def keypoints_draw_predicision_recall_curves(title, experiment_dirs, experiment_
             recalls[thresh_detection] = cnt_true_positives[thresh_detection] / max(1e-5,cnt_true_positives[thresh_detection] + cnt_false_negatives[thresh_detection])
             print('exp',experiment_names[i],thresh_detection,'->',precisions[thresh_detection],recalls[thresh_detection])
             
-        axs.plot([recalls[th] for th in thresh_detections],[precisions[th] for th in thresh_detections],color=colors[[1,10,50,100][i%4]],linestyle='-',label=experiment_names[i])
+        axs.plot([recalls[th] for th in thresh_detections],[precisions[th] for th in thresh_detections],color=colors[[1,10,50,100,200,300,400][i%7]],linestyle='-',label=experiment_names[i])
         #axs[0].plot([c[0] for c in test_random],[c[1] for c in test_random],color=colors[50],linestyle='-',label='test  randomly initialised backbone')
 
-        print('[*] time took %f seconds' % (time.time()-ts))
+        print('[*] %s time took %f seconds' % (output_file, time.time()-ts))
     axs.legend()
     fig.tight_layout()
     plt.savefig(output_file, dpi=300)
