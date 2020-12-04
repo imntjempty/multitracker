@@ -18,6 +18,15 @@ def experiment_f(args, train_video_ids = None):
     
     config['experiment'] = 'F'
     config['maxsteps_objectdetection'] = 50000
+    config['early_stopping'] = False
+    config['finetune'] = False 
+    config['object_augm_flip'] = bool(0)
+    config['object_augm_rot90'] = bool(0)
+    config['object_augm_gaussian'] = bool(0)
+    config['object_augm_image'] = bool(0)
+    config['object_augm_mixup'] = bool(0)
+    config['object_augm_crop'] = bool(0)
+    config['object_augm_stitch'] = bool(0)
 
     #for od_backbone in ['fasterrcnn','ssd']:
     for od_backbone in ['ssd']:
@@ -42,6 +51,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--project_id',required=True,type=int)
     parser.add_argument('--video_id',required=True,type=int)
+    parser.add_argument('--train_video_ids',required=True)
     args = parser.parse_args()
     experiment_f(args)
 

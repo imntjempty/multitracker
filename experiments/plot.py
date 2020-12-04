@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import json
 from multitracker.keypoint_detection import model 
 from multitracker.experiments import bg_accuracy
-
+from multitracker.experiments import roi_curve
 from multitracker.be import dbconnection
 db = dbconnection.DatabaseConnection()
 
@@ -210,6 +210,27 @@ def plot_experiment_c(args):
     plt.savefig(os.path.join(output_dir,'C_loss.png'), dpi=dpi)
 
 def plot_experiment_e(args):
+
+    if 1:
+        plot_experiment_e_roi(args)
+
+    if 0:
+        plot_experiment_e_loss(args)
+
+def plot_experiment_e_roi(args):
+    num_train_samples = len(db.get_labeled_bbox_frames(args.video_id))
+    title = 'Experiment E - Faster R-CNN: using fractions of training data ({0} samples total)'.format(num_train_samples)
+    experiment_dirs = [
+        '/home/alex/checkpoints/experiments/MiceTop/E/1-2020-12-02_11-46-27',
+        '/home/alex/checkpoints/experiments/MiceTop/E/10-2020-12-02_17-02-27',
+        '/home/alex/checkpoints/experiments/MiceTop/E/50-2020-12-02_22-19-06',
+        '/home/alex/checkpoints/experiments/MiceTop/E/100-2020-12-03_08-42-30'
+    ]
+    experiment_names = ['1%','10%','50%','100%']
+    output_file = os.path.join(output_dir,'EE.png')
+    roi_curve.objectdetection_draw_predicision_recall_curves(str(args.video_id), title, experiment_dirs, experiment_names, output_file)
+
+def plot_experiment_e_loss(args):
     #num_test_samples = len(glob(os.path.join(config['roi_dir'],'test','*.png')))
     base_dir = os.path.expanduser('~/checkpoints/experiments/MiceTop/E')
     num_train_samples = len(db.get_labeled_bbox_frames(video_id))
@@ -283,6 +304,8 @@ if __name__ == '__main__':
     import argparse 
     parser = argparse.ArgumentParser()
     #parser.add_argument('--durationsC')
+    parser.add_argument('--project_id', type=int, required=True)
+    parser.add_argument('--video_id', type=int, required=True)
     args = parser.parse_args()
     if 0:
         plot_experiment_a(args)
@@ -290,13 +313,13 @@ if __name__ == '__main__':
     if 0:
         plot_experiment_b(args)
         reset_figures()
-    if 1:
+    if 0:
         plot_experiment_c(args)
         reset_figures()
     if 1:
         plot_experiment_e(args)
         reset_figures()
-    if 1:
+    if 0:
         plot_experiment_f(args)
         reset_figures()
     print('[*] wrote plots to %s' % output_dir)
