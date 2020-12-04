@@ -24,7 +24,7 @@ def experiment_b(args, max_steps = 50000):
     #config['max_steps'] = 15000
     config['early_stopping'] = False
     config['kp_rotation_augmentation'] = bool(0)
-    config['lr'] = 1e-4
+    config['kp_lr'] = 1e-4
 
     #for should_init_pretrained in [False, True]:
     for should_init_pretrained in [False]:

@@ -193,8 +193,8 @@ def get_config(project_id = 3):
     config['max_steps'] = 200000
     config['min_steps_keypoints'] = 50000
     config['max_hours'] = 30.
-    config['lr'] = 2e-5 * 5   *5 *2.
-    config['lr'] = 2e-5
+    config['kp_lr'] = 2e-5 * 5   *5 *2.
+    config['kp_lr'] = 2e-5
     config['kp_blurpool'] = True
     config['ae_pretrained_encoder'] = [False,True][1]
 

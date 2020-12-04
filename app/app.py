@@ -50,7 +50,7 @@ if args.model is not None and os.path.isfile(args.model):
     training_model = tf.keras.models.load_model(h5py.File(args.model, 'r'))
     print('[*] loaded model %s from disk' % args.model)
     config = model.get_config(project_id=args.project_id)
-    optimizer = tf.keras.optimizers.Adam(config['lr'])
+    optimizer = tf.keras.optimizers.Adam(config['kp_lr'])
     config = model.get_config(int(args.project_id))
 else:
     training_model = None 

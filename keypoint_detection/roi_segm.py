@@ -1,6 +1,9 @@
 """
-    detect keypoints on cropped animals
-
+    Keypoint Detection 
+        uses TF2 and keras
+        supports multiple backends like stacked Hourglass, Unet and PSP
+        checkpoints written to ~/data/multitracker/checkpoints/$project_name$/keypoints
+        tensorboard visualization shows loss plots for training and testing and visualizations with drawn ground truth boxes and predictions
 """
 
 import tensorflow as tf
@@ -311,7 +314,7 @@ def train(config):
         
     # decaying learning rate 
     decay_steps, decay_rate = 3000, 0.95
-    lr = tf.keras.optimizers.schedules.ExponentialDecay(config['lr'], decay_steps, decay_rate)
+    lr = tf.keras.optimizers.schedules.ExponentialDecay(config['kp_lr'], decay_steps, decay_rate)
     optimizer = tf.keras.optimizers.Adam(lr)
 
     # checkpoints and tensorboard summary writer

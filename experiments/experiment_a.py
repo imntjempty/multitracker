@@ -22,9 +22,9 @@ def experiment_a(args, max_steps = 50000):
     config['max_steps'] = max_steps
     config['early_stopping'] = False
     config['kp_rotation_augmentation'] = bool(0)
-    config['lr'] = 1e-4
+    config['kp_lr'] = 1e-4
     config['batch_size'] = 8
-    #config['lr'] = 2e-5
+    #config['kp_lr'] = 2e-5
 
     #for data_ratio in [0.01,0.1,0.5,1.0][::-1]:
     for data_ratio in [0.01,0.1,0.5,1.0]:
