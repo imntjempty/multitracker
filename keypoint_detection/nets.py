@@ -30,7 +30,7 @@ def upsample(nfilters, kernel_size, strides=2, dilation = (1,1), norm_type='batc
     return result 
 
 def Encoder(config,inputs):
-    if config['pretrained_encoder']:
+    if config['ae_pretrained_encoder']:
         return EncoderPretrained(config, inputs)
     else:
         return EncoderScratch(config, inputs)
@@ -142,8 +142,6 @@ def DecoderErfnet(config, encoder, norm_type = "batchnorm"):
         x = x + tf.nn.relu6(r)
 
     no = len(config['keypoint_names'])+1
-    if config['autoencoding']:
-        no += 3
     
     x = upsample(32,3,1,norm_type=None)(x)
     act = tf.keras.layers.Activation('softmax')
@@ -199,8 +197,6 @@ def DecoderDefault(config, encoder):
         x = x + r
         
     no = len(config['keypoint_names'])+1
-    if config['autoencoding']:
-        no += 3
     
     act = tf.keras.layers.Activation('softmax')
     x = upsample(no,3,1,norm_type=None,act=act)(x)    

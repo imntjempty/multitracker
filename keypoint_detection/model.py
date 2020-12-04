@@ -55,10 +55,7 @@ def get_loss(predicted_heatmaps, y, config, mode = "train"):
 
     elif config['loss'] == 'focal':
         loss_func = tfa.losses.SigmoidFocalCrossEntropy(False)
-        if config['autoencoding']:
-            loss = loss_func(y[:,:,:,:-3],predicted_heatmaps[:,:,:,:-3])
-        else:
-            loss = loss_func(y, predicted_heatmaps)
+        loss = loss_func(y, predicted_heatmaps)
         loss = tf.reduce_mean(loss)
 
         #loss += tf.reduce_mean(tf.abs(predicted_heatmaps - y))
@@ -198,13 +195,8 @@ def get_config(project_id = 3):
     config['max_hours'] = 30.
     config['lr'] = 2e-5 * 5   *5 *2.
     config['lr'] = 2e-5
-    #config['lr_scratch'] = 1e-4
-    #config['loss'] = ['l1','dice','focal','normed_l1','l2'][2]
-    #if config['loss'] == 'l2':
-    #    config['lr'] = 2e-4
     config['kp_blurpool'] = True
-    config['autoencoding'] = [False, True][0]
-    config['pretrained_encoder'] = [False,True][1]
+    config['ae_pretrained_encoder'] = [False,True][1]
 
     config['mixup'] = [False, True][0]
     config['cutmix'] = [False, True][1]
