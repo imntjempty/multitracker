@@ -16,7 +16,7 @@ def experiment_c(args, max_steps = 50000):
     config['kp_hflips']=False 
     config['kp_vflips']=False 
     config['kp_rot90s'] = False
-    config['blurpool'] = False
+    config['kp_blurpool'] = False
 
     config['train_loss'] = 'focal'
     config['test_losses'] = ['focal'] #['cce','focal']

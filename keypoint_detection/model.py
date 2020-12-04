@@ -193,8 +193,6 @@ def update_config_object_detection(config):
 def get_config(project_id = 3):
     config = {'batch_size': 8}
     config.update({'img_height': 224,'img_width': 224})
-    #config.update({'img_height': 512,'img_width': 512})
-    config['epochs'] = 1000000
     config['max_steps'] = 200000
     config['min_steps_keypoints'] = 50000
     config['max_hours'] = 30.
@@ -204,7 +202,7 @@ def get_config(project_id = 3):
     #config['loss'] = ['l1','dice','focal','normed_l1','l2'][2]
     #if config['loss'] == 'l2':
     #    config['lr'] = 2e-4
-    config['blurpool'] = True
+    config['kp_blurpool'] = True
     config['autoencoding'] = [False, True][0]
     config['pretrained_encoder'] = [False,True][1]
 

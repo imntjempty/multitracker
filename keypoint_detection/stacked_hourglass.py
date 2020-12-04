@@ -27,7 +27,7 @@ def BottleneckBlock(inputs, filters, strides=1, downsample=False, name=None):
 def hourglass(config,inputs, level, filters):
     up = BottleneckBlock(inputs, filters)
     up = BottleneckBlock(up, filters)
-    if config['blurpool']:
+    if config['kp_blurpool']:
         low = BlurPool2D()(inputs)
     else:
         low = tf.keras.layers.MaxPool2D(pool_size = 2, strides = 2)(inputs)
@@ -41,8 +41,8 @@ def hourglass(config,inputs, level, filters):
     return up + lowup
 
 def get_model(config):
-    if not 'blurpool' in config:
-        config['blurpool'] = False 
+    if not 'kp_blurpool' in config:
+        config['kp_blurpool'] = False 
         
     inputs = tf.keras.layers.Input(shape=(config['img_height'], config['img_width'], 3))
     
@@ -170,6 +170,6 @@ def get_model_erfnet_pretrained(config, norm_type = "batchnorm"):
 
 if __name__ == "__main__":
     config = {'img_height': 224, 'img_width': 224, 'num_hourglass': 4, 'keypoint_names': 11*'a'}
-    config['blurpool'] = bool(0)
+    config['kp_blurpool'] = bool(0)
     model = get_model(config)
     model.summary()
