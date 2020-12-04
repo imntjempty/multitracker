@@ -299,7 +299,7 @@ def train(config):
     #config['cutmix'] = False
     #config['mixup'] = True
     if 'hourglass' in config['kp_backbone']:
-        config['num_hourglass'] = int(config['kp_backbone'][9:])
+        config['kp_num_hourglass'] = int(config['kp_backbone'][9:])
         config['kp_backbone'] = 'efficientnetLarge'
     print('[*] config', config)
     
@@ -324,8 +324,8 @@ def train(config):
         checkpoint_path = os.path.expanduser("~/checkpoints/experiments/%s/B/%s-%s" % (config['project_name'], ['random','imagenet'][int(config['should_init_pretrained'])] , now))
     elif config['experiment'] == 'C':
         checkpoint_path = os.path.expanduser("~/checkpoints/experiments/%s/C/%s-%s" % (config['project_name'], config['kp_backbone'] , now))
-        if config['num_hourglass'] > 1:
-            checkpoint_path = checkpoint_path.replace('/C/','/C/hourglass-%i-'%config['num_hourglass'])
+        if config['kp_num_hourglass'] > 1:
+            checkpoint_path = checkpoint_path.replace('/C/','/C/hourglass-%i-'%config['kp_num_hourglass'])
     elif config['experiment'] == 'D':
         checkpoint_path = os.path.expanduser("~/checkpoints/experiments/%s/D/%s-%s" % (config['project_name'], config['train_loss'] , now))
         

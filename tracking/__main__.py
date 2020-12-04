@@ -68,7 +68,7 @@ def main(args):
     config = model.update_config_object_detection(config)
     config['kp_backbone'] = args.keypoint_method
     if 'hourglass' in args.keypoint_method:
-        config['num_hourglass'] = int(args.keypoint_method[9:])
+        config['kp_num_hourglass'] = int(args.keypoint_method[9:])
         config['kp_backbone'] = 'efficientnetLarge'
     
     # <load frames>

@@ -25,7 +25,7 @@ def experiment_c(args, max_steps = 50000):
     config['early_stopping'] = False
     config['kp_rotation_augmentation'] = bool(0)
     config['lr'] = 1e-4
-    config['num_hourglass'] = 1
+    config['kp_num_hourglass'] = 1
     #for backbone in ['hourglass2']:
     for backbone in ['vgg16','efficientnetLarge','psp','hourglass4','hourglass8']:
         print('[*] starting sub experiment backbone %s' % backbone)

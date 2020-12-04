@@ -69,7 +69,7 @@ def get_loss(predicted_heatmaps, y, config, mode = "train"):
     return loss 
 
 def get_model(config):
-    if config['num_hourglass'] == 1:
+    if config['kp_num_hourglass'] == 1:
         model = unet.get_model(config)
         return model
     else:
@@ -204,7 +204,7 @@ def get_config(project_id = 3):
     config['kp_vflips'] = [False,True][1]
     config['kp_rotation_augmentation'] = bool(1)
     config['kp_rot90s'] = bool(1)
-    config['num_hourglass'] = 2 #8
+    config['kp_num_hourglass'] = 2 #8
     config['fov'] = 0.75 # default 0.5
     config['selftrain_start_step'] = 10000
     config['n_blocks'] = 5
