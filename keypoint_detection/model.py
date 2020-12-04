@@ -224,8 +224,8 @@ def get_config(project_id = 3):
     config['object_detection_backbone'] = ['efficient','ssd','fasterrcnn'][2] ## https://github.com/tensorflow/models/blob/master/research/object_detection/g3doc/tf2_detection_zoo.md
     config = update_config_object_detection(config)
     
-    config['train_loss'] = ['cce','focal'][1]
-    config['test_losses'] = ['focal'] #['cce','focal']
+    config['kp_train_loss'] = ['cce','focal'][1]
+    config['kp_test_losses'] = ['focal'] #['cce','focal']
 
     return config 
 

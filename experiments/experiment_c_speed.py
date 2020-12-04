@@ -17,8 +17,8 @@ def experiment_c_speed(args):
     config['cutmix']=False
     config['kp_hflips']=False 
     config['kp_vflips']=False 
-    config['train_loss'] = 'focal'
-    config['test_losses'] = ['focal'] #['cce','focal']
+    config['kp_train_loss'] = 'focal'
+    config['kp_test_losses'] = ['focal'] #['cce','focal']
     config['max_steps'] = 50000
     #config['max_steps'] = 15000
     config['early_stopping'] = False

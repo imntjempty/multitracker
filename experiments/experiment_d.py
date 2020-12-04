@@ -14,7 +14,7 @@ def experiment_d(args, max_steps = 50000, train_video_ids = None):
         config['train_video_ids'] = train_video_ids
     else:
         config['train_video_ids'] = args.train_video_ids
-    config['test_losses'] = ['focal','cce','l2']
+    config['kp_test_losses'] = ['focal','cce','l2']
 
     config['experiment'] = 'D'
     config['mixup']=False
@@ -33,7 +33,7 @@ def experiment_d(args, max_steps = 50000, train_video_ids = None):
     #for loss_name in ['focal','cce','l2']:
     for loss_name in ['focal','cce','l2']:
         print('[*] starting sub experiment loss function %s' % loss_name)
-        config['train_loss'] = loss_name
+        config['kp_train_loss'] = loss_name
         
         print(config,'\n')
         checkpoint_path = roi_segm.train(config)

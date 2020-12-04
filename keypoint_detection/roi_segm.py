@@ -327,7 +327,7 @@ def train(config):
         if config['kp_num_hourglass'] > 1:
             checkpoint_path = checkpoint_path.replace('/C/','/C/hourglass-%i-'%config['kp_num_hourglass'])
     elif config['experiment'] == 'D':
-        checkpoint_path = os.path.expanduser("~/checkpoints/experiments/%s/D/%s-%s" % (config['project_name'], config['train_loss'] , now))
+        checkpoint_path = os.path.expanduser("~/checkpoints/experiments/%s/D/%s-%s" % (config['project_name'], config['kp_train_loss'] , now))
         
     if not os.path.isdir(checkpoint_path):
         os.makedirs(checkpoint_path)
@@ -356,11 +356,11 @@ def train(config):
             all_predicted_heatmaps = net(inp,training=True)
             loss = 0.0
             for predicted_heatmaps in all_predicted_heatmaps:
-                if config['train_loss'] == 'focal':
+                if config['kp_train_loss'] == 'focal':
                     loss += calc_focal_loss(y,predicted_heatmaps)
-                elif config['train_loss'] == 'cce':
+                elif config['kp_train_loss'] == 'cce':
                     loss += calc_cce_loss(y,predicted_heatmaps)
-                elif config['train_loss'] == 'l2':
+                elif config['kp_train_loss'] == 'l2':
                     loss += calc_l2_loss(y,predicted_heatmaps)
             loss = loss / float(len(all_predicted_heatmaps))
 
@@ -372,7 +372,7 @@ def train(config):
         optimizer.apply_gradients(zip(gradients,net.trainable_variables))
 
         should_test = global_step % 250 == 0
-        test_losses = {'focal':0.0,'cce':0.0}
+        test_losses = {'focal':0.0,'cce':0.0,'l2':0.0}
         test_accuracy = 0.0
         if should_test:
             # test data
@@ -382,14 +382,17 @@ def train(config):
                 if not predicted_test.shape[1] == yt.shape[1]:
                     predicted_test = tf.image.resize(predicted_test, x.shape[1:3]) 
 
-                if 'focal' in config['test_losses']:
-                    test_losses['focal'] += calc_focal_loss(yt,predicted_test)
-                if 'cce' in config['test_losses']:
-                    test_losses['cce'] += calc_cce_loss(yt,predicted_test)
-                test_accuracy += calc_accuracy(config, yt,predicted_test)
+                if 'focal' in config['kp_test_losses']:
+                    test_losses['focal'] += calc_focal_loss(yt, predicted_test)
+                if 'cce' in config['kp_test_losses']:
+                    test_losses['cce'] += calc_cce_loss(yt, predicted_test)
+                if 'l2' in config['kp_test_losses']:
+                    test_losses['l2'] += calc_l2_loss(yt, predicted_test)
+                test_accuracy += calc_accuracy(config, yt, predicted_test)
                 nt += 1 
             test_losses['focal'] = test_losses['focal'] / nt
             test_losses['cce'] = test_losses['cce'] / nt
+            test_losses['l2'] = test_losses['l2'] / nt
             test_accuracy = test_accuracy / nt 
 
 
@@ -399,7 +402,7 @@ def train(config):
                 def im_summary(name,data):
                     tf.summary.image(name,data,step=global_step)
                 with writer_train.as_default():
-                    tf.summary.scalar("loss %s" % config['train_loss'],loss,step=global_step)
+                    tf.summary.scalar("loss %s" % config['kp_train_loss'],loss,step=global_step)
                     tf.summary.scalar('min',tf.reduce_min(predicted_heatmaps[:,:,:,:-1]),step=global_step)
                     tf.summary.scalar('max',tf.reduce_max(predicted_heatmaps[:,:,:,:-1]),step=global_step)
                     accuracy = calc_accuracy(config, y,predicted_heatmaps)
@@ -434,9 +437,9 @@ def train(config):
                         writer_test.flush()
 
                     with open(csv_test,'a+') as ftest:
-                        ftest.write('%i,%f,%f,%f\n' % (global_step, test_losses['focal'],test_losses['cce'],test_accuracy))
+                        ftest.write('%i,%f,%f,%f\n' % (global_step, test_losses['focal'],test_losses['cce'], test_losses['l2'], test_accuracy))
         
-        result = {'train_loss':loss}
+        result = {'kp_train_loss':loss}
         if should_test:
             result['test_loss'] = tf.reduce_sum([v for v in test_losses.values()])
         return result 
