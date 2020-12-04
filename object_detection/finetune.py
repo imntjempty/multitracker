@@ -93,7 +93,10 @@ def plot_detections(image_np,
   #  plt.imshow(image_np_with_annotations)
   return image_np_with_annotations
 
-def get_bbox_data(config, vis_input_data=0):
+def get_bbox_data(config, vis_input_data=0, video_ids = None):
+    if video_ids is None:
+        video_ids = config['train_video_ids']
+
     seed = 2305
     train_image_tensors = []
     train_gt_classes_one_hot_tensors = []
@@ -104,7 +107,7 @@ def get_bbox_data(config, vis_input_data=0):
     
     frames_dir = os.path.join(video.base_dir_default,'%i' % config['project_id'])
     frame_bboxes = {}
-    for _video_id in config['train_video_ids'].split(','):
+    for _video_id in video_ids.split(','):
         _video_id = int(_video_id)
         db.execute("select * from bboxes where video_id=%i;" % _video_id)
         db_boxxes = [x for x in db.cur.fetchall()]
@@ -123,7 +126,7 @@ def get_bbox_data(config, vis_input_data=0):
     sample_fim = ''
     while not os.path.isfile(sample_fim):
         k = int(np.random.uniform(len(list(frame_bboxes.keys()))))
-        sample_fim = os.path.join(frames_dir, config['train_video_ids'].split(',')[0],'frames','train','%s.png' % list(frame_bboxes.keys())[k].split('_')[1])
+        sample_fim = os.path.join(frames_dir, video_ids.split(',')[0],'frames','train','%s.png' % list(frame_bboxes.keys())[k].split('_')[1])
 
     H,W,_ = cv.imread( sample_fim ).shape
     frames = list(frame_bboxes.keys())
@@ -169,75 +172,6 @@ def get_bbox_data(config, vis_input_data=0):
     data_test = labeling_list_test.map(load_im, num_parallel_calls = tf.data.experimental.AUTOTUNE).shuffle(256).batch(config['object_detection_batch_size']).prefetch(4*config['object_detection_batch_size'])#.cache()
     return frame_bboxes, data_train, data_test  
     
-
-def get_bbox_data_ram(config, vis_input_data=0):
-    train_image_tensors = []
-    train_gt_classes_one_hot_tensors = []
-    train_gt_box_tensors = []
-    test_image_tensors = []
-    test_gt_classes_one_hot_tensors = []
-    test_gt_box_tensors = []
-
-    frames_dir = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'train')
-    frame_bboxes = {}
-    db.execute("select * from bboxes where video_id=%i;" % config['video_id'])
-    db_boxxes = [x for x in db.cur.fetchall()]
-    shuffle(db_boxxes)
-    for dbbox in db_boxxes:
-        _, _, frame_idx, x1, y1, x2, y2 = dbbox 
-        if not frame_idx in frame_bboxes:
-            frame_bboxes[frame_idx] = [] 
-        frame_bboxes[frame_idx].append(np.array([float(z) for z in [y1,x1,y2,x2]]))
-    
-    for i, frame_idx in enumerate(frame_bboxes.keys()):
-        frame_bboxes[frame_idx] = np.array(frame_bboxes[frame_idx]) 
-    
-    for i, frame_idx in enumerate(frame_bboxes.keys()):
-        f = os.path.join(frames_dir, '%s.png' % frame_idx)
-        image_np = cv.imread(f)
-        image_np = cv.cvtColor(image_np,cv.COLOR_BGR2RGB)
-        #image_np = cv.resize(image_np,(640,640))
-        
-        H, W = image_np.shape[:2]
-        frame_bboxes[frame_idx] = frame_bboxes[frame_idx] / np.array([H,W,H,W]) 
-        bboxes = frame_bboxes[frame_idx]
-        
-        if np.random.uniform() > 0.2:
-            train_image_tensors.append(tf.expand_dims(tf.convert_to_tensor(image_np, dtype=tf.float32), axis=0))
-            train_gt_box_tensors.append(tf.convert_to_tensor(bboxes, dtype=tf.float32))
-            train_gt_classes_one_hot_tensors.append(tf.one_hot(tf.convert_to_tensor(np.ones(shape=[bboxes.shape[0]], dtype=np.int32) - label_id_offset), num_classes))
-        else:
-            test_image_tensors.append(tf.expand_dims(tf.convert_to_tensor(image_np, dtype=tf.float32), axis=0))
-            test_gt_box_tensors.append(tf.convert_to_tensor(bboxes, dtype=tf.float32))
-            test_gt_classes_one_hot_tensors.append(tf.one_hot(tf.convert_to_tensor(np.ones(shape=[bboxes.shape[0]], dtype=np.int32) - label_id_offset), num_classes))
-        
-    print('[*] Done prepping data for %i frames.' % len(frame_bboxes.keys()))
-    
-    if 0:
-        for kk in frame_bboxes.keys():
-            print('bboxes:', kk,'->',len(frame_bboxes[kk]),frame_bboxes[kk].shape)
-
-    if vis_input_data:
-        plt.figure(figsize=(30, 15))
-        for idx in range(9):
-            plt.subplot(3, 3, idx+1)
-            f = os.path.join(frames_dir, '%s.png' % sorted(list(frame_bboxes.keys()))[idx])
-            fo = '/tmp/oo_%s'%f.split('/')[-1]
-            train_image_np = cv.imread(f)
-            
-            gt_boxes = frame_bboxes[sorted(list(frame_bboxes.keys()))[idx]]
-            classes = np.ones(shape=[gt_boxes.shape[0]], dtype=np.int32)
-            dummy_scores = np.ones(shape=[classes.shape[0]], dtype=np.float32)  # give boxes a score of 100%
-            plot_detections(
-                train_image_np,
-                gt_boxes,
-                classes.reshape(gt_boxes.shape[0]),
-                dummy_scores.reshape(gt_boxes.shape[0]), 
-                category_index, image_name = fo)
-            print('[*] wrote input data vis %s' % fo)
-
-    
-    return train_image_tensors, train_gt_box_tensors, train_gt_classes_one_hot_tensors, test_image_tensors, test_gt_box_tensors, test_gt_classes_one_hot_tensors
 
 def get_pipeline_config(config, pipeline_dir = os.path.join(dbconnection.base_data_dir, 'object_detection')):
     return  os.path.join(pipeline_dir, config['object_detection_backbonepath'], 'pipeline.config')

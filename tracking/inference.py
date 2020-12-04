@@ -218,6 +218,8 @@ def detect_frame_boundingboxes(config, detection_model, encoder_model, seq_info,
             features_crop = tf.keras.layers.Flatten()(features_crop)
 
             features_crop = features_crop.numpy()[0,:]
+            # normalize to unit length
+            features_crop = features_crop / np.linalg.norm(features_crop)
 
             detection = Detection([left,top,width,height], proba, features_crop)
             
