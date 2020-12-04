@@ -58,9 +58,9 @@ def get_vanilla_model(config):
 
 def preprocess(config, x):
     #return x 
-    if 'efficientnet' in config['backbone'] or 'psp' in config['backbone']:
+    if 'efficientnet' in config['kp_backbone'] or 'psp' in config['kp_backbone']:
         return tf.keras.applications.efficientnet.preprocess_input(x)
-    elif config['backbone'] == 'vgg16':
+    elif config['kp_backbone'] == 'vgg16':
         return tf.keras.applications.vgg16.preprocess_input(x)
 
 
@@ -260,12 +260,12 @@ def get_psp_model(config):
 
 
 def get_model(config):
-    if config['backbone'] == 'efficientnet':
+    if config['kp_backbone'] == 'efficientnet':
         return get_efficientB0_model(config)
-    elif config['backbone'] == 'efficientnetLarge':
+    elif config['kp_backbone'] == 'efficientnetLarge':
         return get_efficientB6_model(config)
-    elif config['backbone'] == 'vgg16':
+    elif config['kp_backbone'] == 'vgg16':
         return get_vgg16_model(config)
-    elif config['backbone'] == 'psp':
+    elif config['kp_backbone'] == 'psp':
         return get_psp_model(config)
     #return get_vanilla_model(config)

@@ -11,20 +11,20 @@ def experiment_b(args, max_steps = 50000):
     config['video_id'] = int(args.video_id)
 
     config['experiment'] = 'B'
-    config['mixup']=False
-    config['cutmix'] = False
+    config['kp_mixup']=False
+    config['kp_cutmix'] = False
     config['kp_hflips']=False 
     config['kp_vflips']=False 
     config['kp_rot90s'] = False
-    config['blurpool'] = False
-    config['backbone'] = 'hourglass2'
-    config['train_loss'] = 'focal'
-    config['test_losses'] = ['focal'] #['cce','focal']
-    config['max_steps'] = max_steps
-    #config['max_steps'] = 15000
+    config['kp_blurpool'] = False
+    config['kp_backbone'] = 'hourglass2'
+    config['kp_train_loss'] = 'focal'
+    config['kp_test_losses'] = ['focal'] #['cce','focal']
+    config['kp_max_steps'] = max_steps
+    #config['kp_max_steps'] = 15000
     config['early_stopping'] = False
-    config['rotation_augmentation'] = bool(0)
-    config['lr'] = 1e-4
+    config['kp_rotation_augmentation'] = bool(0)
+    config['kp_lr'] = 1e-4
 
     #for should_init_pretrained in [False, True]:
     for should_init_pretrained in [False]:

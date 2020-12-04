@@ -27,7 +27,7 @@ def BottleneckBlock(inputs, filters, strides=1, downsample=False, name=None):
 def hourglass(config,inputs, level, filters):
     up = BottleneckBlock(inputs, filters)
     up = BottleneckBlock(up, filters)
-    if config['blurpool']:
+    if config['kp_blurpool']:
         low = BlurPool2D()(inputs)
     else:
         low = tf.keras.layers.MaxPool2D(pool_size = 2, strides = 2)(inputs)
@@ -41,8 +41,8 @@ def hourglass(config,inputs, level, filters):
     return up + lowup
 
 def get_model(config):
-    if not 'blurpool' in config:
-        config['blurpool'] = False 
+    if not 'kp_blurpool' in config:
+        config['kp_blurpool'] = False 
         
     inputs = tf.keras.layers.Input(shape=(config['img_height'], config['img_width'], 3))
     
@@ -55,7 +55,7 @@ def get_model(config):
     filters = 256
     x = upsample(filters,1,1,norm_type=None,act=None)(encoding.output) 
     x = BottleneckBlock(x, filters)
-    for i in range(config['num_hourglass']):
+    for i in range(config['kp_num_hourglass']):
         x = hourglass(config, x, 3, filters) 
         x = upsample(filters,1,1)(x)
         y = upsample(1+len(config['keypoint_names']),1,1,norm_type=None,act=tf.keras.layers.Activation('softmax'))(x)  
@@ -63,7 +63,7 @@ def get_model(config):
         outputs.append(ybig) 
 
         # add initial block again 
-        if i < config['num_hourglass']:
+        if i < config['kp_num_hourglass']:
             x = upsample(filters,1,1,norm_type=None,act=None)(x) + upsample(filters,1,1,norm_type=None,act=None)(y)
     
     model = tf.keras.Model(inputs,outputs,name="StackedHourglass")
@@ -82,7 +82,7 @@ def get_erfnet_model(config, norm_type = "batchnorm"):
     fs = 512
     x = upsample(fs,3,strides=1)(image_features) 
     # 8 resblocks for each hourglass stage
-    for istage in range(config['num_hourglass']):
+    for istage in range(config['kp_num_hourglass']):
         xin = x
         if should_inject_image_features and istage > 0:
             z = tf.concat([image_features,tf.nn.avg_pool2d(outputs[-1],4,4,'SAME')],axis=3)
@@ -132,7 +132,7 @@ def get_model_erfnet_pretrained(config, norm_type = "batchnorm"):
     xfin = upsample(fs,3,1)(encoder.outputs[0])
     x = xfin 
     # 8 resblocks for each hourglass stage
-    for istage in range(config['num_hourglass']):
+    for istage in range(config['kp_num_hourglass']):
         if should_inject_image_features and istage > 0:
             #x = tf.concat([x,encoder.outputs[0]],axis=3)
             x = tf.concat([x,encoder.outputs[0],tf.nn.avg_pool2d(outputs[-1],4,4,'SAME')],axis=3)
@@ -169,7 +169,7 @@ def get_model_erfnet_pretrained(config, norm_type = "batchnorm"):
     return model
 
 if __name__ == "__main__":
-    config = {'img_height': 224, 'img_width': 224, 'num_hourglass': 4, 'keypoint_names': 11*'a'}
-    config['blurpool'] = bool(0)
+    config = {'img_height': 224, 'img_width': 224, 'kp_num_hourglass': 4, 'keypoint_names': 11*'a'}
+    config['kp_blurpool'] = bool(0)
     model = get_model(config)
     model.summary()

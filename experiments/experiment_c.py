@@ -11,25 +11,25 @@ def experiment_c(args, max_steps = 50000):
     config['video_id'] = int(args.video_id)
 
     config['experiment'] = 'C'
-    config['mixup']=False
-    config['cutmix'] = False
+    config['kp_mixup']=False
+    config['kp_cutmix'] = False
     config['kp_hflips']=False 
     config['kp_vflips']=False 
     config['kp_rot90s'] = False
-    config['blurpool'] = False
+    config['kp_blurpool'] = False
 
-    config['train_loss'] = 'focal'
-    config['test_losses'] = ['focal'] #['cce','focal']
-    config['max_steps'] = max_steps
-    #config['max_steps'] = 15000
+    config['kp_train_loss'] = 'focal'
+    config['kp_test_losses'] = ['focal'] #['cce','focal']
+    config['kp_max_steps'] = max_steps
+    #config['kp_max_steps'] = 15000
     config['early_stopping'] = False
-    config['rotation_augmentation'] = bool(0)
-    config['lr'] = 1e-4
-    config['num_hourglass'] = 1
+    config['kp_rotation_augmentation'] = bool(0)
+    config['kp_lr'] = 1e-4
+    config['kp_num_hourglass'] = 1
     #for backbone in ['hourglass2']:
     for backbone in ['vgg16','efficientnetLarge','psp','hourglass4','hourglass8']:
         print('[*] starting sub experiment backbone %s' % backbone)
-        config['backbone'] = backbone
+        config['kp_backbone'] = backbone
         print(config,'\n')
         checkpoint_path = roi_segm.train(config)
         

@@ -55,10 +55,7 @@ def get_loss(predicted_heatmaps, y, config, mode = "train"):
 
     elif config['loss'] == 'focal':
         loss_func = tfa.losses.SigmoidFocalCrossEntropy(False)
-        if config['autoencoding']:
-            loss = loss_func(y[:,:,:,:-3],predicted_heatmaps[:,:,:,:-3])
-        else:
-            loss = loss_func(y, predicted_heatmaps)
+        loss = loss_func(y, predicted_heatmaps)
         loss = tf.reduce_mean(loss)
 
         #loss += tf.reduce_mean(tf.abs(predicted_heatmaps - y))
@@ -72,7 +69,7 @@ def get_loss(predicted_heatmaps, y, config, mode = "train"):
     return loss 
 
 def get_model(config):
-    if config['num_hourglass'] == 1:
+    if config['kp_num_hourglass'] == 1:
         model = unet.get_model(config)
         return model
     else:
@@ -193,28 +190,20 @@ def update_config_object_detection(config):
 def get_config(project_id = 3):
     config = {'batch_size': 8}
     config.update({'img_height': 224,'img_width': 224})
-    #config.update({'img_height': 512,'img_width': 512})
-    config['epochs'] = 1000000
-    config['max_steps'] = 200000
-    config['min_steps_keypoints'] = 50000
-    config['max_hours'] = 30.
-    config['lr'] = 2e-5 * 5   *5 *2.
-    config['lr'] = 2e-5
-    #config['lr_scratch'] = 1e-4
-    #config['loss'] = ['l1','dice','focal','normed_l1','l2'][2]
-    #if config['loss'] == 'l2':
-    #    config['lr'] = 2e-4
-    config['blurpool'] = True
-    config['autoencoding'] = [False, True][0]
-    config['pretrained_encoder'] = [False,True][1]
+    config['kp_max_steps'] = 200000
+    config['kp_min_steps'] = 50000
+    config['kp_lr'] = 2e-5 * 5   *5 *2.
+    config['kp_lr'] = 2e-5
+    config['kp_blurpool'] = True
+    config['ae_pretrained_encoder'] = [False,True][1]
 
-    config['mixup'] = [False, True][0]
-    config['cutmix'] = [False, True][1]
+    config['kp_mixup'] = [False, True][0]
+    config['kp_cutmix'] = [False, True][1]
     config['kp_hflips'] = [False,True][1]
     config['kp_vflips'] = [False,True][1]
-    config['rotation_augmentation'] = bool(1)
+    config['kp_rotation_augmentation'] = bool(1)
     config['kp_rot90s'] = bool(1)
-    config['num_hourglass'] = 2 #8
+    config['kp_num_hourglass'] = 2 #8
     config['fov'] = 0.75 # default 0.5
     config['selftrain_start_step'] = 10000
     config['n_blocks'] = 5
@@ -229,13 +218,13 @@ def get_config(project_id = 3):
 
     config['keypoint_names'] = db.get_keypoint_names(config['project_id'])
 
-    config['backbone'] = ["vgg16","efficientnet","efficientnetLarge",'psp'][2]
+    config['kp_backbone'] = ["vgg16","efficientnet","efficientnetLarge",'psp'][2]
     
     config['object_detection_backbone'] = ['efficient','ssd','fasterrcnn'][2] ## https://github.com/tensorflow/models/blob/master/research/object_detection/g3doc/tf2_detection_zoo.md
     config = update_config_object_detection(config)
     
-    config['train_loss'] = ['cce','focal'][1]
-    config['test_losses'] = ['focal'] #['cce','focal']
+    config['kp_train_loss'] = ['cce','focal'][1]
+    config['kp_test_losses'] = ['focal'] #['cce','focal']
 
     return config 
 

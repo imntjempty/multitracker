@@ -13,17 +13,17 @@ def experiment_c_speed(args):
     config['video_id'] = int(args.video_id)
 
     config['experiment'] = 'C'
-    config['mixup']=False
-    config['cutmix']=False
+    config['kp_mixup']=False
+    config['kp_cutmix']=False
     config['kp_hflips']=False 
     config['kp_vflips']=False 
-    config['train_loss'] = 'focal'
-    config['test_losses'] = ['focal'] #['cce','focal']
-    config['max_steps'] = 50000
-    #config['max_steps'] = 15000
+    config['kp_train_loss'] = 'focal'
+    config['kp_test_losses'] = ['focal'] #['cce','focal']
+    config['kp_max_steps'] = 50000
+    #config['kp_max_steps'] = 15000
     config['early_stopping'] = False
-    config['rotation_augmentation'] = bool(0)
-    config['lr'] = 1e-4
+    config['kp_rotation_augmentation'] = bool(0)
+    config['kp_lr'] = 1e-4
 
     
     durations = {'efficientnetLarge':{},'vgg16':{}}
@@ -33,7 +33,7 @@ def experiment_c_speed(args):
             'vgg16':'/home/alex/checkpoints/experiments/MiceTop/C/vgg16-2020-10-11_18-26-15'
         }[backbone]
         print('[*] starting sub experiment backbone %s' % backbone)
-        config['backbone'] = backbone
+        config['kp_backbone'] = backbone
         print(config,'\n')
     
         # load pretrained network

@@ -66,10 +66,10 @@ def main(args):
     
     config['object_detection_backbone'] = args.objectdetection_method
     config = model.update_config_object_detection(config)
-    config['backbone'] = args.keypoint_method
+    config['kp_backbone'] = args.keypoint_method
     if 'hourglass' in args.keypoint_method:
-        config['num_hourglass'] = int(args.keypoint_method[9:])
-        config['backbone'] = 'efficientnetLarge'
+        config['kp_num_hourglass'] = int(args.keypoint_method[9:])
+        config['kp_backbone'] = 'efficientnetLarge'
     
     # <load frames>
     output_dir = '/tmp/multitracker/object_detection/predictions/%i' % (config['video_id'])
@@ -117,7 +117,7 @@ def main(args):
 
     # 4) train keypoint estimator model
     if config['keypoint_model'] is None:
-        config['max_steps'] = 50000
+        config['kp_max_steps'] = 50000
         model.create_train_dataset(config)
         config['keypoint_model'] = roi_segm.train(config)
     print('[*] trained keypoint_model',config['keypoint_model'])

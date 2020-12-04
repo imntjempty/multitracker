@@ -1,8 +1,10 @@
 
 """
-
-    python3.7 -m multitracker.object_detection.finetune --project_id 7 --video_id 9 --minutes 10
-
+    Object Detector
+        uses TF2 object detection API
+        supports multiple backends like Faster R-CNN, SSD and EfficientDet 
+        checkpoints written to ~/data/multitracker/checkpoints/$project_name$/bbox
+        tensorboard visualization shows loss plots for training and testing and visualizations with drawn ground truth boxes and predictions with confidence scores
 """
 
 import os
@@ -47,6 +49,7 @@ category_index = {idv_class_id: {'id': 1, 'name': 'animal'}, 2: {'id': 2, 'name'
 
 def setup_oo_api(models_dir = os.path.expanduser('~/github/models')):
     if not os.path.isdir(models_dir):
+        import subprocess
         subprocess.call(['git','clone','--depth','1','https://github.com/tensorflow/models',models_dir])
 
     print('''    
@@ -55,44 +58,6 @@ def setup_oo_api(models_dir = os.path.expanduser('~/github/models')):
         protoc object_detection/protos/*.proto --python_out=.
         cp object_detection/packages/tf2/setup.py .
         python -m pip install .''')
-
-def plot_detections(image_np,
-                    boxes,
-                    classes,
-                    scores,
-                    category_index,
-                    figsize=(12, 16),
-                    image_name=None):
-  """Wrapper function to visualize detections.
-
-  Args:
-    image_np: uint8 numpy array with shape (img_height, img_width, 3)
-    boxes: a numpy array of shape [N, 4]
-    classes: a numpy array of shape [N]. Note that class indices are 1-based,
-      and match the keys in the label map.
-    scores: a numpy array of shape [N] or None.  If scores=None, then
-      this function assumes that the boxes to be plotted are groundtruth
-      boxes and plot all boxes as black with no classes or scores.
-    category_index: a dict containing category dictionaries (each holding
-      category index `id` and category name `name`) keyed by category indices.
-    figsize: size for the figure.
-    image_name: a name for the image file.
-  """
-  image_np_with_annotations = image_np.copy()
-  viz_utils.visualize_boxes_and_labels_on_image_array(
-      image_np_with_annotations,
-      boxes,
-      classes,
-      scores,
-      category_index,
-      use_normalized_coordinates=True,
-      min_score_thresh=0.8)
-  #if image_name:
-  #  plt.imsave(image_name, image_np_with_annotations)
-  #else:
-  #  plt.imshow(image_np_with_annotations)
-  return image_np_with_annotations
-
 def get_bbox_data(config, vis_input_data=0, video_ids = None):
     if video_ids is None:
         video_ids = config['train_video_ids']
@@ -435,8 +400,6 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
             for ib in range(len(_gt_boxes)):
                 for ij in range(len(_gt_boxes[ib])):
                     vis_gt_scores[ib][ij] = 1.
-            #print('vis_gt_scores',vis_gt_scores)
-
 
             vis = viz_utils.draw_bounding_boxes_on_image_tensors(vis, 
                                 vis_gt_boxes, # (4, 100, 4) detection_classes (4, 100) (4, 100)
@@ -521,20 +484,3 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
                         
                 idx += 1 
         
-
-if __name__ == '__main__':
-    import argparse 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--project_id',required=True,type=int)
-    parser.add_argument('--video_id',required=True,type=int)
-    parser.add_argument('--minutes',required=False,default=0.0,type=float)
-    #parser.add_argument('--thresh_detection',required=False,default=0.5,type=float)
-    args = parser.parse_args()
-
-    config = model.get_config(project_id = args.project_id)
-    config['project_id'] = args.project_id
-    config['video_id'] = args.video_id
-    config['minutes'] = args.minutes
-    
-    finetune(config)
-    

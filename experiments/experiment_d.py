@@ -14,26 +14,26 @@ def experiment_d(args, max_steps = 50000, train_video_ids = None):
         config['train_video_ids'] = train_video_ids
     else:
         config['train_video_ids'] = args.train_video_ids
-    config['test_losses'] = ['focal','cce','l2']
+    config['kp_test_losses'] = ['focal','cce','l2']
 
     config['experiment'] = 'D'
-    config['mixup']=False
-    config['cutmix']=False
+    config['kp_mixup']=False
+    config['kp_cutmix']=False
     config['kp_rot90s'] = False
     config['kp_hflips']=False 
     config['kp_vflips']=False 
-    config['blurpool'] = False
-    config['max_steps'] = max_steps
-    config['backbone'] = 'hourglass2'
-    #config['max_steps'] = 15000
+    config['kp_blurpool'] = False
+    config['kp_max_steps'] = max_steps
+    config['kp_backbone'] = 'hourglass2'
+    #config['kp_max_steps'] = 15000
     config['early_stopping'] = False
-    config['rotation_augmentation'] = bool(0)
-    config['lr'] = 1e-4
+    config['kp_rotation_augmentation'] = bool(0)
+    config['kp_lr'] = 1e-4
 
     #for loss_name in ['focal','cce','l2']:
     for loss_name in ['focal','cce','l2']:
         print('[*] starting sub experiment loss function %s' % loss_name)
-        config['train_loss'] = loss_name
+        config['kp_train_loss'] = loss_name
         
         print(config,'\n')
         checkpoint_path = roi_segm.train(config)

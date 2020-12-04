@@ -27,7 +27,7 @@ from multitracker.be import video, project
 from multitracker.keypoint_detection import model, predict
 from multitracker.keypoint_detection import heatmap_drawing
 from multitracker import util
-from multitracker.graph_tracking.__main__ import load_data
+from multitracker.tracking import inference
 
 app = Flask(__name__)
 
@@ -50,7 +50,7 @@ if args.model is not None and os.path.isfile(args.model):
     training_model = tf.keras.models.load_model(h5py.File(args.model, 'r'))
     print('[*] loaded model %s from disk' % args.model)
     config = model.get_config(project_id=args.project_id)
-    optimizer = tf.keras.optimizers.Adam(config['lr'])
+    optimizer = tf.keras.optimizers.Adam(config['kp_lr'])
     config = model.get_config(int(args.project_id))
 else:
     training_model = None 
@@ -165,7 +165,7 @@ def render_labeling(project_id,video_id):
         imp = np.mean(pred[:,maxidx,:,:,:],axis=0)
         #print('im',im.shape,'imp',imp.shape,imp.min(),imp.max())
         for c in range(len(config['keypoint_names'])):
-            frame_candidates.append(predict.extract_frame_candidates(imp[:,:,c],0.1))
+            frame_candidates.append(inference.extract_frame_candidates(imp[:,:,c],0.1))
         print('frame_candidates',frame_candidates)
         
     if len(labeled_frame_idxs) > 0:
@@ -246,7 +246,7 @@ def get_frame(project_id,video_id,frame_idx):
 
 def gen_frame(project_id, video_id):
     project_id, video_id = int(project_id), int(video_id)
-    data = load_data(project_id, video_id)
+    data = inference.load_data(project_id, video_id)
     for i, file_name in enumerate(data):
         frame = cv.imread(file_name)
         yield (b'--frame\r\n'

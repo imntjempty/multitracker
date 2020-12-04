@@ -102,7 +102,7 @@ def plot_experiment_a(args, plot=True):
     axs[0].set_title('Experiment A - Keypoint Estimation: using fractions of training data ({0} samples total)'.format(num_train_samples))
     axs[0].set_xlabel('steps')
     axs[0].set_ylabel('focal loss')
-    axs[0].hlines(bg_accuracy.mice_bg_focal_loss, 0, config['max_steps'], colors='k', linestyles='solid', label='baseline - no keypoints')
+    axs[0].hlines(bg_accuracy.mice_bg_focal_loss, 0, config['kp_max_steps'], colors='k', linestyles='solid', label='baseline - no keypoints')
     #mice_bg_cce_loss = 0.4167337
     
     
@@ -122,7 +122,7 @@ def plot_experiment_a(args, plot=True):
     axs[1].set_xlabel('steps')
     axs[1].set_ylabel('pixel accuracy')
     
-    axs[1].hlines(bg_accuracy.mice_bg_accuracy, 0, config['max_steps'], colors='k', linestyles='solid', label='baseline - no keypoints')
+    axs[1].hlines(bg_accuracy.mice_bg_accuracy, 0, config['kp_max_steps'], colors='k', linestyles='solid', label='baseline - no keypoints')
     axs[1].set_ylim([bg_accuracy.mice_bg_accuracy-0.01,1.0])
     axs[1].legend()
 
@@ -146,7 +146,7 @@ def plot_experiment_b(args):
     axs[0].set_title('Experiment B - Keypoint Estimation: ImageNet pretrained backbone vs random initialised network')
     axs[0].set_xlabel('steps')
     axs[0].set_ylabel('focal loss')
-    axs[0].hlines(bg_accuracy.mice_bg_focal_loss, 0, config['max_steps'], colors='k', linestyles='solid', label='baseline - no keypoints')
+    axs[0].hlines(bg_accuracy.mice_bg_focal_loss, 0, config['kp_max_steps'], colors='k', linestyles='solid', label='baseline - no keypoints')
     
     axs[0].set_ylim([0.0,0.01+bg_accuracy.mice_bg_focal_loss])
     axs[0].grid(True)
@@ -182,7 +182,7 @@ def plot_experiment_b(args):
     axs[1].plot([c[0] for c in train_random],[c[2] for c in train_random],color=colors[50],linestyle='--',label='train randomly initialised backbone')
     axs[1].plot([c[0] for c in test_random],[c[3] for c in test_random],color=colors[50],linestyle='-',label='test  randomly initialised backbone')
 
-    axs[1].hlines(bg_accuracy.mice_bg_accuracy, 0, config['max_steps'], colors='k', linestyles='solid', label='baseline - no keypoints')
+    axs[1].hlines(bg_accuracy.mice_bg_accuracy, 0, config['kp_max_steps'], colors='k', linestyles='solid', label='baseline - no keypoints')
     axs[1].set_ylim([bg_accuracy.mice_bg_accuracy-0.01,1.0])
     axs[1].legend()
 
@@ -202,7 +202,7 @@ def plot_experiment_c(args):
     axs[0].set_xlabel('steps')
     axs[0].set_ylabel('focal loss')
     axs[0].set_ylim([0.0,0.01+bg_accuracy.mice_bg_focal_loss])
-    axs[0].hlines(bg_accuracy.mice_bg_focal_loss, 0, config['max_steps'], colors='k', linestyles='solid', label='baseline - no keypoints')
+    axs[0].hlines(bg_accuracy.mice_bg_focal_loss, 0, config['kp_max_steps'], colors='k', linestyles='solid', label='baseline - no keypoints')
     axs[0].grid(True)
     #mice_bg_cce_loss = 0.4167337
     
@@ -232,7 +232,7 @@ def plot_experiment_c(args):
     ## plot speed
     for backbone in durations.keys():
         for bs in durations[backbone].keys():
-            ''#print('backbone',backbone,bs,':', durations[backbone][bs])
+            ''#print('kp_backbone',backbone,bs,':', durations[backbone][bs])
     labels = ['1','4','16']
     vgg_durations = [durations['vgg16'][bs] for bs in labels]
     efficient_durations = [durations['efficientnetLarge'][bs] for bs in labels]
@@ -329,7 +329,7 @@ def plot_experiment_f_loss(args):
     axs[0].set_xlabel('steps')
     axs[0].set_ylabel('loss')
     axs[0].set_ylim([0.0,2.])
-    #axs[0].hlines(bg_accuracy.mice_bg_focal_loss, 0, config['max_steps'], colors='k', linestyles='solid', label='baseline - no keypoints')
+    #axs[0].hlines(bg_accuracy.mice_bg_focal_loss, 0, config['kp_max_steps'], colors='k', linestyles='solid', label='baseline - no keypoints')
     axs[0].grid(True)
     
     for perc_used in [1,10,50,100]:

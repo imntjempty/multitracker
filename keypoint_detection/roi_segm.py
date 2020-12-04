@@ -1,6 +1,9 @@
 """
-    detect keypoints on cropped animals
-
+    Keypoint Detection 
+        uses TF2 and keras
+        supports multiple backends like stacked Hourglass, Unet and PSP
+        checkpoints written to ~/data/multitracker/checkpoints/$project_name$/keypoints
+        tensorboard visualization shows loss plots for training and testing and visualizations with drawn ground truth boxes and predictions
 """
 
 import tensorflow as tf
@@ -244,7 +247,7 @@ def load_roi_dataset(config,mode='train',batch_size=None, video_ids = None):
         comp = tf.concat(comp,axis=2)
         comp = comp[:,:,:(3+len(config['keypoint_names']))] # cut 'overhanging' channels, that were filled up to reach 3channel png image
         hh = h 
-        if mode == 'train' and config['rotation_augmentation']:
+        if mode == 'train' and config['kp_rotation_augmentation']:
             # random scale augmentation
             #if tf.random.uniform([]) > 0.3:
             #    hh = h + int(tf.random.uniform([],-h/10,h/10)) #h += int(tf.random.uniform([],-h/7,h/7))
@@ -299,11 +302,11 @@ def get_center(x1,y1,x2,y2,H,W,crop_dim):
     return center 
     
 def train(config):
-    #config['cutmix'] = False
-    #config['mixup'] = True
-    if 'hourglass' in config['backbone']:
-        config['num_hourglass'] = int(config['backbone'][9:])
-        config['backbone'] = 'efficientnetLarge'
+    #config['kp_cutmix'] = False
+    #config['kp_mixup'] = True
+    if 'hourglass' in config['kp_backbone']:
+        config['kp_num_hourglass'] = int(config['kp_backbone'][9:])
+        config['kp_backbone'] = 'efficientnetLarge'
     print('[*] config', config)
     
     
@@ -314,7 +317,7 @@ def train(config):
         
     # decaying learning rate 
     decay_steps, decay_rate = 3000, 0.95
-    lr = tf.keras.optimizers.schedules.ExponentialDecay(config['lr'], decay_steps, decay_rate)
+    lr = tf.keras.optimizers.schedules.ExponentialDecay(config['kp_lr'], decay_steps, decay_rate)
     optimizer = tf.keras.optimizers.Adam(lr)
 
     # checkpoints and tensorboard summary writer
@@ -326,11 +329,11 @@ def train(config):
     elif config['experiment'] == 'B':
         checkpoint_path = os.path.expanduser("~/checkpoints/experiments/%s/B/%s-%s" % (config['project_name'], ['random','imagenet'][int(config['should_init_pretrained'])] , now))
     elif config['experiment'] == 'C':
-        checkpoint_path = os.path.expanduser("~/checkpoints/experiments/%s/C/%s-%s" % (config['project_name'], config['backbone'] , now))
-        if config['num_hourglass'] > 1:
-            checkpoint_path = checkpoint_path.replace('/C/','/C/hourglass-%i-'%config['num_hourglass'])
+        checkpoint_path = os.path.expanduser("~/checkpoints/experiments/%s/C/%s-%s" % (config['project_name'], config['kp_backbone'] , now))
+        if config['kp_num_hourglass'] > 1:
+            checkpoint_path = checkpoint_path.replace('/C/','/C/hourglass-%i-'%config['kp_num_hourglass'])
     elif config['experiment'] == 'D':
-        checkpoint_path = os.path.expanduser("~/checkpoints/experiments/%s/D/%s-%s" % (config['project_name'], config['train_loss'] , now))
+        checkpoint_path = os.path.expanduser("~/checkpoints/experiments/%s/D/%s-%s" % (config['project_name'], config['kp_train_loss'] , now))
         
     if not os.path.isdir(checkpoint_path):
         os.makedirs(checkpoint_path)
@@ -359,11 +362,11 @@ def train(config):
             all_predicted_heatmaps = net(inp,training=True)
             loss = 0.0
             for predicted_heatmaps in all_predicted_heatmaps:
-                if config['train_loss'] == 'focal':
+                if config['kp_train_loss'] == 'focal':
                     loss += calc_focal_loss(y,predicted_heatmaps)
-                elif config['train_loss'] == 'cce':
+                elif config['kp_train_loss'] == 'cce':
                     loss += calc_cce_loss(y,predicted_heatmaps)
-                elif config['train_loss'] == 'l2':
+                elif config['kp_train_loss'] == 'l2':
                     loss += calc_l2_loss(y,predicted_heatmaps)
             loss = loss / float(len(all_predicted_heatmaps))
 
@@ -375,7 +378,7 @@ def train(config):
         optimizer.apply_gradients(zip(gradients,net.trainable_variables))
 
         should_test = global_step % 250 == 0
-        test_losses = {'focal':0.0,'cce':0.0}
+        test_losses = {'focal':0.0,'cce':0.0,'l2':0.0}
         test_accuracy = 0.0
         if should_test:
             # test data
@@ -385,14 +388,17 @@ def train(config):
                 if not predicted_test.shape[1] == yt.shape[1]:
                     predicted_test = tf.image.resize(predicted_test, x.shape[1:3]) 
 
-                if 'focal' in config['test_losses']:
-                    test_losses['focal'] += calc_focal_loss(yt,predicted_test)
-                if 'cce' in config['test_losses']:
-                    test_losses['cce'] += calc_cce_loss(yt,predicted_test)
-                test_accuracy += calc_accuracy(config, yt,predicted_test)
+                if 'focal' in config['kp_test_losses']:
+                    test_losses['focal'] += calc_focal_loss(yt, predicted_test)
+                if 'cce' in config['kp_test_losses']:
+                    test_losses['cce'] += calc_cce_loss(yt, predicted_test)
+                if 'l2' in config['kp_test_losses']:
+                    test_losses['l2'] += calc_l2_loss(yt, predicted_test)
+                test_accuracy += calc_accuracy(config, yt, predicted_test)
                 nt += 1 
             test_losses['focal'] = test_losses['focal'] / nt
             test_losses['cce'] = test_losses['cce'] / nt
+            test_losses['l2'] = test_losses['l2'] / nt
             test_accuracy = test_accuracy / nt 
 
 
@@ -402,7 +408,7 @@ def train(config):
                 def im_summary(name,data):
                     tf.summary.image(name,data,step=global_step)
                 with writer_train.as_default():
-                    tf.summary.scalar("loss %s" % config['train_loss'],loss,step=global_step)
+                    tf.summary.scalar("loss %s" % config['kp_train_loss'],loss,step=global_step)
                     tf.summary.scalar('min',tf.reduce_min(predicted_heatmaps[:,:,:,:-1]),step=global_step)
                     tf.summary.scalar('max',tf.reduce_max(predicted_heatmaps[:,:,:,:-1]),step=global_step)
                     accuracy = calc_accuracy(config, y,predicted_heatmaps)
@@ -437,9 +443,9 @@ def train(config):
                         writer_test.flush()
 
                     with open(csv_test,'a+') as ftest:
-                        ftest.write('%i,%f,%f,%f\n' % (global_step, test_losses['focal'],test_losses['cce'],test_accuracy))
+                        ftest.write('%i,%f,%f,%f\n' % (global_step, test_losses['focal'],test_losses['cce'], test_losses['l2'], test_accuracy))
         
-        result = {'train_loss':loss}
+        result = {'kp_train_loss':loss}
         if should_test:
             result['test_loss'] = tf.reduce_sum([v for v in test_losses.values()])
         return result 
@@ -474,12 +480,12 @@ def train(config):
                 if 1:        
                     # mixup augmentation
                     if np.random.random() < 0.5:
-                        if config['mixup'] and np.random.random() > 0.5:
+                        if config['kp_mixup'] and np.random.random() > 0.5:
                             x, y = model.mixup(x,y) 
                         else:
-                            if config['cutmix'] and np.random.random() > 0.5:
+                            if config['kp_cutmix'] and np.random.random() > 0.5:
                                 x, y = model.cutmix(x,y)
-                            if config['mixup'] and np.random.random() > 0.5:
+                            if config['kp_mixup'] and np.random.random() > 0.5:
                                 x, y = model.mixup(x,y)
                     #x = focus_augmentation.out_of_focus_augment(x, proba = 0.5)
 
@@ -495,11 +501,11 @@ def train(config):
                     test_losses.append(step_result['test_loss'])
                 
                 finish = False
-                if n == config['max_steps']-1:
+                if n == config['kp_max_steps']-1:
                     print('[*] stopping keypoint estimation after step %i, because computational budget run out.' % n)
                     finish = True 
                 
-                if n>config['min_steps_keypoints'] and 'test_loss' in step_result and config['early_stopping'] and len(test_losses) > 3:
+                if n>config['kp_min_steps'] and 'test_loss' in step_result and config['early_stopping'] and len(test_losses) > 3:
                     # early stopping        
                     if step_result['test_loss'] > test_losses[-2] and step_result['test_loss'] > test_losses[-3] and step_result['test_loss'] > test_losses[-4] and min(test_losses[:-1]) < 1.5*test_losses[-1]:
                         finish = True 

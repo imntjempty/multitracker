@@ -30,7 +30,7 @@ def upsample(nfilters, kernel_size, strides=2, dilation = (1,1), norm_type='batc
     return result 
 
 def Encoder(config,inputs):
-    if config['pretrained_encoder']:
+    if config['ae_pretrained_encoder']:
         return EncoderPretrained(config, inputs)
     else:
         return EncoderScratch(config, inputs)
@@ -65,17 +65,17 @@ def EncoderScratch(config, inputs, norm_input = True, name = "Scratch Encoder"):
     return model 
 
 def EncoderPretrained(config,inputs):
-    if not 'backbone' in config:
-        config['backbone'] = 'resnet'
+    if not 'kp_backbone' in config:
+        config['kp_backbone'] = 'resnet'
         
-    if config['backbone'] == "resnet":
+    if config['kp_backbone'] == "resnet":
         from tensorflow.keras.applications.resnet_v2 import preprocess_input
-    elif "efficientnet" in config['backbone']:
+    elif "efficientnet" in config['kp_backbone']:
         from tensorflow.keras.applications.efficientnet import preprocess_input
         
-    if config['backbone'] == "resnet":
+    if config['kp_backbone'] == "resnet":
         net = tf.keras.applications.ResNet152V2
-    elif config['backbone'] == 'efficientnet':
+    elif config['kp_backbone'] == 'efficientnet':
         net = tf.keras.applications.EfficientNetB7
     
     inputss = preprocess_input(inputs)
@@ -88,10 +88,10 @@ def EncoderPretrained(config,inputs):
         #print('layer',layer.name,i,layer.output.shape)
         layer.trainable = False 
     
-    if config['backbone'] == "resnet":
+    if config['kp_backbone'] == "resnet":
         layer_name = ['conv3_block8_1_relu',"conv3_block8_preact_relu","max_pooling2d_1"][1] # 32x32
         layer_name = 'conv2_block3_1_relu' # 64x64x64
-    elif config['backbone'] == "efficientnet":
+    elif config['kp_backbone'] == "efficientnet":
         layer_name = ['conv3_block8_1_relu'][0]
     
     feature_activation = net.get_layer(layer_name)
@@ -142,8 +142,6 @@ def DecoderErfnet(config, encoder, norm_type = "batchnorm"):
         x = x + tf.nn.relu6(r)
 
     no = len(config['keypoint_names'])+1
-    if config['autoencoding']:
-        no += 3
     
     x = upsample(32,3,1,norm_type=None)(x)
     act = tf.keras.layers.Activation('softmax')
@@ -199,8 +197,6 @@ def DecoderDefault(config, encoder):
         x = x + r
         
     no = len(config['keypoint_names'])+1
-    if config['autoencoding']:
-        no += 3
     
     act = tf.keras.layers.Activation('softmax')
     x = upsample(no,3,1,norm_type=None,act=act)(x)    

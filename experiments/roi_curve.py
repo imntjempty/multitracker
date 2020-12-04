@@ -45,7 +45,7 @@ def objectdetection_draw_predicision_recall_curves(video_id, title, experiment_d
     axs.set_title(title)
     axs.set_xlabel('Recall')
     axs.set_ylabel('Precision')
-    #axs[0].hlines(bg_accuracy.mice_bg_focal_loss, 0, config['max_steps'], colors='k', linestyles='solid', label='baseline - no keypoints')
+    #axs[0].hlines(bg_accuracy.mice_bg_focal_loss, 0, config['kp_max_steps'], colors='k', linestyles='solid', label='baseline - no keypoints')
     
     axs.set_ylim([.0,1.])
     axs.grid(True)
@@ -145,7 +145,7 @@ def keypoints_draw_predicision_recall_curves(video_id, title, experiment_dirs, e
     axs.set_title(title)
     axs.set_xlabel('Recall')
     axs.set_ylabel('Precision')
-    #axs[0].hlines(bg_accuracy.mice_bg_focal_loss, 0, config['max_steps'], colors='k', linestyles='solid', label='baseline - no keypoints')
+    #axs[0].hlines(bg_accuracy.mice_bg_focal_loss, 0, config['kp_max_steps'], colors='k', linestyles='solid', label='baseline - no keypoints')
     
     axs.set_ylim([.5,1.])
     axs.grid(True)
