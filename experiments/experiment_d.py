@@ -24,10 +24,10 @@ def experiment_d(args, max_steps = 50000, train_video_ids = None):
     config['kp_vflips']=False 
     config['blurpool'] = False
     config['max_steps'] = max_steps
-    config['backbone'] = 'hourglass2'
+    config['kp_backbone'] = 'hourglass2'
     #config['max_steps'] = 15000
     config['early_stopping'] = False
-    config['rotation_augmentation'] = bool(0)
+    config['kp_rotation_augmentation'] = bool(0)
     config['lr'] = 1e-4
 
     #for loss_name in ['focal','cce','l2']:

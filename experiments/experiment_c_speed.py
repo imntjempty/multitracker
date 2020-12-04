@@ -22,7 +22,7 @@ def experiment_c_speed(args):
     config['max_steps'] = 50000
     #config['max_steps'] = 15000
     config['early_stopping'] = False
-    config['rotation_augmentation'] = bool(0)
+    config['kp_rotation_augmentation'] = bool(0)
     config['lr'] = 1e-4
 
     
@@ -33,7 +33,7 @@ def experiment_c_speed(args):
             'vgg16':'/home/alex/checkpoints/experiments/MiceTop/C/vgg16-2020-10-11_18-26-15'
         }[backbone]
         print('[*] starting sub experiment backbone %s' % backbone)
-        config['backbone'] = backbone
+        config['kp_backbone'] = backbone
         print(config,'\n')
     
         # load pretrained network

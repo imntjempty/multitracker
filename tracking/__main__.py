@@ -66,10 +66,10 @@ def main(args):
     
     config['object_detection_backbone'] = args.objectdetection_method
     config = model.update_config_object_detection(config)
-    config['backbone'] = args.keypoint_method
+    config['kp_backbone'] = args.keypoint_method
     if 'hourglass' in args.keypoint_method:
         config['num_hourglass'] = int(args.keypoint_method[9:])
-        config['backbone'] = 'efficientnetLarge'
+        config['kp_backbone'] = 'efficientnetLarge'
     
     # <load frames>
     output_dir = '/tmp/multitracker/object_detection/predictions/%i' % (config['video_id'])

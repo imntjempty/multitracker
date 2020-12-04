@@ -17,13 +17,13 @@ def experiment_b(args, max_steps = 50000):
     config['kp_vflips']=False 
     config['kp_rot90s'] = False
     config['blurpool'] = False
-    config['backbone'] = 'hourglass2'
+    config['kp_backbone'] = 'hourglass2'
     config['train_loss'] = 'focal'
     config['test_losses'] = ['focal'] #['cce','focal']
     config['max_steps'] = max_steps
     #config['max_steps'] = 15000
     config['early_stopping'] = False
-    config['rotation_augmentation'] = bool(0)
+    config['kp_rotation_augmentation'] = bool(0)
     config['lr'] = 1e-4
 
     #for should_init_pretrained in [False, True]:

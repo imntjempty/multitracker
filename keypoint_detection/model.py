@@ -212,7 +212,7 @@ def get_config(project_id = 3):
     config['cutmix'] = [False, True][1]
     config['kp_hflips'] = [False,True][1]
     config['kp_vflips'] = [False,True][1]
-    config['rotation_augmentation'] = bool(1)
+    config['kp_rotation_augmentation'] = bool(1)
     config['kp_rot90s'] = bool(1)
     config['num_hourglass'] = 2 #8
     config['fov'] = 0.75 # default 0.5
@@ -229,7 +229,7 @@ def get_config(project_id = 3):
 
     config['keypoint_names'] = db.get_keypoint_names(config['project_id'])
 
-    config['backbone'] = ["vgg16","efficientnet","efficientnetLarge",'psp'][2]
+    config['kp_backbone'] = ["vgg16","efficientnet","efficientnetLarge",'psp'][2]
     
     config['object_detection_backbone'] = ['efficient','ssd','fasterrcnn'][2] ## https://github.com/tensorflow/models/blob/master/research/object_detection/g3doc/tf2_detection_zoo.md
     config = update_config_object_detection(config)

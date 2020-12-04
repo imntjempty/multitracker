@@ -241,7 +241,7 @@ def load_roi_dataset(config,mode='train',batch_size=None):
         comp = tf.concat(comp,axis=2)
         comp = comp[:,:,:(3+len(config['keypoint_names']))] # cut 'overhanging' channels, that were filled up to reach 3channel png image
         hh = h 
-        if mode == 'train' and config['rotation_augmentation']:
+        if mode == 'train' and config['kp_rotation_augmentation']:
             # random scale augmentation
             #if tf.random.uniform([]) > 0.3:
             #    hh = h + int(tf.random.uniform([],-h/10,h/10)) #h += int(tf.random.uniform([],-h/7,h/7))
@@ -298,9 +298,9 @@ def get_center(x1,y1,x2,y2,H,W,crop_dim):
 def train(config):
     #config['cutmix'] = False
     #config['mixup'] = True
-    if 'hourglass' in config['backbone']:
-        config['num_hourglass'] = int(config['backbone'][9:])
-        config['backbone'] = 'efficientnetLarge'
+    if 'hourglass' in config['kp_backbone']:
+        config['num_hourglass'] = int(config['kp_backbone'][9:])
+        config['kp_backbone'] = 'efficientnetLarge'
     print('[*] config', config)
     
     
@@ -323,7 +323,7 @@ def train(config):
     elif config['experiment'] == 'B':
         checkpoint_path = os.path.expanduser("~/checkpoints/experiments/%s/B/%s-%s" % (config['project_name'], ['random','imagenet'][int(config['should_init_pretrained'])] , now))
     elif config['experiment'] == 'C':
-        checkpoint_path = os.path.expanduser("~/checkpoints/experiments/%s/C/%s-%s" % (config['project_name'], config['backbone'] , now))
+        checkpoint_path = os.path.expanduser("~/checkpoints/experiments/%s/C/%s-%s" % (config['project_name'], config['kp_backbone'] , now))
         if config['num_hourglass'] > 1:
             checkpoint_path = checkpoint_path.replace('/C/','/C/hourglass-%i-'%config['num_hourglass'])
     elif config['experiment'] == 'D':

@@ -192,7 +192,7 @@ def plot_experiment_c(args):
     ## plot speed
     for backbone in durations.keys():
         for bs in durations[backbone].keys():
-            ''#print('backbone',backbone,bs,':', durations[backbone][bs])
+            ''#print('kp_backbone',backbone,bs,':', durations[backbone][bs])
     labels = ['1','4','16']
     vgg_durations = [durations['vgg16'][bs] for bs in labels]
     efficient_durations = [durations['efficientnetLarge'][bs] for bs in labels]
