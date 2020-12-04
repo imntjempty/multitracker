@@ -59,11 +59,11 @@ Each predicted bounding box and keypoint comes with its own confidence score ind
 
 ## Troubleshooting
 ### No boxes are detected
-- Check out tensorboard images called 'object detection'. If the train predictions look great, but the test predictions are aweful, label more bounding boxes!
+- Check out tensorboard images called 'object detection'. If the train predictions look great, but the test predictions are awful, label more bounding boxes!
 - Faster R-CNN sometimes fails on very small boxes, try changing the backbone to SSD ```--objectdetection_method ssd``` 
 - try to lower the threshold for bounding boxes ```--min_confidence_boxes 0.25```
 
 ### No keypoints are detected
-- Check out tensorboard images. If the train predictions look great, but the test predictions are aweful, label more keypoints and bounding boxes!
+- Check out tensorboard images. If the train predictions look great, but the test predictions are awful, label more keypoints and bounding boxes!
 - change the backbone ```--keypoint_method psp```
 - lower the threshold ```--min_confidence_keypoints 0.25```
