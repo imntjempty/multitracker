@@ -30,6 +30,7 @@ import h5py
 from multitracker import util 
 from multitracker.keypoint_detection import heatmap_drawing, model 
 from multitracker.keypoint_detection import predict
+from multitracker.tracking import inference
 from multitracker.graph_tracking import group_indiv
 from multitracker.be import dbconnection
 
@@ -50,7 +51,7 @@ def load_model(path_model):
     return trained_model 
 
 def load_data(project_id,video_id):
-    frames_dir = predict.get_project_frame_train_dir(project_id, video_id)
+    frames_dir = inference.get_project_frame_train_dir(project_id, video_id)
     frame_files = sorted(glob(os.path.join(frames_dir,'*.png')))
     
     #frame_files = frame_files[int(np.random.uniform(2000)):]
@@ -68,7 +69,7 @@ def load_data(project_id,video_id):
 def get_heatmaps_keypoints(heatmaps):
     keypoints = [] 
     for c in range(heatmaps.shape[2]-1): # dont extract from background channel
-        channel_candidates = predict.extract_frame_candidates(heatmaps[:,:,c], thresh = thresh_detection, pp = int(0.02 * np.min(heatmaps.shape[:2])))
+        channel_candidates = inference.extract_frame_candidates(heatmaps[:,:,c], thresh = thresh_detection, pp = int(0.02 * np.min(heatmaps.shape[:2])))
         for [px,py,val] in channel_candidates:
             keypoints.append([px,py,c])
 

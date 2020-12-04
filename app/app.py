@@ -27,6 +27,7 @@ from multitracker.be import video, project
 from multitracker.keypoint_detection import model, predict
 from multitracker.keypoint_detection import heatmap_drawing
 from multitracker import util
+from multitracker.tracking import inference
 from multitracker.graph_tracking.__main__ import load_data
 
 app = Flask(__name__)
@@ -165,7 +166,7 @@ def render_labeling(project_id,video_id):
         imp = np.mean(pred[:,maxidx,:,:,:],axis=0)
         #print('im',im.shape,'imp',imp.shape,imp.min(),imp.max())
         for c in range(len(config['keypoint_names'])):
-            frame_candidates.append(predict.extract_frame_candidates(imp[:,:,c],0.1))
+            frame_candidates.append(inference.extract_frame_candidates(imp[:,:,c],0.1))
         print('frame_candidates',frame_candidates)
         
     if len(labeled_frame_idxs) > 0:

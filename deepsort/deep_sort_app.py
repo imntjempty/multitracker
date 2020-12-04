@@ -14,7 +14,7 @@ from multitracker.deepsort.application_util import visualization
 from multitracker.deepsort.deep_sort import nn_matching
 from multitracker.deepsort.deep_sort.detection import Detection
 from multitracker.deepsort.deep_sort.tracker import Tracker
-
+from multitracker.tracking import inference
 from multitracker.deepsort.detection import Detector
 detector = Detector()
 
@@ -45,7 +45,7 @@ def gather_sequence_info(sequence_dir, detection_file, project_id, video_id):
 
     """
     #image_dir = os.path.join(sequence_dir, "img1")
-    image_dir = predict.get_project_frame_test_dir(project_id, video_id)
+    image_dir = inference.get_project_frame_test_dir(project_id, video_id)
     sequence_dir = image_dir
     image_filenames = {
         int(os.path.splitext(f)[0]): os.path.join(image_dir, f)

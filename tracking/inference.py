@@ -19,6 +19,37 @@ from multitracker.tracking.deep_sort.deep_sort.detection import Detection
 from multitracker.keypoint_detection import roi_segm, unet
 from multitracker.be import video
 
+from multitracker.be import dbconnection
+
+def get_project_frame_test_dir(project_id, video_id):
+    return os.path.join( dbconnection.base_data_dir, 'projects/%i/%i/frames/test' % (project_id,video_id))
+def get_project_frame_train_dir(project_id, video_id):
+    return os.path.join(dbconnection.base_data_dir, 'projects/%i/%i/frames/train' % (project_id,video_id))
+
+def extract_frame_candidates(feature_map, thresh = 0.75, pp = 5):
+    step = -1
+    max_step = 50
+    stop_threshold_hit = False 
+    frame_candidates = []
+    while not stop_threshold_hit and step < max_step:
+        step += 1
+        # find new max pos
+        max_pos = np.unravel_index(np.argmax(feature_map),feature_map.shape)
+        py = max_pos[0] #max_pos // feature_map.shape[0]
+        px = max_pos[1] #max_pos % feature_map.shape[1]
+        val = feature_map[py][px] #np.max(feature_map)
+        frame_candidates.append([px,py,val])
+
+        # delete area around new max pos 
+        feature_map[py-pp:py+pp,px-pp:px+pp] = 0
+        feature_map[py][px] = 0 
+        
+        # stop extraction if max value has small probability 
+        if val < thresh:
+            frame_candidates = frame_candidates[:-1]
+            stop_threshold_hit = True 
+    return frame_candidates
+
 def get_video_output_filepath(config):
     if not 'kp_num_hourglass' in config:
         config['kp_num_hourglass'] = 1 
@@ -36,7 +67,7 @@ def load_keypoint_model(path_model):
     return trained_model 
 
 def load_data(project_id,video_id,max_minutes=0):
-    frames_dir = predict.get_project_frame_train_dir(project_id, video_id)
+    frames_dir = inference.get_project_frame_train_dir(project_id, video_id)
     frame_files = sorted(glob(os.path.join(frames_dir,'*.png')))
     
     #frame_files = frame_files[int(np.random.uniform(2000)):]
@@ -55,7 +86,7 @@ def get_heatmaps_keypoints(heatmaps, thresh_detection=0.5):
     x = np.array(heatmaps,copy=True)
     keypoints = [] 
     for c in range(x.shape[2]-1): # dont extract from background channel
-        channel_candidates = predict.extract_frame_candidates(x[:,:,c], thresh = thresh_detection, pp = int(0.02 * np.min(x.shape[:2])))
+        channel_candidates = extract_frame_candidates(x[:,:,c], thresh = thresh_detection, pp = int(0.02 * np.min(x.shape[:2])))
         for [px,py,val] in channel_candidates:
             keypoints.append([px,py,c])
 

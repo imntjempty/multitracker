@@ -223,12 +223,12 @@ def train(config=None):
         for inp in dataset:
             _global_step = tf.convert_to_tensor(n, dtype=tf.int64)
 
-            if n < config['max_steps']:
+            if n < config['kp_max_steps']:
                 should_summarize=n%100==0
                 train_step(inp,writer,_global_step,should_summarize=should_summarize)
                 n+=1
             
-            if n == config['max_steps']:
+            if n == config['kp_max_steps']:
                 ckpt_save_path = ckpt_manager.save()
                 print('[*] done training, saving checkpoint for step {} at {}'.format(n, ckpt_save_path))
                 return ckpt_save_path
@@ -238,7 +238,7 @@ def train(config=None):
     
 def get_autoencoder_config():
     config = {'batch_size':8, 'img_height':640,'img_width':640}
-    config['max_steps'] = 15000
+    config['kp_max_steps'] = 15000
     config['kp_lr'] = 1e-4
     return config
 

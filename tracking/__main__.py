@@ -117,7 +117,7 @@ def main(args):
 
     # 4) train keypoint estimator model
     if config['keypoint_model'] is None:
-        config['max_steps'] = 50000
+        config['kp_max_steps'] = 50000
         model.create_train_dataset(config)
         config['keypoint_model'] = roi_segm.train(config)
     print('[*] trained keypoint_model',config['keypoint_model'])

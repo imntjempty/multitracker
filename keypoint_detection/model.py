@@ -190,9 +190,8 @@ def update_config_object_detection(config):
 def get_config(project_id = 3):
     config = {'batch_size': 8}
     config.update({'img_height': 224,'img_width': 224})
-    config['max_steps'] = 200000
-    config['min_steps_keypoints'] = 50000
-    config['max_hours'] = 30.
+    config['kp_max_steps'] = 200000
+    config['kp_min_steps'] = 50000
     config['kp_lr'] = 2e-5 * 5   *5 *2.
     config['kp_lr'] = 2e-5
     config['kp_blurpool'] = True

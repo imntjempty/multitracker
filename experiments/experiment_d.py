@@ -23,9 +23,9 @@ def experiment_d(args, max_steps = 50000, train_video_ids = None):
     config['kp_hflips']=False 
     config['kp_vflips']=False 
     config['kp_blurpool'] = False
-    config['max_steps'] = max_steps
+    config['kp_max_steps'] = max_steps
     config['kp_backbone'] = 'hourglass2'
-    #config['max_steps'] = 15000
+    #config['kp_max_steps'] = 15000
     config['early_stopping'] = False
     config['kp_rotation_augmentation'] = bool(0)
     config['kp_lr'] = 1e-4

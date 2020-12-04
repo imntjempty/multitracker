@@ -6,6 +6,7 @@ import h5py
 
 from multitracker.keypoint_detection import nets, predict
 from multitracker.deepsort.deep_sort.detection import Detection
+from multitracker.tracking import inference
 
 class Detector(object):
     def __init__(self):
@@ -66,7 +67,7 @@ class Detector(object):
         for class_id, kp_name in enumerate(range(1)):
             # extract each class individually
             channel = predicted_heatmap[:,:,class_id]
-            candidates = predict.extract_frame_candidates(channel.copy(),thresh = thresh)
+            candidates = inference.extract_frame_candidates(channel.copy(),thresh = thresh)
             print('[*] found %i candidates' % len(candidates),channel.min(),channel.max())
             
             for [cx,cy,proba] in candidates:
