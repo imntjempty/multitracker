@@ -10,8 +10,8 @@ def experiment_a(args, max_steps = 50000):
     model.create_train_dataset(config)
     config['experiment'] = 'A'
     config['video_id'] = int(args.video_id)
-    config['mixup']=False
-    config['cutmix'] = False
+    config['kp_mixup']=False
+    config['kp_cutmix'] = False
     config['kp_hflips']=False 
     config['kp_vflips']=False 
     config['kp_rot90s'] = False

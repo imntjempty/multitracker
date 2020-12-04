@@ -11,8 +11,8 @@ def experiment_c(args, max_steps = 50000):
     config['video_id'] = int(args.video_id)
 
     config['experiment'] = 'C'
-    config['mixup']=False
-    config['cutmix'] = False
+    config['kp_mixup']=False
+    config['kp_cutmix'] = False
     config['kp_hflips']=False 
     config['kp_vflips']=False 
     config['kp_rot90s'] = False

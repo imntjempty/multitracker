@@ -17,8 +17,8 @@ def experiment_d(args, max_steps = 50000, train_video_ids = None):
     config['kp_test_losses'] = ['focal','cce','l2']
 
     config['experiment'] = 'D'
-    config['mixup']=False
-    config['cutmix']=False
+    config['kp_mixup']=False
+    config['kp_cutmix']=False
     config['kp_rot90s'] = False
     config['kp_hflips']=False 
     config['kp_vflips']=False 

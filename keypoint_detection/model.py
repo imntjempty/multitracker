@@ -198,8 +198,8 @@ def get_config(project_id = 3):
     config['kp_blurpool'] = True
     config['ae_pretrained_encoder'] = [False,True][1]
 
-    config['mixup'] = [False, True][0]
-    config['cutmix'] = [False, True][1]
+    config['kp_mixup'] = [False, True][0]
+    config['kp_cutmix'] = [False, True][1]
     config['kp_hflips'] = [False,True][1]
     config['kp_vflips'] = [False,True][1]
     config['kp_rotation_augmentation'] = bool(1)

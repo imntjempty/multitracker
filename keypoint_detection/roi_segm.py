@@ -296,8 +296,8 @@ def get_center(x1,y1,x2,y2,H,W,crop_dim):
     return center 
     
 def train(config):
-    #config['cutmix'] = False
-    #config['mixup'] = True
+    #config['kp_cutmix'] = False
+    #config['kp_mixup'] = True
     if 'hourglass' in config['kp_backbone']:
         config['kp_num_hourglass'] = int(config['kp_backbone'][9:])
         config['kp_backbone'] = 'efficientnetLarge'
@@ -474,12 +474,12 @@ def train(config):
                 if 1:        
                     # mixup augmentation
                     if np.random.random() < 0.5:
-                        if config['mixup'] and np.random.random() > 0.5:
+                        if config['kp_mixup'] and np.random.random() > 0.5:
                             x, y = model.mixup(x,y) 
                         else:
-                            if config['cutmix'] and np.random.random() > 0.5:
+                            if config['kp_cutmix'] and np.random.random() > 0.5:
                                 x, y = model.cutmix(x,y)
-                            if config['mixup'] and np.random.random() > 0.5:
+                            if config['kp_mixup'] and np.random.random() > 0.5:
                                 x, y = model.mixup(x,y)
                     #x = focus_augmentation.out_of_focus_augment(x, proba = 0.5)
 
