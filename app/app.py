@@ -28,7 +28,6 @@ from multitracker.keypoint_detection import model, predict
 from multitracker.keypoint_detection import heatmap_drawing
 from multitracker import util
 from multitracker.tracking import inference
-from multitracker.graph_tracking.__main__ import load_data
 
 app = Flask(__name__)
 
@@ -247,7 +246,7 @@ def get_frame(project_id,video_id,frame_idx):
 
 def gen_frame(project_id, video_id):
     project_id, video_id = int(project_id), int(video_id)
-    data = load_data(project_id, video_id)
+    data = inference.load_data(project_id, video_id)
     for i, file_name in enumerate(data):
         frame = cv.imread(file_name)
         yield (b'--frame\r\n'
