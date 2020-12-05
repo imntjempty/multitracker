@@ -30,7 +30,7 @@ def calc_iou(boxA,boxB):
     
     return iou
 
-def objectdetection_draw_predicision_recall_curves(video_id, title, experiment_dirs, experiment_names, output_file):
+def objectdetection_draw_predicision_recall_curves(video_id, title, experiment_dirs, experiment_names, output_file, mode='test'):
     num_classes, label_id_offset = 1,1
     thresh_detections = np.arange(0.1,1.,step=.05)
 
@@ -61,6 +61,9 @@ def objectdetection_draw_predicision_recall_curves(video_id, title, experiment_d
         #config['object_detection_batch_size'] = 2
         
         frame_bboxes, data_train, data_test = finetune.get_bbox_data(config, video_ids=str(video_id))
+        data = data_train
+        if mode == 'test':
+            data = data_test 
         gt_boxes, gt_classes = [], []
         detection_model = finetune.load_trained_model(config)
 
@@ -69,7 +72,7 @@ def objectdetection_draw_predicision_recall_curves(video_id, title, experiment_d
         for thresh_detection in thresh_detections:
             cnt_true_positives[thresh_detection], cnt_false_positives[thresh_detection], cnt_false_negatives[thresh_detection] = 0,0,0
 
-        for frame_idx, image_tensors in data_test:
+        for frame_idx, image_tensors in data:
             gt_boxes, gt_classes = [],[]
             for ii in range(len(frame_idx)):
                 gt_boxes.append(tf.convert_to_tensor(frame_bboxes[str(frame_idx[ii].numpy().decode("utf-8") )], dtype=tf.float32))
@@ -120,7 +123,7 @@ def objectdetection_draw_predicision_recall_curves(video_id, title, experiment_d
     return precisions, recalls, output_file
 
 
-def keypoints_draw_predicision_recall_curves(video_id, title, experiment_dirs, experiment_names, output_file, max_neighbor_dist = 10):
+def keypoints_draw_predicision_recall_curves(video_id, title, experiment_dirs, experiment_names, output_file, max_neighbor_dist = 10, mode = 'test'):
     """
         draw a graph that compares precision and recall curves for thresholds in [0.1,0.2,...,0.9] of different keypoint prediction experiments
 
@@ -161,7 +164,7 @@ def keypoints_draw_predicision_recall_curves(video_id, title, experiment_dirs, e
         config['batch_size'] = 128
         print(config)
         
-        test_dataset = roi_segm.load_roi_dataset(config,mode='test',video_ids=str(video_id))
+        dataset = roi_segm.load_roi_dataset(config,mode=mode,video_ids=str(video_id))
 
         # load net 
         net = model.get_model(config) # outputs: keypoints + background
@@ -183,7 +186,7 @@ def keypoints_draw_predicision_recall_curves(video_id, title, experiment_dirs, e
             cnt_false_positives[thresh_detection] = 0 
         
         cnt_batches = -1
-        for xt,yt in test_dataset:
+        for xt,yt in dataset:
             cnt_batches += 1 
             predicted_test = net(xt,training=False)[-1].numpy()
             for b in range(0,predicted_test.shape[0],1):

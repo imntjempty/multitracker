@@ -26,7 +26,6 @@ import json
 from multitracker import util 
 from multitracker.be import video
 from multitracker.keypoint_detection import heatmap_drawing, model , roi_segm
-from multitracker.keypoint_detection import predict 
 from multitracker.object_detection import finetune
 from multitracker.tracking import inference 
 from multitracker.keypoint_detection.roi_segm import get_center

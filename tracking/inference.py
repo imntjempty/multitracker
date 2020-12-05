@@ -12,7 +12,6 @@ import multiprocessing as mp
 
 from multitracker import util 
 from multitracker.keypoint_detection import heatmap_drawing, model 
-from multitracker.keypoint_detection import predict
 from multitracker.keypoint_detection.blurpool import BlurPool2D
 from multitracker import autoencoder
 from multitracker.tracking.deep_sort.deep_sort.detection import Detection

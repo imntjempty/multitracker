@@ -23,6 +23,8 @@ output_dir = os.path.expanduser('~/Documents/Multitracker_experiments')
 if not os.path.isdir(output_dir):
     os.makedirs(output_dir)
 
+colors = {1: 'tab:brown', 10: 'tab:blue',20: 'tab:orange', 50: 'tab:green', 100: 'tab:red',200: 'tab:black',300: 'tab:yellow', 400: 'tab:gray'}
+
 def plot_experiment_a_roi(args):
     num_train_samples = len(db.get_labeled_bbox_frames(args.video_id))
     title = 'Experiment A - Keypoint Estimation: using fractions of training data ({0} samples total)'.format(num_train_samples)
@@ -62,7 +64,20 @@ def plot_experiment_c_roi(args):
     output_file = os.path.join(output_dir,'C_prec_recall_curve.png')
     roi_curve.keypoints_draw_predicision_recall_curves(str(args.video_id), title, experiment_dirs, experiment_names, output_file)
 
+def plot_object_detector_train_traintest_testtest(args):
+    title = 'Experiment G - Object Detection: generalization'
 
+    raise Exception('''TODO!
+        make precision recall curves
+        train data - test data of train video - test on unseen video
+    ''')
+def plot_keypoint_detector_train_traintest_testtest(args):
+    title = 'Experiment H - Keypoint Estimation: generalization'
+
+    raise Exception('''TODO!
+        make precision recall curves
+        train data - test data of train video - test on unseen video
+    ''')
 def plot_experiment_a(args, plot=True):
     print('plot',args)
     percs = [1, 10,50,100]
@@ -76,7 +91,6 @@ def plot_experiment_a(args, plot=True):
         if not perc_used in experiment_dirs:
             experiment_dirs[perc_used] = checkpoint_dir
 
-    colors = {1: 'tab:brown', 10: 'tab:blue',20: 'tab:orange', 50: 'tab:green', 100: 'tab:red'}
     fig, axs = plt.subplots(2)
     fig.set_size_inches(figsize[0],figsize[1])
     ltrains, ltests = [], []
@@ -195,7 +209,6 @@ def plot_experiment_c(args):
     base_dir = os.path.expanduser('~/checkpoints/experiments/MiceTop/C')
     
     ## plot losses
-    colors = {1: 'tab:brown', 10: 'tab:blue',20: 'tab:orange', 50: 'tab:green', 100: 'tab:red'}
     fig, axs = plt.subplots(2)
     fig.set_size_inches(figsize[0],figsize[1])
     axs[0].set_title('Experiment C - Keypoint Estimation: inference loss using test data ({0} samples total)'.format(num_test_samples))
@@ -273,7 +286,6 @@ def plot_experiment_e_loss(args):
     base_dir = os.path.expanduser('~/checkpoints/experiments/MiceTop/E')
     num_train_samples = len(db.get_labeled_bbox_frames(video_id))
     ## plot losses
-    colors = {1: 'tab:brown', 10: 'tab:blue',20: 'tab:orange', 50: 'tab:green', 100: 'tab:red'}
     fig, axs = plt.subplots(1)
     axs = [axs]
     fig.set_size_inches(figsize[0],figsize[1])
@@ -321,7 +333,6 @@ def plot_experiment_f_loss(args):
     base_dir = os.path.expanduser('~/checkpoints/experiments/MiceTop/F')
     num_train_samples = len(db.get_labeled_bbox_frames(video_id))
     ## plot losses
-    colors = {1: 'tab:brown', 10: 'tab:blue',20: 'tab:orange', 50: 'tab:green', 100: 'tab:red'}
     fig, axs = plt.subplots(1)
     axs = [axs]
     fig.set_size_inches(figsize[0],figsize[1])
@@ -386,5 +397,11 @@ if __name__ == '__main__':
         reset_figures()
     if 0:
         plot_experiment_f(args)
+        reset_figures()
+    if 1:
+        plot_object_detector_train_traintest_testtest(args)
+        reset_figures()
+    if 1:
+        plot_keypoint_detector_train_traintest_testtest(args)
         reset_figures()
     print('[*] wrote plots to %s' % output_dir)

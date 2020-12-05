@@ -19,13 +19,13 @@ def experiment_e(args, train_video_ids = None):
     #config['kp_max_steps'] = 15000
     config['early_stopping'] = False
     config['finetune'] = False 
-    config['object_augm_flip'] = bool(0)
+    '''config['object_augm_flip'] = bool(0)
     config['object_augm_rot90'] = bool(0)
     config['object_augm_gaussian'] = bool(0)
     config['object_augm_image'] = bool(0)
     config['object_augm_mixup'] = bool(0)
     config['object_augm_crop'] = bool(0)
-    config['object_augm_stitch'] = bool(0)
+    config['object_augm_stitch'] = bool(0)'''
 
     #for data_ratio in [1.0]:
     for data_ratio in [0.01,0.1,0.5,1.0]:
@@ -33,7 +33,7 @@ def experiment_e(args, train_video_ids = None):
         print('[*] starting sub experiment with %i/100 of data used' % int( 100. * data_ratio ))
         config['data_ratio'] = data_ratio
         checkpoint_dir = os.path.expanduser('~/checkpoints/experiments/%s/E/%i-%s' %(config['project_name'], int( 100. * data_ratio ), now))
-        config['maxsteps_objectdetection'] = {0.01: 20000, 0.1: 20000, 0.5: 40000, 1.0: 50000}[data_ratio]
+        config['maxsteps_objectdetection'] = {0.01: 20000, 0.1: 20000, 0.5: 30000, 1.0: 30000}[data_ratio]
     
         print(config,'\n')
         finetune(config, checkpoint_dir)

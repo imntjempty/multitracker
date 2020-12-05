@@ -443,7 +443,7 @@ def train(config):
                         writer_test.flush()
 
                     with open(csv_test,'a+') as ftest:
-                        ftest.write('%i,%f,%f,%f\n' % (global_step, test_losses['focal'],test_losses['cce'], test_losses['l2'], test_accuracy))
+                        ftest.write('%i,%f,%f,%f,%f\n' % (global_step, test_losses['focal'],test_losses['cce'], test_losses['l2'], test_accuracy))
         
         result = {'kp_train_loss':loss}
         if should_test:
