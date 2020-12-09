@@ -10,6 +10,9 @@ from multitracker.tracking.inference import get_heatmaps_keypoints
 from multitracker.keypoint_detection import roi_segm, model
 from multitracker.object_detection import finetune
 
+colors = {1: 'tab:brown', 10: 'tab:blue',20: 'tab:orange', 50: 'tab:green', 100: 'tab:red',200: 'tab:black',300: 'tab:yellow', 400: 'tab:gray'}
+
+
 def calc_iou(boxA,boxB):
     ## box encoded y_min, x_min, y_max, x_max
     
@@ -39,7 +42,6 @@ def objectdetection_draw_predicision_recall_curves(video_id, title, experiment_d
     assert len(experiment_dirs) == len(experiment_names)
 
     figsize = (12,8)
-    colors = {1: 'tab:brown', 10: 'tab:blue',20: 'tab:orange', 50: 'tab:green', 100: 'tab:red',200: 'tab:black',300: 'tab:yellow', 400: 'tab:gray'}
     fig, axs = plt.subplots(1)
     fig.set_size_inches(figsize[0],figsize[1])
     axs.set_title(title)
@@ -142,7 +144,6 @@ def keypoints_draw_predicision_recall_curves(video_id, title, experiment_dirs, e
 
     ## plot curves
     figsize = (12,8)
-    colors = {1: 'tab:brown', 10: 'tab:blue',20: 'tab:orange', 50: 'tab:green', 100: 'tab:red'}
     fig, axs = plt.subplots(1)
     fig.set_size_inches(figsize[0],figsize[1])
     axs.set_title(title)
