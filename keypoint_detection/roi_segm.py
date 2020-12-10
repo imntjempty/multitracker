@@ -10,18 +10,17 @@ import tensorflow as tf
 import tensorflow_addons as tfa
 import os
 import time
-import matplotlib.pyplot as plt
 from multiprocessing import Pool
 from datetime import datetime 
-from IPython.display import clear_output
-from multitracker.keypoint_detection import model , unet, heatmap_drawing, stacked_hourglass
-from multitracker.be import video 
 import cv2 as cv 
 from glob import glob 
 from random import shuffle
 import numpy as np 
 from datetime import datetime 
 import json 
+
+from multitracker.keypoint_detection import model , unet, heatmap_drawing, stacked_hourglass
+from multitracker.be import video 
 
 from multitracker.be import dbconnection
 db = dbconnection.DatabaseConnection()
