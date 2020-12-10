@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 from multiprocessing import Pool
 from datetime import datetime 
 from IPython.display import clear_output
-from multitracker.keypoint_detection import model , unet, heatmap_drawing, focus_augmentation, stacked_hourglass
+from multitracker.keypoint_detection import model , unet, heatmap_drawing, stacked_hourglass
 from multitracker.be import video 
 import cv2 as cv 
 from glob import glob 
@@ -487,8 +487,7 @@ def train(config):
                                 x, y = model.cutmix(x,y)
                             if config['kp_mixup'] and np.random.random() > 0.5:
                                 x, y = model.mixup(x,y)
-                    #x = focus_augmentation.out_of_focus_augment(x, proba = 0.5)
-
+                    
                 should_summarize=n%200==0
                 step_result = train_step(x, y, writer_train, writer_test, n, should_summarize=should_summarize)
                 
