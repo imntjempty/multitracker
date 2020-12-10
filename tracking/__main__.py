@@ -36,7 +36,7 @@ from multitracker.tracking.clustering import get_clustlets
 
 from multitracker.tracking.deep_sort import deep_sort_app
 from multitracker.tracking.tracktor import tracktor_app
-from multitracker.tracking import cv_multitracker
+from multitracker.tracking import upperbound_tracker
 
 from multitracker.be import dbconnection
 db = dbconnection.DatabaseConnection()
@@ -52,9 +52,9 @@ def main(args):
     config['objectdetection_model'] = args.objectdetection_model
     config['train_video_ids'] = args.train_video_ids
     config['minutes'] = args.minutes
-    #config['fixed_number'] = db.get_video_fixednumber(args.video_id) 
-    #config['fixed_number'] = None
-    config['fixed_number'] = args.fixed_number
+    #config['upper_bound'] = db.get_video_fixednumber(args.video_id) 
+    #config['upper_bound'] = None
+    config['upper_bound'] = args.upper_bound
     config['n_blocks'] = 4
     if args.inference_objectdetection_batchsize > 0:
         config['inference_objectdetection_batchsize'] = args.inference_objectdetection_batchsize
@@ -150,12 +150,10 @@ def main(args):
     if config['tracking_method'] == 'DeepSORT':
         deep_sort_app.run(config, detection_model, encoder_model, keypoint_model, output_dir, 
             args.min_confidence_boxes, args.min_confidence_keypoints, crop_dim, nms_max_overlap, max_cosine_distance, nn_budget, display)
-    else:
-        # tracktor algorithm
-        if config['tracking_method'] == 'Tracktor':
-            tracktor_app.run(config, detection_model, encoder_model, keypoint_model, crop_dim)
+    elif config['tracking_method'] == 'UpperBound':
+        upperbound_tracker.run(config, detection_model, encoder_model, keypoint_model, crop_dim)
         else:# config['tracking_method'] == 'FixedAssigner':
-            cv_multitracker.run(config, detection_model, encoder_model, keypoint_model, crop_dim, args.min_confidence_boxes, args.min_confidence_keypoints  )
+            upperbound_tracker.run(config, detection_model, encoder_model, keypoint_model, crop_dim, args.min_confidence_boxes, args.min_confidence_keypoints  )
 
     video_file_out = inference.get_video_output_filepath(config)
     convert_video_h265(video_file_out.replace('.mp4','.avi'), video_file_out)
@@ -188,7 +186,7 @@ if __name__ == '__main__':
     parser.add_argument('--tracking_method',required=False,default='DeepSORT',type=str,help="Tracking Algorithm to use: [DeepSORT, VIoU, FixedAssigner] defaults to DeepSORT")
     parser.add_argument('--objectdetection_method',required=False,default="fasterrcnn", help="Object Detection Algorithm to use [fasterrcnn, ssd] defaults to fasterrcnn") 
     parser.add_argument('--keypoint_method',required=False,default="hourglass2", help="Keypoint Detection Algorithm to use [hourglass2, hourglass4, hourglass8, vgg16, efficientnet, efficientnetLarge, psp]. defaults to hourglass2") 
-    parser.add_argument('--fixed_number',required=False,default=0,type=int)
+    parser.add_argument('--upper_bound',required=False,default=0,type=int)
     args = parser.parse_args()
     assert args.tracking_method in ['DeepSORT', 'VIoU', 'FixedAssigner']
     assert args.objectdetection_method in ['fasterrcnn', 'ssd']

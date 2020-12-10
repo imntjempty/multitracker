@@ -24,7 +24,7 @@ from multitracker.tracking.deep_sort.deep_sort.tracker import Tracker
 from multitracker.keypoint_detection import roi_segm
 from multitracker.tracking import inference
 from multitracker.tracking.keypoint_tracking import tracker as keypoint_tracking
-from multitracker.tracking.cv_multitracker import tlhw2chw
+from multitracker.tracking.upperbound_tracker import tlhw2chw
 from multitracker.be import video
 from multitracker import util 
 
@@ -274,8 +274,8 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
     metric = nn_matching.NearestNeighborDistanceMetric(
         "cosine", max_cosine_distance, nn_budget)
     #if 'tracking_method' in config or config['tracking_method'] == 'DeepSORT':
-    if 'fixed_number' in config and config['fixed_number'] is not None:
-        tracker = Tracker(metric,fixed_number=config['fixed_number'])
+    if 'upper_bound' in config and config['upper_bound'] is not None:
+        tracker = Tracker(metric,upper_bound=config['upper_bound'])
     else:
         tracker = Tracker(metric)
     
