@@ -4,10 +4,10 @@
 
     python3.7 -m multitracker.tracking --project_id 7 --video_id 13 --train_video_ids 9,14 --objectdetection_model ~/checkpoints/multitracker/bbox/vids9\,14-2020-11-13_07-56-02 --autoencoder_model /home/alex/checkpoints/multitracker/ae/vid_13-2020-11-10_22-34-32 --keypoint_model /home/alex/checkpoints/multitracker/keypoints/vids9,14-2020-11-13_00-24-28 --min_confidence_boxes 0.6 --min_confidence_keypoints 0.7 --tracking_method Tracktor --video /home/alex/data/multitracker/projects/7/videos/from_above_Oct2020_2_12fps.mp4
 
-    python3.7 -m multitracker.tracking --project_id 7 --video_id 13 --train_video_ids 9,14 --objectdetection_model ~/checkpoints/multitracker/bbox/vids9\,14-2020-11-13_07-56-02 --autoencoder_model /home/alex/checkpoints/multitracker/ae/vid_13-2020-11-10_22-34-32 --keypoint_model /home/alex/checkpoints/multitracker/keypoints/vids9,14-2020-11-13_00-24-28 --min_confidence_boxes 0.7 --min_confidence_keypoints 0.5 --tracking_method FixedAssigner --video /home/alex/data/multitracker/projects/7/videos/from_above_Oct2020_2_12fps.mp4
+    python3.7 -m multitracker.tracking --project_id 7 --video_id 13 --train_video_ids 9,14 --objectdetection_model ~/checkpoints/multitracker/bbox/vids9\,14-2020-11-13_07-56-02 --autoencoder_model /home/alex/checkpoints/multitracker/ae/vid_13-2020-11-10_22-34-32 --keypoint_model /home/alex/checkpoints/multitracker/keypoints/vids9,14-2020-11-13_00-24-28 --min_confidence_boxes 0.7 --min_confidence_keypoints 0.5 --tracking_method UpperBound --video /home/alex/data/multitracker/projects/7/videos/from_above_Oct2020_2_12fps.mp4
 
 
-    python3.7 -m multitracker.tracking --project_id 7 --video_id 13 --train_video_ids 9,14 --autoencoder_model /home/alex/checkpoints/multitracker/ae/vid_13-2020-11-10_22-34-32 --keypoint_model /home/alex/checkpoints/multitracker/keypoints/vids9,14-2020-11-13_00-24-28 --min_confidence_boxes 0.5 --min_confidence_keypoints 0.5 --tracking_method FixedAssigner --video /home/alex/data/multitracker/projects/7/videos/from_above_Oct2020_2_12fps.mp4 --objectdetection_model /home/alex/checkpoints/multitracker/bbox/flips,rot90,gauss,noise-vids9,14-2020-11-25_07-15-17 --sketch_file /home/alex/data/multitracker/projects/7/13/sketch.png
+    python3.7 -m multitracker.tracking --project_id 7 --video_id 13 --train_video_ids 9,14 --autoencoder_model /home/alex/checkpoints/multitracker/ae/vid_13-2020-11-10_22-34-32 --keypoint_model /home/alex/checkpoints/multitracker/keypoints/vids9,14-2020-11-13_00-24-28 --min_confidence_boxes 0.5 --min_confidence_keypoints 0.5 --tracking_method UpperBound --video /home/alex/data/multitracker/projects/7/videos/from_above_Oct2020_2_12fps.mp4 --objectdetection_model /home/alex/checkpoints/multitracker/bbox/flips,rot90,gauss,noise-vids9,14-2020-11-25_07-15-17 --sketch_file /home/alex/data/multitracker/projects/7/13/sketch.png
 
 """
 
@@ -35,7 +35,7 @@ from multitracker.tracking.tracklets import get_tracklets
 from multitracker.tracking.clustering import get_clustlets
 
 from multitracker.tracking.deep_sort import deep_sort_app
-from multitracker.tracking.tracktor import tracktor_app
+from multitracker.tracking.viou import viou_tracker
 from multitracker.tracking import upperbound_tracker
 
 from multitracker.be import dbconnection
@@ -151,9 +151,9 @@ def main(args):
         deep_sort_app.run(config, detection_model, encoder_model, keypoint_model, output_dir, 
             args.min_confidence_boxes, args.min_confidence_keypoints, crop_dim, nms_max_overlap, max_cosine_distance, nn_budget, display)
     elif config['tracking_method'] == 'UpperBound':
-        upperbound_tracker.run(config, detection_model, encoder_model, keypoint_model, crop_dim)
-        else:# config['tracking_method'] == 'FixedAssigner':
-            upperbound_tracker.run(config, detection_model, encoder_model, keypoint_model, crop_dim, args.min_confidence_boxes, args.min_confidence_keypoints  )
+        upperbound_tracker.run(config, detection_model, encoder_model, keypoint_model, crop_dim, args.min_confidence_boxes, args.min_confidence_keypoints  )
+    elif config['tracking_method'] == 'VIoU':
+        viou_tracker.run(config, detection_model, encoder_model, keypoint_model, crop_dim, args.min_confidence_boxes, args.min_confidence_keypoints  )
 
     video_file_out = inference.get_video_output_filepath(config)
     convert_video_h265(video_file_out.replace('.mp4','.avi'), video_file_out)
@@ -183,12 +183,12 @@ if __name__ == '__main__':
     parser.add_argument('--track_tail',required=False,default=800,type=int,help="How many steps back in the past should the path of each animal be drawn? -1 -> draw complete path")
     parser.add_argument('--sketch_file',required=False,default=None, help="Black and White Sketch of the frame without animals")
     parser.add_argument('--video',required=False,default=None)
-    parser.add_argument('--tracking_method',required=False,default='DeepSORT',type=str,help="Tracking Algorithm to use: [DeepSORT, VIoU, FixedAssigner] defaults to DeepSORT")
+    parser.add_argument('--tracking_method',required=False,default='DeepSORT',type=str,help="Tracking Algorithm to use: [DeepSORT, VIoU, UpperBound] defaults to DeepSORT")
     parser.add_argument('--objectdetection_method',required=False,default="fasterrcnn", help="Object Detection Algorithm to use [fasterrcnn, ssd] defaults to fasterrcnn") 
     parser.add_argument('--keypoint_method',required=False,default="hourglass2", help="Keypoint Detection Algorithm to use [hourglass2, hourglass4, hourglass8, vgg16, efficientnet, efficientnetLarge, psp]. defaults to hourglass2") 
     parser.add_argument('--upper_bound',required=False,default=0,type=int)
     args = parser.parse_args()
-    assert args.tracking_method in ['DeepSORT', 'VIoU', 'FixedAssigner']
+    assert args.tracking_method in ['DeepSORT', 'VIoU', 'UpperBound']
     assert args.objectdetection_method in ['fasterrcnn', 'ssd']
     assert args.keypoint_method in ['hourglass2', 'hourglass4', 'hourglass8', 'vgg16', 'efficientnet', 'efficientnetLarge', 'psp']
     main(args)
