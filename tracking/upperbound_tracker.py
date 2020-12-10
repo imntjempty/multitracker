@@ -99,7 +99,8 @@ class Tracker(object):
         np.nan_to_num(costs)
         costs[costs > 1 - self.sigma_iou] = np.nan
         track_ids, det_ids = solve_dense(costs)
-      
+        return track_ids, det_ids
+        
 class UpperBoundTracker(Tracker):
     def __init__(self, upper_bound):
         super().__init__()
