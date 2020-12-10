@@ -273,16 +273,16 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
     config['count'] = 0 
     metric = nn_matching.NearestNeighborDistanceMetric(
         "cosine", max_cosine_distance, nn_budget)
-    #if 'tracking_method' in config or config['tracking_method'] == 'DeepSORT':
-    if 'upper_bound' in config and config['upper_bound'] is not None:
-        tracker = Tracker(metric,upper_bound=config['upper_bound'])
-    else:
-        tracker = Tracker(metric)
+
+    tracker = Tracker(metric)
     
     results = []
 
     if 'video' in config and config['video'] is not None:
         video_reader = cv.VideoCapture( config['video'] )
+        # ignore first 5 frames
+        for _ in range(5):
+            _, _ = video_reader.read()
     else:
         video_reader = None 
     

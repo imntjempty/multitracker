@@ -286,7 +286,7 @@ class UpperBoundTracker(Tracker):
 
 
 def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_confidence_boxes, min_confidence_keypoints, tracker = None):
-    assert 'upper_bound' in config and config['upper_bound'] is not None and config['upper_bound']>0:
+    assert 'upper_bound' in config and config['upper_bound'] is not None and config['upper_bound']>0
     #config['upper_bound'] = None # ---> force VIOU tracker
     
     nms_max_overlap = 1.

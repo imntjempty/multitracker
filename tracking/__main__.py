@@ -2,7 +2,7 @@
 """
     main program to track animals and their corresponding limbs on a video file
 
-    python3.7 -m multitracker.tracking --project_id 7 --video_id 13 --train_video_ids 9,14 --objectdetection_model ~/checkpoints/multitracker/bbox/vids9\,14-2020-11-13_07-56-02 --autoencoder_model /home/alex/checkpoints/multitracker/ae/vid_13-2020-11-10_22-34-32 --keypoint_model /home/alex/checkpoints/multitracker/keypoints/vids9,14-2020-11-13_00-24-28 --min_confidence_boxes 0.6 --min_confidence_keypoints 0.7 --tracking_method Tracktor --video /home/alex/data/multitracker/projects/7/videos/from_above_Oct2020_2_12fps.mp4
+    python3.7 -m multitracker.tracking --project_id 7 --video_id 13 --train_video_ids 9,14 --objectdetection_model ~/checkpoints/multitracker/bbox/vids9\,14-2020-11-13_07-56-02 --autoencoder_model /home/alex/checkpoints/multitracker/ae/vid_13-2020-11-10_22-34-32 --keypoint_model /home/alex/checkpoints/multitracker/keypoints/vids9,14-2020-11-13_00-24-28 --min_confidence_boxes 0.5 --min_confidence_keypoints 0.5 --tracking_method DeepSort --video /home/alex/data/multitracker/projects/7/videos/from_above_Oct2020_2_12fps.mp4
 
     python3.7 -m multitracker.tracking --project_id 7 --video_id 13 --train_video_ids 9,14 --objectdetection_model ~/checkpoints/multitracker/bbox/vids9\,14-2020-11-13_07-56-02 --autoencoder_model /home/alex/checkpoints/multitracker/ae/vid_13-2020-11-10_22-34-32 --keypoint_model /home/alex/checkpoints/multitracker/keypoints/vids9,14-2020-11-13_00-24-28 --min_confidence_boxes 0.7 --min_confidence_keypoints 0.5 --tracking_method UpperBound --video /home/alex/data/multitracker/projects/7/videos/from_above_Oct2020_2_12fps.mp4
 
