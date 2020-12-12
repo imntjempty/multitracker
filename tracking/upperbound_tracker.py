@@ -37,7 +37,6 @@ from multitracker.tracking.deep_sort.application_util import visualization
 from multitracker.tracking.deep_sort.deep_sort import nn_matching
 from multitracker.tracking.deep_sort import deep_sort_app
 from multitracker.tracking.deep_sort.deep_sort.detection import Detection
-from multitracker.tracking.deep_sort.deep_sort.tracker import Tracker
 
 from multitracker import autoencoder
 from multitracker.keypoint_detection import roi_segm, unet
@@ -77,9 +76,8 @@ class OpenCVTrack(object):
 class Tracker(object):
     def __init__(self):
         self.tracks = [] 
-        self.sigma_iou = 0.25
-
-    def associate(self, tracked_boxes, detected_boxes):
+        
+    def associate(self, tracked_boxes, detected_boxes, sigma_iou = 0.5):
         """ perform association between tracks and detections in a frame.
         Args:
             tracks (list): input tracks
@@ -97,7 +95,7 @@ class Tracker(object):
                 costs[row, col] = 1. - iou
 
         np.nan_to_num(costs)
-        costs[costs > 1 - self.sigma_iou] = np.nan
+        costs[costs > 1 - sigma_iou] = np.nan
         track_ids, det_ids = solve_dense(costs)
         return track_ids, det_ids
         
@@ -371,7 +369,7 @@ def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_co
             #detections = [detections[i] for i in indices]
             #print('[*] found %i detections' % len(detections))
             # Update tracker
-            tracker.step({'img':frame,'detections':[boxes, scores, features]})
+            tracker.step({'img':frame,'detections':[boxes, scores, features], 'frame_idx': frame_idx})
 
             keypoints = inference.inference_keypoints(config, frame, detections, keypoint_model, crop_dim, min_confidence_keypoints)
             # update tracked keypoints with new detections
