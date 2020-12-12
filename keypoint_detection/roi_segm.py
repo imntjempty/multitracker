@@ -20,6 +20,7 @@ from datetime import datetime
 import json 
 
 from multitracker.keypoint_detection import model , unet, heatmap_drawing, stacked_hourglass
+from multitracker.object_detection import augmentation
 from multitracker.be import video 
 
 from multitracker.be import dbconnection
@@ -486,7 +487,13 @@ def train(config):
                                 x, y = model.cutmix(x,y)
                             if config['kp_mixup'] and np.random.random() > 0.5:
                                 x, y = model.mixup(x,y)
-                    
+                if 1:
+                    # noise augmentation
+                    if config['kp_im_noise'] and np.random.random() < 0.5:
+                        x = tf.keras.layers.GaussianNoise(np.random.uniform(25))(x)
+                    if config['kp_im_noise'] and np.random.random() < 0.5:
+                        x, _ = augmentation.random_image_transformation(x,x)
+
                 should_summarize=n%200==0
                 step_result = train_step(x, y, writer_train, writer_test, n, should_summarize=should_summarize)
                 
