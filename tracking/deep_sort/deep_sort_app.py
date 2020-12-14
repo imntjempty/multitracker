@@ -68,11 +68,7 @@ def gather_sequence_info(config):
     print('[*] min_frame_idx',min_frame_idx,'max_frame_idx',max_frame_idx)
 
     if len(image_filenames) > 0:
-        for iv,v in enumerate(image_filenames.values()):
-            if iv < 5:
-                print(v[:5])
         image_size = cv.imread(image_filenames[list(image_filenames.keys())[0]][0]  ,cv.IMREAD_GRAYSCALE).shape
-         
     else:
         image_size = None
 
