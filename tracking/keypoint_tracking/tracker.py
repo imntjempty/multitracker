@@ -38,7 +38,7 @@ class KeypointTracker(object):
                 min_dist, min_idx = 1e6, (-1,-1)
                 for j in range(len(self.tracks)):
                     ts = self.tracks[j].position
-                    # if track not matched 
+                    # if track not already matched 
                     if tracks_matched[j] == 0:
                         # if classes match 
                         if self.tracks[j].history_class[-1] == keypoints[k][2]:
@@ -50,7 +50,7 @@ class KeypointTracker(object):
                                     min_idx = (j,k)
                 # match min distance keypoint to track 
                 if min_idx[0] >= 0:
-                    alpha = 0.1
+                    alpha = 0.5
                     self.tracks[min_idx[0]].history.append(keypoints[min_idx[1]][:2])#tracks[min_idx[0]]['position'])
                     self.tracks[min_idx[0]].history_class.append(keypoints[min_idx[1]][2])
                     estimated_pos = np.array(self.tracks[min_idx[0]].position)#

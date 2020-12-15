@@ -29,6 +29,7 @@ from multitracker.experiments.roi_curve import calc_iou
 from glob import glob 
 import os
 from collections import deque
+from tqdm import tqdm
 
 from lapsolver import solve_dense
 
@@ -129,92 +130,40 @@ class UpperBoundTracker(Tracker):
         matched_detections = [False for _ in detected_boxes]
         matched_tracks = [False for _ in range(self.upper_bound)]
         matched_track_scores = [False for _ in range(self.upper_bound)]
-        #print('tracked_boxes',len(tracked_boxes))
-        #print('detected_boxes',len(detected_boxes))
+        
+        ## linear assignment
+        track_ids, det_ids = self.associate(tracked_boxes, detected_boxes)
+        for i, (track_id, det_id) in enumerate(zip(track_ids, det_ids)):
+            matched_detections[det_id] = True 
+            matched_tracks[track_id] = True 
 
-        matching_method = ["greedy","linear_assignment"][1]
-        if matching_method == "greedy":
-            for i,tbox in enumerate(self.trackers.getObjects()):
-                (x, y, w, h) = [int(v) for v in tbox]
-                highest_iou, highest_iou_idx = -1.,-1
-                for j, dbox in enumerate(detected_boxes):
-                    if not matched_detections[j]:
-                        iou = calc_iou(tlhw2tlbr(tbox),tlhw2tlbr(dbox))
-                        if iou > highest_iou:
-                            # check if no other matched detection has relatively high iou with detection j 
-                            other_detected_box_near = False 
-                            for k in range(len(detected_boxes)):
-                                if matched_detections[k] and not k == j:
-                                    other_detected_box_near = other_detected_box_near or ( calc_iou(tlhw2tlbr(dbox),tlhw2tlbr(detected_boxes[k])) > 0.5 )
-                            if not other_detected_box_near:
-                                highest_iou, highest_iou_idx = iou, j 
-                    
-                #print(i,highest_iou,highest_iou_idx,'coords',x,y,w,h)
-                # if prediction matched with detection:
-                if highest_iou > 0.5:
-                    # new general position is average of tracker prediction and matched detection
-                    alpha = 0.5
-                    box = alpha * tbox + (1.-alpha) * detected_boxes[highest_iou_idx]
-                    self.last_means[i].append(box)
-                    
-                    # replace tracker in multilist by init again with new general bounding box
-                    obs = self.trackers.getObjects()
-                    obs[i] = box
-                    matched_track_scores[i] = scores[highest_iou_idx]
-                    self.trackers = cv.MultiTracker_create()
-                    for ob in obs:
-                        self.trackers.add(cv.TrackerCSRT_create(), frame, tuple([int(cc) for cc in ob]))
-                    if debug: print('[*]   updated active tracker %i with detection %i' % (i,highest_iou_idx))
-                    
-                    self.steps_without_detection[i] = 0
-                    if not self.active[i]:
-                        self.active[i] = True
-                        self.alive[i] = True
-                        self.active_cnt += 1
-                    matched_tracks[i] = True
-                    matched_detections[highest_iou_idx] = True
-                else:
-                    #print(i,'steps_without_detection',self.steps_without_detection)
-                    self.last_means[i].append(tbox)
-                    self.steps_without_detection[i] += 1
-                    if self.steps_without_detection[i] > self.thresh_set_inactive and self.active[i]:
-                        self.active[i] = False
-                        self.active_cnt -= 1 
-                    if self.steps_without_detection[i] > self.thresh_set_dead and self.alive[i]:
-                        self.alive[i] = False
-
-        elif matching_method == "linear_assignment":
-            track_ids, det_ids = self.associate(tracked_boxes, detected_boxes)
-            for i, (track_id, det_id) in enumerate(zip(track_ids, det_ids)):
-                matched_detections[det_id] = True 
-                matched_tracks[track_id] = True 
-
-                # new general position is average of tracker prediction and matched detection
-                alpha = 0.5
-                box = alpha * tracked_boxes[track_id] + (1.-alpha) * detected_boxes[det_id]
-                self.last_means[i].append(box)
-                
-                # replace tracker in multilist by init again with new general bounding box
-                obs = self.trackers.getObjects()
-                obs[track_id] = box
-                matched_track_scores[track_id] = scores[det_id]
-                self.trackers = cv.MultiTracker_create()
-                for ob in obs:
-                    self.trackers.add(cv.TrackerCSRT_create(), frame, tuple([int(cc) for cc in ob]))
-                if debug: print('[*]   updated active tracker %i with detection %i' % (track_id, det_id))
-                
-                self.steps_without_detection[track_id] = 0
-                if not self.active[track_id]:
-                    self.active[track_id] = True
-                    self.alive[track_id] = True
-                    self.active_cnt += 1
-
-            for i in range(len(tracked_boxes)):
-                if not matched_tracks[i]:
-                    self.steps_without_detection[i] += 1 
-                    if self.steps_without_detection[i] > self.thresh_set_inactive and self.active[i]:
-                        self.active[i] = False
-                        self.active_cnt -= 1
+            # new general position is average of tracker prediction and matched detection
+            alpha = 0.5
+            box = alpha * tracked_boxes[track_id] + (1.-alpha) * detected_boxes[det_id]
+            self.last_means[track_id].append(box)
+            
+            # replace tracker in multilist by init again with new general bounding box
+            if debug: print('[*]   updated active tracker %i with detection %i by matching' % (track_id, det_id),'det:',detected_boxes[det_id],'track:',tracked_boxes[track_id],'new:',box)
+            tracked_boxes[track_id] = box
+            matched_track_scores[track_id] = scores[det_id]
+            self.trackers = cv.MultiTracker_create()
+            
+            self.steps_without_detection[track_id] = 0
+            if not self.active[track_id]:
+                self.active[track_id] = True
+                self.alive[track_id] = True
+                self.active_cnt += 1
+        
+        for box in tracked_boxes:
+            self.trackers.add(cv.TrackerCSRT_create(), frame, tuple([int(cc) for cc in box]))
+        
+        for i in range(len(tracked_boxes)):
+            if not matched_tracks[i]:
+                self.last_means[i].append(tracked_boxes[i])
+                self.steps_without_detection[i] += 1 
+                if self.steps_without_detection[i] > self.thresh_set_inactive and self.active[i]:
+                    self.active[i] = False
+                    self.active_cnt -= 1
 
         # e) reassign: check if unmatched detection is a new track or gets assigned to inactive track (depending on barrier fixed number)
         #for j in range(min(len(detected_boxes),self.upper_bound)):
@@ -244,8 +193,6 @@ class UpperBoundTracker(Tracker):
                         # calc center distance to all inactive tracks, merge with nearest track
                         nearest_inactive_track_distance, nearest_inactive_track_idx = 1e7,-1
                         for i, tbox in enumerate(self.trackers.getObjects()):
-                            #if not matched_tracks[i] and 
-                            #if self.steps_without_detection[i]>0:
                             if not self.active[i]:
                                 (detx, dety, detw, deth) = dbox 
                                 (trackx,tracky,trackw,trackh) = tbox
@@ -274,7 +221,7 @@ class UpperBoundTracker(Tracker):
         self.tracks = []
         for i, tbox in enumerate(self.trackers.getObjects()):
             self.tracks.append(OpenCVTrack(i,tbox,self.active[i],self.steps_without_detection[i],self.last_means[i],matched_track_scores[i]))
-        
+
         if debug:
             for i, tbox in enumerate(self.trackers.getObjects()):
                 if len(self.last_means[i])>0:
@@ -285,7 +232,7 @@ class UpperBoundTracker(Tracker):
 
 
 def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_confidence_boxes, min_confidence_keypoints, tracker = None):
-    assert 'upper_bound' in config and config['upper_bound'] is not None and config['upper_bound']>0
+    assert 'upper_bound' in config and config['upper_bound'] is not None and int(config['upper_bound'])>0
     #config['upper_bound'] = None # ---> force VIOU tracker
     
     nms_max_overlap = 1.
@@ -336,10 +283,10 @@ def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_co
         ret, frame = video_reader.read()
         frame_buffer.append(frame[:,:,::-1]) # trained on TF RGB, cv2 yields BGR
 
-    while running: #video_reader.isOpened():
-        frame_idx += 1 
+    #while running: #video_reader.isOpened():
+    for frame_idx in tqdm(range(total_frame_number)):
+        #frame_idx += 1 
         config['count'] = frame_idx
-        # if buffer not empty use preloaded frames and preloaded detections
         
         # fill up frame buffer as you take something from it to reduce lag 
         if video_reader.isOpened():
@@ -347,9 +294,11 @@ def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_co
             if frame is not None:
                 frame_buffer.append(frame[:,:,::-1]) # trained on TF RGB, cv2 yields BGR
             else:
-                running = False 
+                running = False
+                return True  
         else:
             running = False 
+            return True 
         
         if running:
             if len(detection_buffer) == 0:
@@ -358,6 +307,7 @@ def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_co
                 batch_detections = inference.detect_batch_bounding_boxes(detection_model, dettensor, seq_info, min_confidence_boxes)
                 [detection_buffer.append(batch_detections[ib]) for ib in range(config['inference_objectdetection_batchsize'])]
 
+            # if detection buffer not empty use preloaded frames and preloaded detections
             frame = frame_buffer.popleft()
             detections = detection_buffer.popleft()
                 
@@ -382,10 +332,9 @@ def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_co
                 result = [frame_idx, track.track_id, center0, center1, bbox[0], bbox[1], bbox[2], bbox[3], track.is_confirmed(), track.time_since_update]
                 results.append(result)
             
-            print('[%i/%i] - %i detections. %i keypoints' % (config['count'], total_frame_number, len(detections), len(keypoints)),[kp for kp in keypoints])
+            #print('[%i/%i] - %i detections. %i keypoints' % (config['count'], total_frame_number, len(detections), len(keypoints)))
             out = deep_sort_app.visualize(visualizer, frame, tracker, detections, keypoint_tracker, keypoints, tracked_keypoints, crop_dim, results, sketch_file=config['sketch_file'])
             video_writer.writeFrame(cv.cvtColor(out, cv.COLOR_BGR2RGB))
-            #video_writer.writeFrame(cv.cvtColor(out, cv.COLOR_BGR2RGB)) #out[:,:,::-1])
             
             if 1:
                 cv.imshow("tracking visualization", cv.resize(out,None,None,fx=0.75,fy=0.75))

@@ -182,26 +182,6 @@ def visualize(vis, frame, tracker, detections, keypoint_tracker, keypoints, trac
             p2 = tuple(np.int32(np.around(tracked_keypoints[i].history_estimated[j-1])))
             im = cv.line(im, p1, p2, color_keypoint, 2)
 
-    # draw keypoint tracks in full color
-    for keypoint_track in keypoint_tracker.get_deadnalive_tracks():
-        should_draw = True 
-        x, y = [ int(round(c)) for c in keypoint_track.position]
-        if keypoint_track.alive:
-            color_keypoint = [int(ss) for ss in colors[keypoint_track.history_class[-1]%len(colors)]]
-        '''else:
-            color_keypoint = [int(ss)//2+128 for ss in colors[keypoint_track.history_class[-1]%len(colors)]]
-            if len(keypoint_track.history_class) < 10:
-                should_draw = False
-        if should_draw:
-            im = cv.circle(im, (x,y), radius_keypoint, color_keypoint, -1)'''
-
-    # draw detected keypoint    
-    for [x,y,c] in keypoints:
-        x, y = [int(round(x)),int(round(y))]
-        color_keypoint = [int(ss) for ss in colors[c%len(colors)]]
-        color_keypoint = [c//2 + 64 for c in color_keypoint]
-        #im = cv.circle(im, (x,y), radius_keypoint, color_keypoint, 3)
-    
     history_heatmap = draw_heatmap(frame, results, sketch_file)
     # crop keypointed vis 
     vis_crops = [ history_heatmap ]
@@ -219,8 +199,6 @@ def visualize(vis, frame, tracker, detections, keypoint_tracker, keypoints, trac
             q = tuple([int(round(cc)) for cc in track.last_means[j  ][:2]])
             vis_history_track = cv.line(vis_history_track, p, q, tuple(visualization.create_unique_color_uchar(track.track_id)),3) 
         vis_crops.append(cv.resize(vis_history_track,(256,256)))
-
-        #vis_crops[-1] = cv.resize(vis_crops[-1], (im.shape[0]//2,im.shape[0]//2))
     
     _shape = [im.shape[0]//2,im.shape[1]//2]
     if len(vis_crops)>0:
