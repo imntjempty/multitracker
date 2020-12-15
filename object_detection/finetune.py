@@ -57,7 +57,10 @@ def setup_oo_api(models_dir = os.path.expanduser('~/github/models')):
         cd models/research/
         protoc object_detection/protos/*.proto --python_out=.
         cp object_detection/packages/tf2/setup.py .
-        python -m pip install .''')
+        python -m pip install .
+        
+        further explanation: https://github.com/tensorflow/models/blob/master/research/object_detection/g3doc/tf2.md''')
+
 def get_bbox_data(config, vis_input_data=0, video_ids = None):
     if video_ids is None:
         video_ids = config['train_video_ids']

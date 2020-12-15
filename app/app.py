@@ -24,7 +24,7 @@ tf.get_logger().setLevel(logging.ERROR)
 
 #from multitracker.be.db.dbconnection import get_connector
 from multitracker.be import video, project
-from multitracker.keypoint_detection import model, predict
+from multitracker.keypoint_detection import model
 from multitracker.keypoint_detection import heatmap_drawing
 from multitracker import util
 from multitracker.tracking import inference

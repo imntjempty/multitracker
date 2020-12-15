@@ -228,23 +228,3 @@ def get_config(project_id = 3):
     config['kp_test_losses'] = ['focal'] #['cce','focal']
 
     return config 
-
-def main(args):
-    config = get_config(args.project_id)
-    config['video_id'] = int(args.video_id)
-    print(config,'\n')
-    create_train_dataset(config)
-    checkpoint_path = train(config)
-    #predict.predict(config, checkpoint_path, int(args.project_id), int(args.video_id))
-
-
-if __name__ == '__main__':
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--project_id',required=True,type=int)
-    parser.add_argument('--video_id',required=True,type=int)
-    args = parser.parse_args()
-    main(args)
-
-    
-    #main(args)
