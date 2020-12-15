@@ -150,6 +150,6 @@ class Visualization(object):
                 for i in range(len(track.last_means)-1, _stop, -1):
                     px, py = track.last_means[i-1][:2]
                     x,   y = track.last_means[i  ][:2]
-                    if np.sqrt( (px-x)**2 + (py-y)**2 ) < 50:
-                        px,py,x,y = [int(round(c)) for c in [px,py,x,y]] 
-                        self.viewer.image = cv.line(self.viewer.image,(px,py),(x,y),self.viewer.color,thickness=2)
+                    #if np.sqrt( (px-x)**2 + (py-y)**2 ) < 50:
+                    px,py,x,y = [int(round(c)) for c in [px,py,x,y]] 
+                    self.viewer.image = cv.line(self.viewer.image,(px,py),(x,y),self.viewer.color,thickness=2)

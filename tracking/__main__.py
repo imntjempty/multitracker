@@ -180,7 +180,7 @@ if __name__ == '__main__':
     parser.add_argument('--min_confidence_keypoints',required=False,default=0.5,type=float)
     parser.add_argument('--inference_objectdetection_batchsize',required=False,default=0,type=int)
     parser.add_argument('--output_tracking_results',required=False,default=None)
-    parser.add_argument('--track_tail',required=False,default=800,type=int,help="How many steps back in the past should the path of each animal be drawn? -1 -> draw complete path")
+    parser.add_argument('--track_tail',required=False,default=100,type=int,help="How many steps back in the past should the path of each animal be drawn? -1 -> draw complete path")
     parser.add_argument('--sketch_file',required=False,default=None, help="Black and White Sketch of the frame without animals")
     parser.add_argument('--video',required=False,default=None)
     parser.add_argument('--tracking_method',required=False,default='DeepSORT',type=str,help="Tracking Algorithm to use: [DeepSORT, VIoU, UpperBound] defaults to DeepSORT")

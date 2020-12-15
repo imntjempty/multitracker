@@ -205,6 +205,13 @@ class UpperBoundTracker(Tracker):
                         obs = self.trackers.getObjects()
                         #if nearest_inactive_track_idx >= 0:
                         if nearest_inactive_track_distance < self.maximum_nearest_inactive_track_distance:
+                            ## the old estimation was obvisiouly wrong, so correct last means and add interpolated track
+                            self.last_means[nearest_inactive_track_idx] = self.last_means[nearest_inactive_track_idx][:-self.steps_without_detection[nearest_inactive_track_idx]]
+                            for ims in range(self.steps_without_detection[nearest_inactive_track_idx]):
+                                ratio = ims / float(self.steps_without_detection[nearest_inactive_track_idx])
+                                interpolated_box = (1. - ratio) * self.last_means[nearest_inactive_track_idx][-1] + ratio * detected_boxes[j]
+                                self.last_means[nearest_inactive_track_idx].append(interpolated_box)
+
                             matched_detections[j] = True
                             matched_tracks[nearest_inactive_track_idx] = True
                             obs[nearest_inactive_track_idx] = detected_boxes[j]
@@ -215,6 +222,8 @@ class UpperBoundTracker(Tracker):
                             self.trackers = cv.MultiTracker_create()
                             for ob in obs:
                                 self.trackers.add(cv.TrackerCSRT_create(), frame, tuple([int(cc) for cc in ob]))
+
+
                             if debug: print('[*]   updated inactive tracker %i with detection %i' % (nearest_inactive_track_idx,j))
 
         # update internal variables to be compatible with rest
