@@ -15,6 +15,7 @@ import os
 import numpy as np 
 import tensorflow as tf 
 tf.get_logger().setLevel('INFO')
+tf.get_logger().setLevel('ERROR')
 from glob import glob 
 from random import shuffle 
 import time 
@@ -64,7 +65,6 @@ def main(args):
     config['file_tracking_results'] = args.output_tracking_results
     
     config['object_detection_backbone'] = args.objectdetection_method
-    config = model.update_config_object_detection(config)
     config['kp_backbone'] = args.keypoint_method
     if 'hourglass' in args.keypoint_method:
         config['kp_num_hourglass'] = int(args.keypoint_method[9:])
