@@ -305,9 +305,12 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
         tracker.predict()
         tracker.update(detections)
         
-        keypoints = inference.inference_keypoints(config, frame, detections, keypoint_model, crop_dim, min_confidence_keypoints)
-        # update tracked keypoints with new detections
-        tracked_keypoints = keypoint_tracker.update(keypoints)
+        if keypoint_model is None:
+            keypoints, tracked_keypoints = [], []
+        else:
+            keypoints = inference.inference_keypoints(config, frame, detections, keypoint_model, crop_dim, min_confidence_keypoints)
+            # update tracked keypoints with new detections
+            tracked_keypoints = keypoint_tracker.update(keypoints)
 
         # Store results.
         for track in tracker.tracks:

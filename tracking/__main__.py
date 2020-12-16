@@ -106,7 +106,7 @@ def main(args):
     #point_classification.calculate_keypoints(config, detection_file_bboxes)
     
     # 2) train autoencoder for tracking appearence vector
-    if config['autoencoder_model'] is None:
+    if config['autoencoder_model'] is None and config['tracking_method'] == 'DeepSORT':
         config_autoencoder = autoencoder.get_autoencoder_config()
         config_autoencoder['project_id'] = config['project_id']
         config_autoencoder['video_id'] = config['video_id']
@@ -115,7 +115,7 @@ def main(args):
     print('[*] trained autoencoder model',config['autoencoder_model'])
 
     # 4) train keypoint estimator model
-    if config['keypoint_model'] is None:
+    if config['keypoint_model'] is None and not config['kp_backbone'] == 'none':
         config['kp_max_steps'] = 50000
         model.create_train_dataset(config)
         config['keypoint_model'] = roi_segm.train(config)
@@ -137,7 +137,10 @@ def main(args):
         encoder_model = inference.load_autoencoder_feature_extractor(config)
 
     # load trained keypoint model
-    keypoint_model = inference.load_keypoint_model(config['keypoint_model'])
+    if config['kp_backbone'] == 'none':
+        keypoint_model = None
+    else:
+        keypoint_model = inference.load_keypoint_model(config['keypoint_model'])
     # </load models>
 
     # 3) run bbox tracking deep sort with fixed tracks
@@ -185,10 +188,10 @@ if __name__ == '__main__':
     parser.add_argument('--video',required=False,default=None)
     parser.add_argument('--tracking_method',required=False,default='DeepSORT',type=str,help="Tracking Algorithm to use: [DeepSORT, VIoU, UpperBound] defaults to DeepSORT")
     parser.add_argument('--objectdetection_method',required=False,default="fasterrcnn", help="Object Detection Algorithm to use [fasterrcnn, ssd] defaults to fasterrcnn") 
-    parser.add_argument('--keypoint_method',required=False,default="hourglass2", help="Keypoint Detection Algorithm to use [hourglass2, hourglass4, hourglass8, vgg16, efficientnet, efficientnetLarge, psp]. defaults to hourglass2") 
+    parser.add_argument('--keypoint_method',required=False,default="hourglass2", help="Keypoint Detection Algorithm to use [none, hourglass2, hourglass4, hourglass8, vgg16, efficientnet, efficientnetLarge, psp]. defaults to hourglass2") 
     parser.add_argument('--upper_bound',required=False,default=0,type=int)
     args = parser.parse_args()
     assert args.tracking_method in ['DeepSORT', 'VIoU', 'UpperBound']
     assert args.objectdetection_method in ['fasterrcnn', 'ssd']
-    assert args.keypoint_method in ['hourglass2', 'hourglass4', 'hourglass8', 'vgg16', 'efficientnet', 'efficientnetLarge', 'psp']
+    assert args.keypoint_method in ['none', 'hourglass2', 'hourglass4', 'hourglass8', 'vgg16', 'efficientnet', 'efficientnetLarge', 'psp']
     main(args)
