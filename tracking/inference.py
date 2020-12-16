@@ -204,10 +204,10 @@ def detect_batch_bounding_boxes(detection_model, frames, seq_info, thresh_detect
             if proba > thresh_detection:
                 #print('box',j,bboxes['detection_boxes'][j])
                 top,left,height,width = bboxes['detection_boxes'][b][j]
-                top *= seq_info['image_size'][0]#/scale
-                height *= seq_info['image_size'][0]#/scale
-                left *= seq_info['image_size'][1]#/scale
-                width *= seq_info['image_size'][1]#/scale
+                top *= frames.shape[1] #seq_info['image_size'][0]#/scale
+                height *= frames.shape[1] #seq_info['image_size'][0]#/scale
+                left *= frames.shape[2] #seq_info['image_size'][1]#/scale
+                width *= frames.shape[2] #seq_info['image_size'][1]#/scale
                 height = height - top  
                 width = width - left
 

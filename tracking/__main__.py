@@ -9,6 +9,7 @@
 
     python3.7 -m multitracker.tracking --project_id 7 --video_id 13 --train_video_ids 9,14 --autoencoder_model /home/alex/checkpoints/multitracker/ae/vid_13-2020-11-10_22-34-32 --keypoint_model /home/alex/checkpoints/multitracker/keypoints/vids9,14-2020-11-13_00-24-28 --min_confidence_boxes 0.5 --min_confidence_keypoints 0.5 --tracking_method UpperBound --video /home/alex/data/multitracker/projects/7/videos/from_above_Oct2020_2_12fps.mp4 --objectdetection_model /home/alex/checkpoints/multitracker/bbox/flips,rot90,gauss,noise-vids9,14-2020-11-25_07-15-17 --sketch_file /home/alex/data/multitracker/projects/7/13/sketch.png
 
+    python3.7 -m multitracker.tracking --project_id 7 --video_id 13 --train_video_ids 9,14 --objectdetection_model /home/alex/checkpoints/multitracker/bbox/faster_vids9,14_flips,rot90,gauss,imtransform-2020-11-26_10-13-19 --keypoint_method none --min_confidence_boxes 0.85 --tracking_method UpperBound --upper_bound 4 --video /home/alex/data/multitracker/projects/7/videos/from_above_Oct2020_2_12fps_halfresolution.mp4 --sketch_file /home/alex/data/multitracker/projects/7/13/sketch.png --inference_objectdetection_batchsize 8
 """
 
 import os
