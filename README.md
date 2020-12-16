@@ -47,7 +47,7 @@ There are several options for object detection, keypoint estimation and tracking
 
 `--objectdetection_method` options: fasterrcnn, ssd. fasterrcnn is slower but usually achieves higher accuracy. ssd is faster but might fail to generalize to new videos
 
-`--keypoint_method` options: hourglass2, hourglass4, hourglass8, vgg16, efficientnet, efficientnetLarge, psp. defaults to hourglass2
+`--keypoint_method` options: none, hourglass2, hourglass4, hourglass8, vgg16, efficientnet, efficientnetLarge, psp. defaults to hourglass2. option none tracks objects without keypoints.
 
 `--tracking_method` options: DeepSORT, VIoU, UpperBound
 
