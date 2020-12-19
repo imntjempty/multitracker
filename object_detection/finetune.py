@@ -252,6 +252,18 @@ def restore_weights(config, checkpoint_path = None, gt_boxes = None, gt_classes 
     print('[*] object detection weights restored from %s' % checkpoint_path)
     return ckpt, model_config, detection_model
 
+def get_trainable_variables(detection_model, mode):
+    if mode == 'transfer':
+        to_fine_tune = []
+        prefixes_to_train = [
+            'WeightSharedConvolutionalBoxPredictor/WeightSharedConvolutionalBoxHead',
+            'WeightSharedConvolutionalBoxPredictor/WeightSharedConvolutionalClassHead']
+        for var in detection_model.trainable_variables:
+            if any([var.name.startswith(prefix) for prefix in prefixes_to_train]):
+                to_fine_tune.append(var)
+    else:
+        to_fine_tune = detection_model.trainable_variables
+    return to_fine_tune 
 
 def finetune(config, checkpoint_directory, checkpoint_restore = None):
     #setup_oo_api() 
@@ -283,24 +295,12 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
         learning_rate = config['lr_objectdetection']
         num_batches = int(1e7) # was 100 with 5 examples
 
-        # Select variables in top layers to fine-tune.
-        trainable_variables = detection_model.trainable_variables
         
-        to_fine_tune = []
-        if config['finetune']:
-            prefixes_to_train = [
-                'WeightSharedConvolutionalBoxPredictor/WeightSharedConvolutionalBoxHead',
-                'WeightSharedConvolutionalBoxPredictor/WeightSharedConvolutionalClassHead']
-            for var in trainable_variables:
-                if any([var.name.startswith(prefix) for prefix in prefixes_to_train]):
-                    to_fine_tune.append(var)
-        else:
-            to_fine_tune = trainable_variables
 
         # Set up forward + backward pass for a single train step.
-        def get_model_train_step_function(model, optimizer, vars_to_fine_tune):
+        def get_model_train_step_function(model, optimizer, mode):
             """Get a tf.function for training step."""
-
+            vars_to_fine_tune = get_trainable_variables(model, mode)
             # Use tf.function for a bit of speed.
             # Comment out the tf.function decorator if you want the inside of the
             # function to run eagerly.
@@ -374,7 +374,7 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
             return train_step_fn, test_step_fn
 
         optimizer = tf.keras.optimizers.SGD(learning_rate=learning_rate, momentum=0.9)
-        train_step_fn, test_step_fn = get_model_train_step_function(detection_model, optimizer, to_fine_tune)
+        train_step_fn, test_step_fn = get_model_train_step_function(detection_model, optimizer, 'transfer')
         writer_train = tf.summary.create_file_writer(checkpoint_directory+'/train')
         writer_test = tf.summary.create_file_writer(checkpoint_directory+'/test')
         csv_train = os.path.join(checkpoint_directory,'train_log.csv')
@@ -425,6 +425,10 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
                     gt_boxes.append(tf.convert_to_tensor(frame_bboxes[str(frame_idx[ii].numpy().decode("utf-8") )], dtype=tf.float32))
                     gt_classes.append(tf.one_hot(tf.convert_to_tensor(np.ones(shape=[frame_bboxes[str(frame_idx[ii].numpy().decode("utf-8") )].shape[0]], dtype=np.int32) - label_id_offset), num_classes))
                 
+                if idx == config['object_finetune_warmup']:
+                    train_step_fn, test_step_fn = get_model_train_step_function(detection_model, optimizer, 'finetune')
+                    print('[*] switching from transfer learning to fine tuning after %i steps.' % idx)
+                    
                 # <augmentation>
                 image_tensors, gt_boxes, gt_classes = augmentation.augment(config, image_tensors, gt_boxes, gt_classes)
                 # </augmentation>

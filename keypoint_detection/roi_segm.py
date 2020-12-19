@@ -495,6 +495,12 @@ def train(config):
                         x, _ = augmentation.random_image_transformation(x,x)
 
                 should_summarize=n%200==0
+                ## if finetuning warmup phase is over, unfreeze all layers including encoding layers and continue fine-tuning
+                if n == config['kp_finetune_warmup']:
+                    net.trainable = True 
+                    for l in net.layers:
+                        l.trainable = True 
+                    print('[*] going from transfer learning to fine-tuning by unfreezing all layers after %i steps' % n)
                 step_result = train_step(x, y, writer_train, writer_test, n, should_summarize=should_summarize)
                 
                 if n % 2000 == 0:

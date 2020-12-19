@@ -68,13 +68,19 @@ def get_loss(predicted_heatmaps, y, config, mode = "train"):
         raise Exception("Loss function not supported! try l1, normed_l1, l2, focal or dice")
     return loss 
 
-def get_model(config):
+def get_model(config, verbose = True):
     if config['kp_num_hourglass'] == 1:
-        model = unet.get_model(config)
-        return model
+        encoder, net = unet.get_model(config)
     else:
-        return stacked_hourglass.get_model(config)
-
+        encoder, net = stacked_hourglass.get_model(config)
+    if verbose:
+        print('[*] Encoder definition')
+        encoder.summary()
+        print(5*'\n','[*] network definition')
+        net.summary()
+        for i, l in enumerate(net.layers):
+            print('layer %i:'%i,l.name,l.output.shape,l.trainable)
+    return net
 # </network architecture>
 
 # <data>
@@ -177,6 +183,7 @@ def update_config_object_detection(config):
         config['lr_objectdetection'] *= 10.
     config['maxsteps_objectdetection'] = 250000 #50000
     config['minsteps_objectdetection'] = 50000 #25000
+    config['object_finetune_warmup'] = 5000
     config['object_augm_flip'] = bool(1)
     config['object_augm_rot90'] = bool(1)
     config['object_augm_gaussian'] = bool(1)
@@ -205,8 +212,9 @@ def get_config(project_id = 3):
     config['kp_rot90s'] = bool(1)
     config['kp_im_noise'] = bool(1)
     config['kp_num_hourglass'] = 2 #8
+    config['kp_finetune_warmup'] = 5000
     config['fov'] = 0.75 # default 0.5
-    config['selftrain_start_step'] = 10000
+    
     config['n_blocks'] = 5
     config['early_stopping'] = True 
 

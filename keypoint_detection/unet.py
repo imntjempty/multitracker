@@ -52,9 +52,8 @@ def get_vanilla_model(config):
     # final classification layer
     x = upsample(1+len(config['keypoint_names']),5,2,norm_type=None,act=tf.keras.layers.Activation('softmax'))(x)     
     
-    model = tf.keras.Model(inputs=inputs, outputs=[[x]], name="Unet")
-    model.summary()
-    return model 
+    net = tf.keras.Model(inputs=inputs, outputs=[[x]], name="Unet")
+    return net 
 
 def preprocess(config, x):
     #return x 
@@ -71,8 +70,9 @@ def get_vgg16_model(config):
     if 'experiment' in config and config['experiment'] == 'B' and config['should_init_pretrained']==False:
         weights = None 
     encoder = VGG16(include_top=False, weights=weights, input_tensor=inputs)
-    #encoder.summary()
     encoder.trainable = False 
+    for l in encoder.layers:
+        l.trainable = False 
         
     encoded_layer_names = [
         'block2_conv2', # (112,112,128)
@@ -81,13 +81,11 @@ def get_vgg16_model(config):
         'block5_conv3', # ( 14, 14,512)
     ]
     outputs = [get_decoded(config, encoder, encoded_layer_names)]
-    model = tf.keras.Model(inputs=encoder.inputs, outputs=[outputs], name="VGG16Unet")
-    for l in model.layers:
-        if 'block' in l.name:
-            l.trainable=False
-    
-    #model.summary()
-    return model 
+    net = tf.keras.Model(inputs=encoder.inputs, outputs=[outputs], name="VGG16Unet")
+    #for l in net.layers:
+    #    if 'block' in l.name:
+    #       l.trainable=False
+    return encoder, net
 
 def get_efficientB0_model(config):
     # https://keras.io/examples/vision/image_classification_efficientnet_fine_tuning/
@@ -102,7 +100,9 @@ def get_efficientB0_model(config):
         weights = None 
     
     encoder = EfficientNetB0(include_top=False, weights=weights, drop_connect_rate=0.2,input_tensor=x)
-    encoder.trainable = bool(0)#True 
+    encoder.trainable = False
+    for l in encoder.layers:
+        l.trainable = False 
     encoder.summary()
     encoded_layer_names = [
         'block1a_activation', # (112,112,32)
@@ -113,12 +113,11 @@ def get_efficientB0_model(config):
     ]
 
     outputs = [get_decoded(config, encoder, encoded_layer_names)]
-    model = tf.keras.Model(inputs=encoder.inputs, outputs=[outputs], name="EfficientUnet")
-    for l in model.layers:
-        if 'block' in l.name:
-            l.trainable=False
-    #model.summary()
-    return model 
+    net = tf.keras.Model(inputs=encoder.inputs, outputs=[outputs], name="EfficientUnet")
+    #for l in net.layers:
+    #    if 'block' in l.name:
+    #        l.trainable=False
+    return encoder, net
 
 def get_efficientB6_model(config):
     # https://keras.io/examples/vision/image_classification_efficientnet_fine_tuning/
@@ -133,8 +132,10 @@ def get_efficientB6_model(config):
         weights = None 
     
     encoder = EfficientNetB6(include_top=False, weights=weights, drop_connect_rate=0.2,input_tensor=x)
-    encoder.trainable = True 
-    encoder.summary() 
+    encoder.trainable = False 
+    for l in encoder.layers:
+        l.trainable = False 
+    #encoder.summary() 
 
     encoded_layer_names = [
         'block1a_activation', # (112,112,32)
@@ -145,14 +146,8 @@ def get_efficientB6_model(config):
     ]
 
     outputs = [get_decoded(config, encoder, encoded_layer_names)]
-    model = tf.keras.Model(inputs=encoder.inputs, outputs=[outputs], name="LargeEfficientUnet")
-    for l in model.layers:
-        if 'block' in l.name:
-            l.trainable=False
-            #print('[*] not training layer %s' % l.name)
-    
-    #model.summary()
-    return model 
+    net = tf.keras.Model(inputs=encoder.inputs, outputs=[outputs], name="LargeEfficientUnet")
+    return encoder, net 
 
 def get_decoded(config, encoder, encoded_layer_names):
     encoded_layers = []
@@ -211,7 +206,7 @@ def get_psp_model(config):
             x = tf.keras.layers.AveragePooling2D(pool_size=(h//bin_size, w//bin_size), strides=(h//bin_size, w//bin_size))(input_tensor)
             x = upsample(128, 3, strides=-2)(x)
             x = upsample(128/len(bin_sizes),1, strides=1)(x)
-            print('pyramid',bin_size,x.shape)
+            #print('pyramid',bin_size,x.shape)
             x = tf.keras.layers.Lambda(lambda x: tf.image.resize(x, (h,w)))(x)
             concat_list.append(x)
         return tf.keras.layers.concatenate(concat_list)
@@ -226,9 +221,10 @@ def get_psp_model(config):
         weights = None 
     
     encoder = EfficientNetB6(include_top=False, weights=weights, drop_connect_rate=0.2,input_tensor=x)
-    encoder.trainable = True 
-    #encoder.summary() 
-
+    encoder.trainable = False 
+    for l in encoder.layers:
+        l.trainable = False
+    
     encoded_layer_name = 'block4a_expand_activation' # (28,28,240)
     for i , l in enumerate(encoder.layers):
         if l.name == encoded_layer_name:
@@ -249,14 +245,8 @@ def get_psp_model(config):
     x = tf.keras.layers.Lambda(lambda x: tf.image.resize(x, (config['img_height'],config['img_width'])))(x)
     x = upsample(1+len(config['keypoint_names']),1,1,norm_type=None,act=tf.keras.layers.Activation('softmax'))(x)     
     
-    model = tf.keras.Model(inputs=encoder.inputs, outputs=[[x]], name="PSP")
-    for l in model.layers:
-        if 'block' in l.name:
-            l.trainable=False
-            #print('[*] not training layer %s' % l.name)
-    
-    model.summary()
-    return model 
+    net = tf.keras.Model(inputs=encoder.inputs, outputs=[[x]], name="PSP")
+    return encoder, net 
 
 
 def get_model(config):
