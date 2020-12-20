@@ -274,7 +274,7 @@ def load_roi_dataset(config,mode='train',batch_size=None, video_ids = None):
         heatmaps = crop[:,:,3:] / 255.
         return image, heatmaps
 
-    if mode == 'train' and 'experiment' in config and config['experiment']=='A':
+    if mode == 'train' and 'data_ratio' in config and config['data_ratio']>0 and config['data_ratio']<1: #'experiment' in config and config['experiment']=='A':
         file_list = glob(os.path.join(config['roi_dir'],mode,'*.png'))
         shuffle(file_list)
         oldlen = len(file_list)
