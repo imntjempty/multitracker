@@ -56,7 +56,7 @@ def gather_sequence_info(config):
         * max_frame_idx: Index of the last frame.
 
     """
-    image_dir = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'train')
+    image_dir = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['train_video_ids'].split(',')[0]),'train')
     image_filenames = {
         1: sorted(glob(os.path.join(image_dir,'*.png')))
     }
@@ -68,7 +68,7 @@ def gather_sequence_info(config):
     print('[*] min_frame_idx',min_frame_idx,'max_frame_idx',max_frame_idx)
 
     if len(image_filenames) > 0:
-        image_size = cv.imread(image_filenames[list(image_filenames.keys())[0]][0]  ,cv.IMREAD_GRAYSCALE).shape
+        image_size = cv.imread(image_filenames[list(image_filenames.keys())[0]][0] ,cv.IMREAD_GRAYSCALE).shape
     else:
         image_size = None
 
@@ -155,7 +155,7 @@ def draw_heatmap(frame, results, sketch_file):
         c0,c1 = result[2], result[3]
         history_heatmap[min(int(c1/grid_height),grid_num_y-1)][min(int(c0/grid_height),grid_num_x-1)] += 1. 
     
-    history_heatmap = (history_heatmap-history_heatmap.min()) / (history_heatmap.max()-history_heatmap.min())
+    history_heatmap = (history_heatmap-history_heatmap.min()) / (history_heatmap.max()-history_heatmap.min()+1e-7)
     history_heatmap = np.uint8(np.around(255. * history_heatmap))
     history_heatmap = cv.resize(history_heatmap,(256,256))
     

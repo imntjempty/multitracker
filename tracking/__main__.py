@@ -2,14 +2,8 @@
 """
     main program to track animals and their corresponding limbs on a video file
 
-    python3.7 -m multitracker.tracking --project_id 7 --video_id 13 --train_video_ids 9,14 --objectdetection_model ~/checkpoints/multitracker/bbox/vids9\,14-2020-11-13_07-56-02 --autoencoder_model /home/alex/checkpoints/multitracker/ae/vid_13-2020-11-10_22-34-32 --keypoint_model /home/alex/checkpoints/multitracker/keypoints/vids9,14-2020-11-13_00-24-28 --min_confidence_boxes 0.5 --min_confidence_keypoints 0.5 --tracking_method DeepSort --video /home/alex/data/multitracker/projects/7/videos/from_above_Oct2020_2_12fps.mp4
-
-    python3.7 -m multitracker.tracking --project_id 7 --video_id 13 --train_video_ids 9,14 --objectdetection_model ~/checkpoints/multitracker/bbox/vids9\,14-2020-11-13_07-56-02 --autoencoder_model /home/alex/checkpoints/multitracker/ae/vid_13-2020-11-10_22-34-32 --keypoint_model /home/alex/checkpoints/multitracker/keypoints/vids9,14-2020-11-13_00-24-28 --min_confidence_boxes 0.7 --min_confidence_keypoints 0.5 --tracking_method UpperBound --video /home/alex/data/multitracker/projects/7/videos/from_above_Oct2020_2_12fps.mp4
-
-
-    python3.7 -m multitracker.tracking --project_id 7 --video_id 13 --train_video_ids 9,14 --autoencoder_model /home/alex/checkpoints/multitracker/ae/vid_13-2020-11-10_22-34-32 --keypoint_model /home/alex/checkpoints/multitracker/keypoints/vids9,14-2020-11-13_00-24-28 --min_confidence_boxes 0.5 --min_confidence_keypoints 0.5 --tracking_method UpperBound --video /home/alex/data/multitracker/projects/7/videos/from_above_Oct2020_2_12fps.mp4 --objectdetection_model /home/alex/checkpoints/multitracker/bbox/flips,rot90,gauss,noise-vids9,14-2020-11-25_07-15-17 --sketch_file /home/alex/data/multitracker/projects/7/13/sketch.png
-
-    python3.7 -m multitracker.tracking --project_id 7 --video_id 13 --train_video_ids 9,14 --objectdetection_model /home/alex/checkpoints/multitracker/bbox/faster_vids9,14_flips,rot90,gauss,imtransform-2020-11-26_10-13-19 --keypoint_method none --min_confidence_boxes 0.85 --tracking_method UpperBound --upper_bound 4 --video /home/alex/data/multitracker/projects/7/videos/from_above_Oct2020_2_12fps_halfresolution.mp4 --sketch_file /home/alex/data/multitracker/projects/7/13/sketch.png --inference_objectdetection_batchsize 8
+    
+    python3.7 -m multitracker.tracking --project_id 7 --train_video_ids 9,14 --test_video_ids 13,14 --objectdetection_model /home/alex/checkpoints/experiments/MiceTop/E/1-2020-12-20_18-23-08 --keypoint_model /home/alex/checkpoints/experiments/MiceTop/B/random-2020-12-20_19-04-50 --min_confidence_boxes 0.85 --tracking_method UpperBound --upper_bound 4 --video /home/alex/data/multitracker/projects/7/videos/from_above_Oct2020_2_12fps.mp4 --sketch_file /home/alex/data/multitracker/projects/7/13/sketch.png 
 """
 
 import os
@@ -133,7 +127,7 @@ def main(args):
     nn_budget = None # Maximum size of the appearance descriptors gallery. If None, no budget is enforced.
     display = True # dont write vis images
 
-    crop_dim = roi_segm.get_roi_crop_dim(config['project_id'], config['test_video_ids'].split(',')[0], cv.imread(frame_files[0]).shape[0])
+    crop_dim = roi_segm.get_roi_crop_dim(config['project_id'], config['test_video_ids'].split(',')[0])
     if config['tracking_method'] == 'DeepSORT':
         deep_sort_app.run(config, detection_model, encoder_model, keypoint_model, output_dir, 
             args.min_confidence_boxes, args.min_confidence_keypoints, crop_dim, nms_max_overlap, max_cosine_distance, nn_budget, display)
