@@ -410,7 +410,6 @@ def main(args):
     config = model.get_config(args.project_id)
     config['video_id'] = int(args.video_id)
     print(config,'\n')
-    model.create_train_dataset(config)
     checkpoint_path = train(config)
     #predict.predict(config, checkpoint_path, int(args.project_id), int(args.video_id))
 

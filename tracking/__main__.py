@@ -47,12 +47,12 @@ def main(args):
     tstart = time.time()
     config = model.get_config(project_id = args.project_id)
     config['project_id'] = args.project_id
-    config['video_id'] = args.video_id
     config['video'] = args.video
     config['keypoint_model'] = args.keypoint_model
     config['autoencoder_model'] = args.autoencoder_model 
     config['objectdetection_model'] = args.objectdetection_model
     config['train_video_ids'] = args.train_video_ids
+    config['test_video_ids'] = args.test_video_ids
     config['minutes'] = args.minutes
     #config['upper_bound'] = db.get_video_fixednumber(args.video_id) 
     #config['upper_bound'] = None
@@ -71,22 +71,6 @@ def main(args):
         config['kp_num_hourglass'] = int(args.keypoint_method[9:])
         config['kp_backbone'] = 'efficientnetLarge'
     
-    # <load frames>
-    output_dir = '/tmp/multitracker/object_detection/predictions/%i' % (config['video_id'])
-    if not os.path.isdir(output_dir):
-        os.makedirs(output_dir)
-    print('[*] writing object detection bounding boxes %f minutes of video %i frames to %s' % (config['minutes'],config['video_id'],output_dir))
-
-    frames_dir = os.path.join(dbconnection.base_data_dir, 'projects/%i/%i/frames/train' % (config['project_id'], config['video_id']))
-    frame_files = sorted(glob(os.path.join(frames_dir,'*.png')))
-    if len(frame_files) == 0:
-        raise Exception("ERROR: no frames found in " + str(frames_dir))
-    
-    if config['minutes']> 0:
-        frame_files = frame_files[:int(30. * 60. * config['minutes'])]
-
-    # </load frames>
-
     # <train models>
     # 1) animal bounding box finetuning -> trains and inferences 
     config['objectdetection_max_steps'] = 30000
@@ -118,7 +102,6 @@ def main(args):
     # 4) train keypoint estimator model
     if config['keypoint_model'] is None and not config['kp_backbone'] == 'none':
         config['kp_max_steps'] = 50000
-        model.create_train_dataset(config)
         config['keypoint_model'] = roi_segm.train(config)
     print('[*] trained keypoint_model',config['keypoint_model'])
     # </train models>
@@ -150,7 +133,7 @@ def main(args):
     nn_budget = None # Maximum size of the appearance descriptors gallery. If None, no budget is enforced.
     display = True # dont write vis images
 
-    crop_dim = roi_segm.get_roi_crop_dim(config['project_id'], config['video_id'], cv.imread(frame_files[0]).shape[0])
+    crop_dim = roi_segm.get_roi_crop_dim(config['project_id'], config['test_video_ids'].split(',')[0], cv.imread(frame_files[0]).shape[0])
     if config['tracking_method'] == 'DeepSORT':
         deep_sort_app.run(config, detection_model, encoder_model, keypoint_model, output_dir, 
             args.min_confidence_boxes, args.min_confidence_keypoints, crop_dim, nms_max_overlap, max_cosine_distance, nn_budget, display)
@@ -177,8 +160,8 @@ if __name__ == '__main__':
     parser.add_argument('--keypoint_model', required=False,default=None)
     parser.add_argument('--autoencoder_model', required=False,default=None)
     parser.add_argument('--project_id',required=True,type=int)
-    parser.add_argument('--video_id',required=True,type=int)
     parser.add_argument('--train_video_ids',default='')
+    parser.add_argument('--test_video_ids',default='')
     parser.add_argument('--minutes',required=False,default=0.0,type=float)
     parser.add_argument('--min_confidence_boxes',required=False,default=0.5,type=float)
     parser.add_argument('--min_confidence_keypoints',required=False,default=0.5,type=float)

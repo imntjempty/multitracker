@@ -36,7 +36,7 @@ def plot_experiment_a_roi(args):
     ]
     experiment_names = ['1%','10%','50%','100%']
     output_file = os.path.join(output_dir,'A_prec_recall_curve.png')
-    roi_curve.keypoints_draw_predicision_recall_curves(str(args.video_id), title, experiment_dirs, experiment_names, output_file)
+    roi_curve.keypoints_draw_predicision_recall_curves(str(args.videos), title, experiment_dirs, experiment_names, output_file)
 
 def plot_experiment_b_roi(args):
     num_train_samples = len(db.get_labeled_bbox_frames(args.video_id))

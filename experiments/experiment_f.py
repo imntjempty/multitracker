@@ -10,23 +10,15 @@ from datetime import datetime
 def experiment_f(args, train_video_ids = None):
     print('[*] starting experiment F: object detection test loss SSD vs FasterRCNN')
     config = model.get_config(args.project_id)
-    config['video_id'] = int(args.video_id)
     if train_video_ids is not None:
         config['train_video_ids'] = train_video_ids
     else:
         config['train_video_ids'] = args.train_video_ids
-    
+    config['test_video_ids'] = args.test_video_ids
     config['experiment'] = 'F'
     config['maxsteps_objectdetection'] = 20000
     config['early_stopping'] = False
     config['finetune'] = False 
-    '''config['object_augm_flip'] = bool(0)
-    config['object_augm_rot90'] = bool(0)
-    config['object_augm_gaussian'] = bool(0)
-    config['object_augm_image'] = bool(0)
-    config['object_augm_mixup'] = bool(0)
-    config['object_augm_crop'] = bool(0)
-    config['object_augm_stitch'] = bool(0)'''
 
     #for od_backbone in ['fasterrcnn','ssd']:
     for od_backbone in ['ssd']:
@@ -50,8 +42,8 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--project_id',required=True,type=int)
-    parser.add_argument('--video_id',required=True,type=int)
     parser.add_argument('--train_video_ids',required=True)
+    parser.add_argument('--test_video_ids',required=True)
     args = parser.parse_args()
     experiment_f(args)
 

@@ -13,8 +13,8 @@ def experiment_d(args, max_steps = 25000, train_video_ids = None):
         config['train_video_ids'] = train_video_ids
     else:
         config['train_video_ids'] = args.train_video_ids
-    model.create_train_dataset(config)
-
+    config['test_video_ids'] = args.test_video_ids
+    
     config['kp_test_losses'] = ['focal','cce','l2']
 
     config['experiment'] = 'D'
@@ -48,5 +48,6 @@ if __name__ == '__main__':
     parser.add_argument('--project_id',required=True,type=int)
     parser.add_argument('--video_id',required=True,type=int)
     parser.add_argument('--train_video_ids',required=True,type=str)
+    parser.add_argument('--test_video_ids',required=True,type=str)
     args = parser.parse_args()
     experiment_d(args)

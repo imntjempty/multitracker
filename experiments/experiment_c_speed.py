@@ -9,14 +9,10 @@ from multitracker.keypoint_detection import model, roi_segm, unet
 def experiment_c_speed(args):
     print('[*] starting experiment C: keypoint estimation inference speed: EfficientNetB6 vs VGG16')
     config = model.get_config(args.project_id)
-    model.create_train_dataset(config)
     config['video_id'] = int(args.video_id)
 
     config['experiment'] = 'C'
-    config['kp_mixup']=False
-    config['kp_cutmix']=False
-    config['kp_hflips']=False 
-    config['kp_vflips']=False 
+    
     config['kp_train_loss'] = 'focal'
     config['kp_test_losses'] = ['focal'] #['cce','focal']
     config['kp_max_steps'] = 50000

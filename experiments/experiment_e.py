@@ -14,6 +14,7 @@ def experiment_e(args, train_video_ids = None):
         config['train_video_ids'] = train_video_ids
     else:
         config['train_video_ids'] = args.train_video_ids
+    config['test_video_ids'] = args.test_video_ids
     config['experiment'] = 'E'
     config['maxsteps_objectdetection'] = 50000
     #config['kp_max_steps'] = 15000
@@ -45,7 +46,7 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--project_id',required=True,type=int)
-    parser.add_argument('--video_id',required=True,type=int)
+    parser.add_argument('--test_video_ids',required=True,type=str)
     parser.add_argument('--train_video_ids',required=True)
     args = parser.parse_args()
     experiment_e(args)

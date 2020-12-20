@@ -52,7 +52,7 @@ def get_roi_crop_dim(project_id, video_id, Htarget):
         different videos show animals in different sizes, so we scan the db for all bboxes and take 98% median as size
     """
     [Hframe,Wframe,_] = cv.imread(glob(os.path.join(os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, project_id), video_id),'test'),'*.png'))[0]).shape
-    db.execute("select * from bboxes where video_id=%i;" % video_id)
+    db.execute("select * from bboxes where video_id=%s;" % video_id)
     db_boxxes = [x for x in db.cur.fetchall()]
     ref_vid_id = None
     #assert len(db_boxxes) > 0, "[*] ERROR: no labeled bounding boxes found! please label at least one bounding box for video " + str(video_id) 
@@ -154,20 +154,31 @@ def filter_crop_shape(obj):
         return True 
     return False 
 
-def load_roi_dataset(config,mode='train',batch_size=None, video_ids = None):
-    if video_ids is None:
-        video_ids = config['train_video_ids']
+def load_roi_dataset(config, mode = 'train', batch_size = None, video_id = None):
+    video_ids = config['%s_video_ids' % mode]
+    if video_id is not None:
+        video_ids = str(video_id)
 
-    if mode=='train' or mode == 'test':
-        image_directory = os.path.join(config['data_dir'],'%s' % mode)
-    [Hframe,Wframe,_] = cv.imread(glob(os.path.join(os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'test'),'*.png'))[0]).shape
+    max_height = None 
+    if 'max_height' in config:
+        max_height = config['max_height']
+    
+    ## create heatmaps for whole frames
+    if len(glob(os.path.join(config['data_dir'],'train','*.png')))==0:
+        _video_ids = ','.join(list(set(config['train_video_ids'].split(',') + config['test_video_ids'].split(','))))
+        for _video_id in _video_ids.split(','):
+            _video_id = int(_video_id)
+            heatmap_drawing.randomly_drop_visualiztions(config['project_id'], _video_id, dst_dir=config['data_dir'],max_height=max_height)
+
+    image_directory = os.path.join(config['data_dir'],'%s' % mode)
+    [Hframe,Wframe,_] = cv.imread(glob(os.path.join(os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), video_ids.split(',')[0]),'test'),'*.png'))[0]).shape
     
     [Hcomp,Wcomp,_] = cv.imread(glob(os.path.join(image_directory,'*.png'))[0]).shape
     H = Hcomp 
     w = int(Wframe*Hcomp/Hframe)
 
     len_parts = Wcomp // w  
-    crop_dim = get_roi_crop_dim(config['project_id'], config['video_id'], Hcomp)
+    crop_dim = get_roi_crop_dim(config['project_id'], video_ids.split(',')[0], Hcomp)
     crop_dim_extended_ratio = 1.5
     crop_dim_extended = min(Hcomp, crop_dim * crop_dim_extended_ratio)
     crop_dim_extended = int(crop_dim_extended)
@@ -180,15 +191,11 @@ def load_roi_dataset(config,mode='train',batch_size=None, video_ids = None):
     for _mode in ['train','test']:
         if not os.path.isdir(os.path.join(config['roi_dir'],_mode)): os.makedirs(os.path.join(config['roi_dir'],_mode))
         
-    if 0:
-        for ii,ff in enumerate(glob(os.path.join(config['roi_dir'],'train','*.png'))):
-            print(ii,ff.split('/')[-1],cv.imread(ff).shape)
-    
+    ## create data sets if not present for region of interest
     if len(glob(os.path.join(config['roi_dir'],'train','*.png')))==0:
         print('[*] creating cropped regions for each animal to train keypoint prediction ...')
-        # extract bounding boxes of animals
-        # <bboxes>
-        for _video_id in video_ids.split(','):
+        _video_ids = ','.join(list(set(config['train_video_ids'].split(',') + config['test_video_ids'].split(','))))
+        for _video_id in _video_ids.split(','):
             _video_id = int(_video_id)
             frame_bboxes = {}
             db.execute("select * from bboxes where video_id=%i;" % _video_id)
@@ -223,17 +230,12 @@ def load_roi_dataset(config,mode='train',batch_size=None, video_ids = None):
                 sampled_H, sampled_W = np.median(np.array(sampled_shapes)[:,0]), np.median(np.array(sampled_shapes)[:,1])
                 for ii,ff in enumerate(glob(os.path.join(config['roi_dir'],_mode,'*.png'))): 
                     results_shapefilter.append( pool.apply_async(filter_crop_shape,({'f':ff,'H':sampled_H, 'W':sampled_W},)) )
-            results_shapefilter = [result.get() for result in results_shapefilter]
-        # </bboxes>weights='imagenet'
-    
-
-    
+       
     #mean_rgb = calc_mean_rgb(config)
     hroi,wroicomp = cv.imread(glob(os.path.join(config['roi_dir'],'train','*.png'))[0]).shape[:2]
     wroi = hroi#wroicomp // (1+len(config['keypoint_names'])//3)
     h = hroi #int(hroi * 0.98)
-    if 1:
-        print('wroi',hroi,wroicomp,wroi,'->',wroicomp//wroi)
+
     def load_im(image_file):
         image = tf.io.read_file(image_file)
         image = tf.image.decode_png(image,channels=3)
@@ -274,17 +276,17 @@ def load_roi_dataset(config,mode='train',batch_size=None, video_ids = None):
         heatmaps = crop[:,:,3:] / 255.
         return image, heatmaps
 
+    ## read data files of all videos
+    file_list = []
+    for _video_id in video_ids.split(','):
+        file_list.extend(glob(os.path.join(config['roi_dir'],mode,'%i_*.png'%int(_video_id))))
+    shuffle(file_list)
     if mode == 'train' and 'data_ratio' in config and config['data_ratio']>0 and config['data_ratio']<1: #'experiment' in config and config['experiment']=='A':
-        file_list = glob(os.path.join(config['roi_dir'],mode,'*.png'))
-        shuffle(file_list)
         oldlen = len(file_list)
         file_list = file_list[:int(len(file_list) * config['data_ratio'])]
         file_list = sorted(file_list)
         print('[*] cutting training data from %i samples to %i samples' % (oldlen, len(file_list)))
-    else:
-        file_list = sorted(glob(os.path.join(config['roi_dir'],mode,'*.png')))
-    
-    print('[*] loaded %i samples for mode %s' % (len(file_list),mode))
+    print('[*] loaded %i samples for mode %s for videos %s' % (len(file_list),mode,video_ids))
 
     file_list_tf = tf.data.Dataset.from_tensor_slices(file_list)
     data = file_list_tf.map(load_im, num_parallel_calls = tf.data.experimental.AUTOTUNE).batch(batch_size).prefetch(4*batch_size)#.cache()
@@ -309,9 +311,11 @@ def train(config):
         config['kp_backbone'] = 'efficientnetLarge'
     print('[*] config', config)
     
-    
     dataset_train = load_roi_dataset(config,mode='train')
-    dataset_test = load_roi_dataset(config,mode='test')
+    datasets_test = {}
+    for _video_id in config['test_video_ids'].split(','):
+        _video_id = int(_video_id)
+        datasets_test[_video_id] = load_roi_dataset(config,mode='test',video_id = _video_id)
 
     net = model.get_model(config) # outputs: keypoints + background
         
@@ -343,10 +347,13 @@ def train(config):
     with open(file_json, 'w') as f:
         json.dump(config, f, indent=4)
     
-    writer_train = tf.summary.create_file_writer(checkpoint_path+'/train')
-    writer_test = tf.summary.create_file_writer(checkpoint_path+'/test')
+    writer_train = tf.summary.create_file_writer(checkpoint_path+'/train_%s' % config['train_video_ids'])
+    writers_test = {}
+    for _video_id in config['test_video_ids'].split(','):
+        _video_id = int(_video_id)
+        writers_test[_video_id] = tf.summary.create_file_writer(checkpoint_path+'/test_%i'%int(_video_id))
     csv_train = os.path.join(checkpoint_path,'train_log.csv')
-    csv_test = os.path.join(checkpoint_path,'test_log.csv')
+    csv_test = os.path.join(checkpoint_path,'test_%s_log.csv')
 
     ckpt = tf.train.Checkpoint(net = net, optimizer = optimizer)
     
@@ -357,7 +364,7 @@ def train(config):
         ckpt.restore(ckpt_manager.latest_checkpoint)
         print('[*] Latest checkpoint restored',ckpt_manager.latest_checkpoint)
 
-    def train_step(inp, y, writer_train, writer_test, global_step, should_summarize = False):
+    def train_step(inp, y, writer_train, writers_test, global_step, should_summarize = False):
         with tf.GradientTape(persistent=True) as tape:
             all_predicted_heatmaps = net(inp,training=True)
             loss = 0.0
@@ -378,35 +385,50 @@ def train(config):
         optimizer.apply_gradients(zip(gradients,net.trainable_variables))
 
         should_test = global_step % 250 == 0
-        test_losses = {'focal':0.0,'cce':0.0,'l2':0.0}
         test_accuracy = 0.0
+        def im_summary(name,data):
+            tf.summary.image(name,data,step=global_step)
         if should_test:
-            # test data
-            nt = 0
-            for xt,yt in dataset_test:
-                predicted_test = net(xt,training=False)[-1]
-                if not predicted_test.shape[1] == yt.shape[1]:
-                    predicted_test = tf.image.resize(predicted_test, x.shape[1:3]) 
+            # test data for each test video id separately
+            for test_video_id, dataset_test in datasets_test.items():
+                test_losses = {'focal':0.0,'cce':0.0,'l2':0.0}
+                nt = 0
+                for xt,yt in dataset_test:
+                    predicted_test = net(xt,training=False)[-1]
+                    if not predicted_test.shape[1] == yt.shape[1]:
+                        predicted_test = tf.image.resize(predicted_test, x.shape[1:3]) 
 
-                if 'focal' in config['kp_test_losses']:
-                    test_losses['focal'] += calc_focal_loss(yt, predicted_test)
-                if 'cce' in config['kp_test_losses']:
-                    test_losses['cce'] += calc_cce_loss(yt, predicted_test)
-                if 'l2' in config['kp_test_losses']:
-                    test_losses['l2'] += calc_l2_loss(yt, predicted_test)
-                test_accuracy += calc_accuracy(config, yt, predicted_test)
-                nt += 1 
-            test_losses['focal'] = test_losses['focal'] / nt
-            test_losses['cce'] = test_losses['cce'] / nt
-            test_losses['l2'] = test_losses['l2'] / nt
-            test_accuracy = test_accuracy / nt 
+                    if 'focal' in config['kp_test_losses']:
+                        test_losses['focal'] += calc_focal_loss(yt, predicted_test)
+                    if 'cce' in config['kp_test_losses']:
+                        test_losses['cce'] += calc_cce_loss(yt, predicted_test)
+                    if 'l2' in config['kp_test_losses']:
+                        test_losses['l2'] += calc_l2_loss(yt, predicted_test)
+                    test_accuracy += calc_accuracy(config, yt, predicted_test)
+                    nt += 1 
+                test_losses['focal'] = test_losses['focal'] / nt
+                test_losses['cce'] = test_losses['cce'] / nt
+                test_losses['l2'] = test_losses['l2'] / nt
+                test_accuracy = test_accuracy / nt 
 
+                with tf.device("cpu:0"):
+                    with writers_test[test_video_id].as_default():
+                        im_summary('image',xt/256.)
+                        tf.summary.scalar('pixel accuracy', test_accuracy,step=global_step)
+                        for kk, keypoint_name in enumerate(config['keypoint_names']):
+                            im_summary('heatmap_%s' % keypoint_name, tf.concat((tf.expand_dims(yt[:,:,:,kk],axis=3), tf.expand_dims(predicted_test[:,:,:,kk],axis=3)),axis=2))
+                        im_summary('background', tf.concat((tf.expand_dims(yt[:,:,:,-1],axis=3),tf.expand_dims(predicted_test[:,:,:,-1],axis=3)),axis=2))
+                        for k,v in test_losses.items():
+                            tf.summary.scalar("loss %s" % k,v,step=global_step)
+                        
+                        writers_test[test_video_id].flush()
 
+                        with open(csv_test % test_video_id,'a+') as ftest:
+                            ftest.write('%i,%f,%f,%f,%f\n' % (global_step, test_losses['focal'],test_losses['cce'], test_losses['l2'], test_accuracy))
+            
         # write summary
         if should_summarize:
             with tf.device("cpu:0"):
-                def im_summary(name,data):
-                    tf.summary.image(name,data,step=global_step)
                 with writer_train.as_default():
                     tf.summary.scalar("loss %s" % config['kp_train_loss'],loss,step=global_step)
                     tf.summary.scalar('min',tf.reduce_min(predicted_heatmaps[:,:,:,:-1]),step=global_step)
@@ -428,23 +450,6 @@ def train(config):
                 with open(csv_train,'a+') as ftrain:
                     ftrain.write('%i,%f,%f\n' % (global_step, loss, accuracy))
 
-                if should_test:            
-                    with writer_test.as_default():
-                        for k,v in test_losses.items():
-                            tf.summary.scalar("loss %s" % k,v,step=global_step)
-                        tf.summary.scalar('accuracy', test_accuracy,step=global_step)
-                        im_summary('image',xt/256.)
-                        
-                        for kk, keypoint_name in enumerate(config['keypoint_names']):
-                            im_summary('heatmap_%s' % keypoint_name, tf.concat((tf.expand_dims(yt[:,:,:,kk],axis=3), tf.expand_dims(predicted_test[:,:,:,kk],axis=3)),axis=2))
-                        
-                        im_summary('background', tf.concat((tf.expand_dims(yt[:,:,:,-1],axis=3),tf.expand_dims(predicted_test[:,:,:,-1],axis=3)),axis=2))
-                            
-                        writer_test.flush()
-
-                    with open(csv_test,'a+') as ftest:
-                        ftest.write('%i,%f,%f,%f,%f\n' % (global_step, test_losses['focal'],test_losses['cce'], test_losses['l2'], test_accuracy))
-        
         result = {'kp_train_loss':loss}
         if should_test:
             result['test_loss'] = tf.reduce_sum([v for v in test_losses.values()])
@@ -501,7 +506,7 @@ def train(config):
                     for l in net.layers:
                         l.trainable = True 
                     print('[*] going from transfer learning to fine-tuning by unfreezing all layers after %i steps' % n)
-                step_result = train_step(x, y, writer_train, writer_test, n, should_summarize=should_summarize)
+                step_result = train_step(x, y, writer_train, writers_test, n, should_summarize=should_summarize)
                 
                 if n % 2000 == 0:
                     ckpt_save_path = ckpt_manager.save()
@@ -532,19 +537,4 @@ def train(config):
                 n+=1
         #except Exception as e:
         #    print('step',n,'\n',e)
-                
-def main(args):
-    config = model.get_config(args.project_id)
-    config['video_id'] = int(args.video_id)
-
-    print(config,'\n')
-    model.create_train_dataset(config)
-    checkpoint_path = train(config)
-
-if __name__ == '__main__':
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--project_id',required=True,type=int)
-    parser.add_argument('--video_id',required=True,type=int)
-    args = parser.parse_args()
-    main(args)
+    

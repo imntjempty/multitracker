@@ -20,21 +20,6 @@ db = dbconnection.DatabaseConnection()
 from multitracker.keypoint_detection import heatmap_drawing, stacked_hourglass, unet
 from multitracker.be import video 
 
-def calc_ssim_loss(x, y):
-  """Computes a differentiable structured image similarity measure."""
-  c1 = 0.01**2
-  c2 = 0.03**2
-  mu_x = tf.nn.avg_pool2d(x, 3, 1, 'VALID')
-  mu_y = tf.nn.avg_pool2d(y, 3, 1, 'VALID')
-  sigma_x = tf.nn.avg_pool2d(x**2, 3, 1, 'VALID') - mu_x**2
-  sigma_y = tf.nn.avg_pool2d(y**2, 3, 1, 'VALID') - mu_y**2
-  sigma_xy = tf.nn.avg_pool2d(x * y, 3, 1, 'VALID') - mu_x * mu_y
-  ssim_n = (2 * mu_x * mu_y + c1) * (2 * sigma_xy + c2)
-  ssim_d = (mu_x**2 + mu_y**2 + c1) * (sigma_x + sigma_y + c2)
-  ssim = ssim_n / ssim_d
-  ssim = tf.clip_by_value((1 - ssim) / 2, 0, 1)
-  ssim = tf.reduce_mean(ssim)
-  return ssim
 
 mse = tf.keras.losses.MeanSquaredError()
 def get_loss(predicted_heatmaps, y, config, mode = "train"):
@@ -74,38 +59,12 @@ def get_model(config, verbose = True):
     else:
         encoder, net = stacked_hourglass.get_model(config)
     if verbose:
-        print('[*] Encoder definition')
-        encoder.summary()
-        print(5*'\n','[*] network definition')
+        #encoder.summary()
         net.summary()
-        for i, l in enumerate(net.layers):
-            print('layer %i:'%i,l.name,l.output.shape,l.trainable)
+        #for i, l in enumerate(net.layers):
+        #    print('layer %i:'%i,l.name,l.output.shape,l.trainable)
     return net
 # </network architecture>
-
-# <data>
-
-def create_train_dataset(config):
-    # make sure that the heatmaps are 
-    if not os.path.isdir(config['data_dir']) or len(glob(os.path.join(config['data_dir'],'train/*.png')))==0:
-        max_height = None 
-        if 'max_height' in config:
-            max_height = config['max_height']
-        if not 'train_video_ids' in config or config['train_video_ids'] == '':
-            heatmap_drawing.randomly_drop_visualiztions(config['project_id'], config['video_id'], dst_dir=config['data_dir'],max_height=max_height)
-        else:
-            for _video_id in config['train_video_ids'].split(','):
-                print('dropping for video',_video_id)
-                heatmap_drawing.randomly_drop_visualiztions(config['project_id'], int(_video_id), dst_dir=config['data_dir'],max_height=max_height)
-        
-
-        if 0:
-            from multitracker.keypoint_detection import feature_augment
-            feature_augment.augment_dataset(config['project_id'])
-        
-    
-    config['input_image_shape'] = cv.imread(glob(os.path.join(config['data_dir'],'train/*.png'))[0]).shape[:2]
-    return config 
 
 def mixup(x,y):
     rr = tf.random.uniform(shape=[x.shape[0]],minval=0.0,maxval=0.3)

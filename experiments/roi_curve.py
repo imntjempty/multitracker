@@ -125,7 +125,7 @@ def objectdetection_draw_predicision_recall_curves(video_id, title, experiment_d
     return precisions, recalls, output_file
 
 
-def keypoints_draw_predicision_recall_curves(video_id, title, experiment_dirs, experiment_names, output_file, max_neighbor_dist = 10, mode = 'test'):
+def keypoints_draw_predicision_recall_curves(video_ids, title, experiment_dirs, experiment_names, output_file, max_neighbor_dist = 10, mode = 'test'):
     """
         draw a graph that compares precision and recall curves for thresholds in [0.1,0.2,...,0.9] of different keypoint prediction experiments
 
