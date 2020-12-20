@@ -61,10 +61,7 @@ def setup_oo_api(models_dir = os.path.expanduser('~/github/models')):
         
         further explanation: https://github.com/tensorflow/models/blob/master/research/object_detection/g3doc/tf2.md''')
 
-def get_bbox_data(config, vis_input_data=0, video_ids = None):
-    if video_ids is None:
-        video_ids = config['train_video_ids']
-
+def get_bbox_data(config, video_ids, vis_input_data=0):
     seed = 2305
     train_image_tensors = []
     train_gt_classes_one_hot_tensors = []
@@ -89,7 +86,7 @@ def get_bbox_data(config, vis_input_data=0, video_ids = None):
         
         for i, _key in enumerate(frame_bboxes.keys()):
             frame_bboxes[_key] = np.array(frame_bboxes[_key]) 
-        
+    
     # read one arbitray frame
     sample_fim = ''
     while not os.path.isfile(sample_fim):
@@ -114,14 +111,13 @@ def get_bbox_data(config, vis_input_data=0, video_ids = None):
             test_gt_classes_one_hot_tensors.append(tf.one_hot(tf.convert_to_tensor(np.ones(shape=[bboxes.shape[0]], dtype=np.int32) - label_id_offset), num_classes))
     
     # maybe use only a part of the train set
-    ddata_train, ddata_test = [], []
+    ddata_train, ddata_test = [train_image_tensors[0]], [test_image_tensors[0]]
     for i in range(len(train_image_tensors)):
         if not ('data_ratio' in config and np.random.uniform() > config['data_ratio']):
             ddata_train.append(train_image_tensors[i])
-
     for i in range(len(test_image_tensors)):
         ddata_test.append(test_image_tensors[i])
-    print('[*] loaded object detection %s data: training on %i samples, testing on %i samples' % (config['object_detection_backbone'], len(ddata_train),len(ddata_test)))
+    print('[*] loaded object detection %s data: training on %i samples, testing on %i samples (data_ratio %f)' % (config['object_detection_backbone'], len(ddata_train),len(ddata_test),config['data_ratio']))
     labeling_list_train = tf.data.Dataset.from_tensor_slices(ddata_train)
     labeling_list_test = tf.data.Dataset.from_tensor_slices(ddata_test)
     
@@ -277,13 +273,21 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
     with open(file_json, 'w') as f:
         json.dump(config, f, indent=4)
 
-    # load and prepare data 
-    frame_bboxes, data_train, data_test = get_bbox_data(config)
+    ## load and prepare data 
+    #  train video ids
+    frame_bboxes, data_train, _ = get_bbox_data(config, config['train_video_ids'])
     frame_idx, _ = next(iter(data_train))
     gt_boxes, gt_classes = [],[]
     for ii in range(len(frame_idx)):
         gt_boxes.append(tf.convert_to_tensor(frame_bboxes[str(frame_idx[ii].numpy().decode("utf-8") )], dtype=tf.float32))
         gt_classes.append(tf.one_hot(tf.convert_to_tensor(np.ones(shape=[frame_bboxes[str(frame_idx[ii].numpy().decode("utf-8") )].shape[0]], dtype=np.int32) - label_id_offset), num_classes))
+    #  test video ids
+    datas_test = {}
+    for test_video_id in config['test_video_ids'].split(','):
+        frame_bboxes_test, _, data_test = get_bbox_data(config, test_video_id)
+        frame_bboxes.update(frame_bboxes_test)
+        datas_test[int(test_video_id)] = data_test
+    
     #print('gt_boxes',gt_boxes,'gt_classes',gt_classes)
     ckpt, model_config, detection_model = restore_weights(config, checkpoint_restore, gt_boxes, gt_classes)
     if checkpoint_restore is None:
@@ -375,16 +379,20 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
 
         optimizer = tf.keras.optimizers.SGD(learning_rate=learning_rate, momentum=0.9)
         train_step_fn, test_step_fn = get_model_train_step_function(detection_model, optimizer, 'transfer')
-        writer_train = tf.summary.create_file_writer(checkpoint_directory+'/train')
-        writer_test = tf.summary.create_file_writer(checkpoint_directory+'/test')
-        csv_train = os.path.join(checkpoint_directory,'train_log.csv')
-        csv_test = os.path.join(checkpoint_directory,'test_log.csv')
+        writer_train = tf.summary.create_file_writer(checkpoint_directory+'/train_%s' % config['train_video_ids'])
+        writers_test = {} 
+        for test_video_id in config['test_video_ids'].split(','):
+            writers_test[int(test_video_id)] = tf.summary.create_file_writer(checkpoint_directory+'/test_%s' % test_video_id)
+        csv_train = os.path.join(checkpoint_directory,'train_%s_log.csv')
+        csv_test = os.path.join(checkpoint_directory,'test_%i_log.csv')
 
         print('Start fine-tuning!', flush=True)
         early_stopping = False 
         idx = 0
         epoch = 0
-        test_losses = []
+        test_losses = {}
+        for test_video_id in config['test_video_ids'].split(','):
+            test_losses[int(test_video_id)] = []
 
         def get_vis(vis, _gt_boxes, _prediction_dict):
             
@@ -445,39 +453,42 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
                         vis = get_vis(tf.cast(tf.concat(image_tensors,axis=0),tf.uint8), gt_boxes, prediction_dict)
                         tf.summary.image('object detection',vis/255.,step=idx)
                         writer_train.flush()
-                        with open(csv_train,'a+') as ftrain:
+                        with open(csv_train % config['train_video_ids'],'a+') as ftrain:
                             ftrain.write('%i,%f\n' % (idx, total_loss))
 
                 ## Test images
                 if idx % 250 == 0:
                     num_test_batches = 8
-                    test_loss = 0.
-                    for frame_idx, image_tensors_test in data_test:
-                        gt_boxes_test, gt_classes_test = [],[]
-                        for ii in range(len(frame_idx)):
-                            gt_boxes_test.append(tf.convert_to_tensor(frame_bboxes[str(frame_idx[ii].numpy().decode("utf-8") )], dtype=tf.float32))
-                            gt_classes_test.append(tf.one_hot(tf.convert_to_tensor(np.ones(shape=[frame_bboxes[str(frame_idx[ii].numpy().decode("utf-8") )].shape[0]], dtype=np.int32) - label_id_offset), num_classes))
-                        # Test step (forward pass only)
-                        prediction_dict_test, shapes, _loss_test = test_step_fn(image_tensors_test, gt_boxes_test, gt_classes_test)
-                        test_loss = test_loss + _loss_test/num_test_batches
-                    with open(csv_test,'a+') as ftest:
-                        ftest.write('%i,%f\n' % (idx, test_loss))
+                    for test_video_id, data_test in datas_test.items():
+                        test_video_id = int(test_video_id)
+                        test_loss = 0.
+                        for frame_idx, image_tensors_test in data_test:
+                            gt_boxes_test, gt_classes_test = [],[]
+                            for ii in range(len(frame_idx)):
+                                gt_boxes_test.append(tf.convert_to_tensor(frame_bboxes[str(frame_idx[ii].numpy().decode("utf-8") )], dtype=tf.float32))
+                                gt_classes_test.append(tf.one_hot(tf.convert_to_tensor(np.ones(shape=[frame_bboxes[str(frame_idx[ii].numpy().decode("utf-8") )].shape[0]], dtype=np.int32) - label_id_offset), num_classes))
+                            # Test step (forward pass only)
+                            prediction_dict_test, shapes, _loss_test = test_step_fn(image_tensors_test, gt_boxes_test, gt_classes_test)
+                            test_loss = test_loss + _loss_test/num_test_batches
+                        with open(csv_test % test_video_id,'a+') as ftest:
+                            ftest.write('%i,%f\n' % (idx, test_loss))
 
-                    test_losses.append(test_loss)
+                        test_losses[test_video_id].append(test_loss)
 
-                    # write tensorboard summary
-                    with writer_test.as_default():
-                        tf.summary.scalar("loss",test_loss,step=idx)
+                        # write tensorboard summary
+                        with writers_test[test_video_id].as_default():
+                            tf.summary.scalar("loss",test_loss,step=idx)
 
-                        prediction_dict_test = detection_model.postprocess(prediction_dict_test, shapes)
-                        vis_test = get_vis(tf.cast(tf.concat(image_tensors_test,axis=0),tf.uint8), gt_boxes_test, prediction_dict_test)
-                        tf.summary.image('object detection',vis_test/255.,step=idx)
-                        writer_test.flush()
+                            prediction_dict_test = detection_model.postprocess(prediction_dict_test, shapes)
+                            vis_test = get_vis(tf.cast(tf.concat(image_tensors_test,axis=0),tf.uint8), gt_boxes_test, prediction_dict_test)
+                            tf.summary.image('object detection',vis_test/255.,step=idx)
+                            writers_test[test_video_id].flush()
 
                     # check for early stopping -> stop training if test loss is increasing
-                    if idx==config['maxsteps_objectdetection'] or (idx>config['minsteps_objectdetection'] and config['early_stopping'] and len(test_losses) > 3 and test_loss > test_losses[-2] and test_loss > test_losses[-3] and test_loss > test_losses[-4] and min(test_losses[:-1]) < 1.5*test_losses[-1]):
+                    _test_losses = test_losses[list(test_losses.keys())[0]]
+                    if idx==config['maxsteps_objectdetection'] or (idx>config['minsteps_objectdetection'] and config['early_stopping'] and len(_test_losses) > 3 and test_loss > _test_losses[-2] and test_loss > _test_losses[-3] and test_loss > _test_losses[-4] and min(_test_losses[:-1]) < 1.5*_test_losses[-1]):
                         early_stopping = True 
-                        print('[*] stopping object detection early at step %i, epoch %i, because current test loss %f is higher than previous %f and %f' % (idx, epoch, test_loss, test_losses[-2], test_losses[-3]))
+                        print('[*] stopping object detection early at step %i, epoch %i, because current test loss %f is higher than previous %f and %f' % (idx, epoch, test_loss, _test_losses[-2], _test_losses[-3]))
                         ckpt_saver = tf.compat.v2.train.Checkpoint(detection_model=detection_model)
                         ckpt_manager = tf.train.CheckpointManager(ckpt_saver, checkpoint_directory, max_to_keep=5)
                         saved_path = ckpt_manager.save()

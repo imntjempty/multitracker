@@ -62,7 +62,7 @@ def objectdetection_draw_predicision_recall_curves(video_id, title, experiment_d
         config['objectdetection_model'] = experiment_dir
         #config['object_detection_batch_size'] = 2
         
-        frame_bboxes, data_train, data_test = finetune.get_bbox_data(config, video_ids=str(video_id))
+        frame_bboxes, data_train, data_test = finetune.get_bbox_data(config, video_id)
         data = data_train
         if mode == 'test':
             data = data_test 

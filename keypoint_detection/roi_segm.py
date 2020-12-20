@@ -434,7 +434,7 @@ def train(config):
                     tf.summary.scalar('min',tf.reduce_min(predicted_heatmaps[:,:,:,:-1]),step=global_step)
                     tf.summary.scalar('max',tf.reduce_max(predicted_heatmaps[:,:,:,:-1]),step=global_step)
                     accuracy = calc_accuracy(config, y,predicted_heatmaps)
-                    tf.summary.scalar('accuracy', accuracy,step=global_step)
+                    tf.summary.scalar('pixel_accuracy', accuracy,step=global_step)
                     im_summary('image',inp/256.)
                     for kk, keypoint_name in enumerate(config['keypoint_names']):
                         im_summary('heatmap_%s' % keypoint_name, tf.concat((tf.expand_dims(y[:,:,:,kk],axis=3), tf.expand_dims(predicted_heatmaps[:,:,:,kk],axis=3)),axis=2))
@@ -472,32 +472,26 @@ def train(config):
 
         if 1:#try:
             for x,y in dataset_train:
-            
-                if np.random.random() < 0.5 and config['kp_hflips']:
+                if np.random.random() < 0.5 and 'kp_hflips' in config and config['kp_hflips']:
                     x,y = model.hflip(swaps,x,y)
-                if np.random.random() < 0.5 and config['kp_vflips']:
+                if np.random.random() < 0.5 and 'kp_vflips' in config and config['kp_vflips']:
                     x,y = model.vflip(swaps,x,y)
                 if np.random.random() < 0.5 and 'kp_rot90s' in config and config['kp_rot90s']:
                     _num_rots = 1+int(np.random.uniform(3))
                     for ir in range(_num_rots):
                         x = tf.image.rot90(x)
                         y = tf.image.rot90(y)
-                if 1:        
-                    # mixup augmentation
-                    if np.random.random() < 0.5:
-                        if config['kp_mixup'] and np.random.random() > 0.5:
-                            x, y = model.mixup(x,y) 
-                        else:
-                            if config['kp_cutmix'] and np.random.random() > 0.5:
-                                x, y = model.cutmix(x,y)
-                            if config['kp_mixup'] and np.random.random() > 0.5:
-                                x, y = model.mixup(x,y)
-                if 1:
-                    # noise augmentation
-                    if config['kp_im_noise'] and np.random.random() < 0.5:
-                        x = tf.keras.layers.GaussianNoise(np.random.uniform(25))(x)
-                    if config['kp_im_noise'] and np.random.random() < 0.5:
-                        x, _ = augmentation.random_image_transformation(x,x)
+            
+                # mixup/cutmix augmentation
+                if config['kp_mixup'] and np.random.random() > 0.5:
+                    x, y = model.mixup(x,y) 
+                if config['kp_cutmix'] and np.random.random() > 0.5:
+                    x, y = model.cutmix(x,y)
+                # noise augmentation
+                if config['kp_im_noise'] and np.random.random() < 0.5:
+                    x = tf.keras.layers.GaussianNoise(np.random.uniform(25))(x)
+                if config['kp_im_transf'] and np.random.random() < 0.5:
+                    x, _ = augmentation.random_image_transformation(x,x)
 
                 should_summarize=n%200==0
                 ## if finetuning warmup phase is over, unfreeze all layers including encoding layers and continue fine-tuning

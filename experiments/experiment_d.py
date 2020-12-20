@@ -8,7 +8,6 @@ from multitracker.keypoint_detection import model, roi_segm
 def experiment_d(args, max_steps = 25000, train_video_ids = None):
     print('[*] starting experiment D: keypoint estimation categorical cross entropy / focal loss test trained with categorical cross entropy and focal loss')
     config = model.get_config(args.project_id)
-    config['video_id'] = int(args.video_id)
     if train_video_ids is not None:
         config['train_video_ids'] = train_video_ids
     else:
@@ -46,7 +45,6 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--project_id',required=True,type=int)
-    parser.add_argument('--video_id',required=True,type=int)
     parser.add_argument('--train_video_ids',required=True,type=str)
     parser.add_argument('--test_video_ids',required=True,type=str)
     args = parser.parse_args()

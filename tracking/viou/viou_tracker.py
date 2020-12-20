@@ -249,7 +249,7 @@ def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_co
     total_frame_number = int(video_reader.get(cv.CAP_PROP_FRAME_COUNT))
     print('[*] total_frame_number',total_frame_number)
 
-    [Hframe,Wframe,_] = cv.imread(glob(os.path.join(os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'test'),'*.png'))[0]).shape
+    [Hframe,Wframe,_] = cv.imread(glob(os.path.join(os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), '*'),'test'),'*.png'))[0]).shape
     
     video_file_out = inference.get_video_output_filepath(config)
     if config['file_tracking_results'] is None:

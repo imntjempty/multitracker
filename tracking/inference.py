@@ -55,7 +55,7 @@ def get_video_output_filepath(config):
     if 'video' in config and config['video'] is not None:
         video_file_out = os.path.join(video.get_project_dir(video.base_dir_default, config['project_id']),'tracking_%s_%s_%s_%istack_%s_%s.avi' % (config['project_name'],config['tracking_method'],config['object_detection_backbone'],config['kp_num_hourglass'], config['kp_backbone'],'.'.join(config['video'].split('/')[-1].split('.')[:-1])))
     else:
-        video_file_out = os.path.join(video.get_project_dir(video.base_dir_default, config['project_id']),'tracking_%s_%s_%s_%istack_%s_vid%i.avi' % (config['project_name'],config['tracking_method'],config['object_detection_backbone'],config['kp_num_hourglass'], config['kp_backbone'],config['video_id']))
+        video_file_out = os.path.join(video.get_project_dir(video.base_dir_default, config['project_id']),'tracking_%s_%s_%s_%istack_%s_vid%i.avi' % (config['project_name'],config['tracking_method'],config['object_detection_backbone'],config['kp_num_hourglass'], config['kp_backbone'],config['test_video_ids'].split(',')[0]))
     return video_file_out
 
 def load_keypoint_model(path_model):

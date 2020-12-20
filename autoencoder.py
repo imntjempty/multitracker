@@ -117,7 +117,7 @@ def preprocess(image):
     return image
 
 def load_raw_dataset(config):
-    image_dir = os.path.join(dbconnection.base_data_dir, 'projects/%i/%i/frames/train' % (config['project_id'],config['video_id']))
+    image_dir = os.path.join(dbconnection.base_data_dir, 'projects/%i/%i/frames/train' % (config['project_id'],config['train_video_id'].split(',')[0]))
     file_list = tf.data.Dataset.list_files(os.path.join(image_dir,'*.png'))
     data = file_list.map(load_im, num_parallel_calls = tf.data.experimental.AUTOTUNE).repeat().batch(config['batch_size']).prefetch(4*config['batch_size'])#.cache()
     print('[*] loaded images from disk')
