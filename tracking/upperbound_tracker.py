@@ -112,7 +112,6 @@ class UpperBoundTracker(Tracker):
         self.tracks = []
         self.trackers = cv.MultiTracker_create()
         self.active = [False for _ in range(upper_bound)]
-        self.alive = [False for _ in range(upper_bound)]
         self.active_cnt = 0
         self.steps_without_detection = [0 for _ in range(upper_bound)]
         self.last_means = [[] for _ in range(upper_bound)]
@@ -146,14 +145,13 @@ class UpperBoundTracker(Tracker):
             if debug: print('[*]   updated active tracker %i with detection %i by matching' % (track_id, det_id),'det:',detected_boxes[det_id],'track:',tracked_boxes[track_id],'new:',box)
             tracked_boxes[track_id] = box
             matched_track_scores[track_id] = scores[det_id]
-            self.trackers = cv.MultiTracker_create()
             
             self.steps_without_detection[track_id] = 0
             if not self.active[track_id]:
                 self.active[track_id] = True
-                self.alive[track_id] = True
                 self.active_cnt += 1
         
+        self.trackers = cv.MultiTracker_create()
         for box in tracked_boxes:
             self.trackers.add(cv.TrackerCSRT_create(), frame, tuple([int(cc) for cc in box]))
         
@@ -181,7 +179,6 @@ class UpperBoundTracker(Tracker):
                         dboxi = tuple([int(cc) for cc in dbox])
                         self.trackers.add(cv.TrackerCSRT_create(), frame, dboxi)
                         self.active[self.active_cnt] = True 
-                        self.alive[self.active_cnt] = True
                         if debug: print('[*]   added tracker %i with detection %i' % (self.active_cnt,j))
                         self.active_cnt += 1
                 else:
@@ -216,7 +213,6 @@ class UpperBoundTracker(Tracker):
                             matched_tracks[nearest_inactive_track_idx] = True
                             obs[nearest_inactive_track_idx] = detected_boxes[j]
                             self.active[nearest_inactive_track_idx] = True
-                            self.alive[nearest_inactive_track_idx] = True 
                             self.active_cnt += 1 
                             self.steps_without_detection[nearest_inactive_track_idx] = 0
                             self.trackers = cv.MultiTracker_create()
