@@ -23,8 +23,6 @@ def experiment_e(args, train_video_ids = None):
     config['object_augm_image'] = bool(0)
     config['object_augm_mixup'] = bool(0)
     
-    #for data_ratio in [.5,1.0]:
-    #for data_ratio in [.1,.01]:
     for data_ratio in [0.01,0.1,0.5,1.0][::-1]: #,
         now = str(datetime.now()).replace(' ','_').replace(':','-').split('.')[0]
         print('[*] starting sub experiment with %i/100 of data used' % int( 100. * data_ratio ))

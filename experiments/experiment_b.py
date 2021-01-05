@@ -22,12 +22,9 @@ def experiment_b(args, max_steps = 12000):
     config['kp_lr'] = 1e-4
 
     config_b = deepcopy(config)
-    #for should_init_pretrained in [False, True]:
     for should_init_pretrained in [False,True]:
-        #for data_ratio in [0.01,1.0]:
         for augm in [False,True]:
             print('[*] starting sub experiment %s weight initialization' % ['without','with'][int(should_init_pretrained)])
-            #config['data_ratio'] = data_ratio
             if not augm:
                 config_b['kp_mixup'] = False 
                 config_b['kp_cutmix'] = False 

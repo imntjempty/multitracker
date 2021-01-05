@@ -20,7 +20,6 @@ def experiment_f(args, train_video_ids = None):
     config['early_stopping'] = False
     
     for od_backbone in ['fasterrcnn','ssd']:
-    #for od_backbone in ['ssd']:
         print('[*] starting subexperiment for backbone type',od_backbone)
         config['object_detection_backbone'] = od_backbone
         config['object_detection_backbonepath'] = {

@@ -31,7 +31,6 @@ def experiment_d(args, max_steps = 25000, train_video_ids = None):
     config['batch_size'] = 8
     config['kp_lr'] = 1e-4
 
-    #for loss_name in ['focal','cce','l2']:
     for loss_name in ['focal','cce','l2']:
         print('[*] starting sub experiment loss function %s' % loss_name)
         config['kp_train_loss'] = loss_name
