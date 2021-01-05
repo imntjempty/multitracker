@@ -39,7 +39,9 @@
     <table class="ui striped table" id="table_projects">
         <thead>
             <tr>
+            <th>Project ID</th>
             <th>Project</th>
+            <th>Video ID</th>
             <th>Video</th>
             <th>Manager</th>
             <th>Limb names</th>
@@ -110,7 +112,9 @@ function init_projects_table(){
         let data = JSON.parse(response)['data'];
         let tbody = document.getElementById('table_projects').tBodies[0];
         for(let i=0;i<data.length;i++){
-            tbody.innerHTML += "<tr><td>"+data[i]['project_name']
+            tbody.innerHTML += "<tr><td>"+data[i]['project_id']
+                            +"</td><td>"+data[i]['project_name']
+                            +"</td><td>"+data[i]['video_id']
                             +"</td><td>"+data[i]['video_name']
                             +"</td><td>"+data[i]['manager']
                             +"</td><td>"+data[i]['keypoint_names'].join(', ')
