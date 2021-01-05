@@ -16,10 +16,9 @@ def experiment_f(args, train_video_ids = None):
         config['train_video_ids'] = args.train_video_ids
     config['test_video_ids'] = args.test_video_ids
     config['experiment'] = 'F'
-    config['maxsteps_objectdetection'] = 20000
+    config['maxsteps_objectdetection'] = 15000
     config['early_stopping'] = False
-    config['finetune'] = False 
-
+    
     for od_backbone in ['fasterrcnn','ssd']:
     #for od_backbone in ['ssd']:
         print('[*] starting subexperiment for backbone type',od_backbone)

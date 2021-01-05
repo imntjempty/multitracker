@@ -15,7 +15,7 @@ def experiment_a(args, max_steps = 30000):
     config['kp_max_steps'] = max_steps
     config['early_stopping'] = False
     config['kp_lr'] = 1e-4
-    config['batch_size'] = 4
+    config['batch_size'] = 8
     #config['kp_lr'] = 2e-5
 
     #for data_ratio in [0.01,0.1,0.5,1.0][::-1]:
@@ -23,7 +23,7 @@ def experiment_a(args, max_steps = 30000):
         print('[*] starting sub experiment with %i/100 of data used' % int( 100. * data_ratio ))
         config['data_ratio'] = data_ratio
         print(config,'\n')
-        checkpoint_path = roi_segm.train(config)
+        checkpoint_path = roi_segm.train(config, log_images=False)
 
         clear_session()
         print(10*'\n')

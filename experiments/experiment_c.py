@@ -18,13 +18,13 @@ def experiment_c(args, max_steps = 30000):
     config['early_stopping'] = False
     config['kp_lr'] = 1e-4
     config['kp_num_hourglass'] = 1
-    config['batch_size'] = 4
+    config['batch_size'] = 8
     #for backbone in ['hourglass2']:
     for backbone in ['vgg16','efficientnetLarge','psp','hourglass2','hourglass4','hourglass8']:
         print('[*] starting sub experiment backbone %s' % backbone)
         config['kp_backbone'] = backbone
         print(config,'\n')
-        checkpoint_path = roi_segm.train(config)
+        checkpoint_path = roi_segm.train(config, log_images=False)
         
         clear_session()
 

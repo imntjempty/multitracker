@@ -33,7 +33,7 @@ def get_background_baseline_loss_accuracy(config):
             test_losses['cce'] += roi_segm.calc_cce_loss(yt,predicted_test)
         if 'l2' in config['kp_test_losses']:
             test_losses['l2'] += roi_segm.calc_l2_loss(yt,predicted_test)
-        test_accuracy += roi_segm.calc_accuracy(config, yt,predicted_test)
+        test_accuracy += roi_segm.calc_accuracy(yt,predicted_test)
         nt += 1 
     test_losses['focal'] = test_losses['focal'] / nt
     test_losses['cce'] = test_losses['cce'] / nt

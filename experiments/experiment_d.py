@@ -28,7 +28,7 @@ def experiment_d(args, max_steps = 25000, train_video_ids = None):
     #config['kp_max_steps'] = 15000
     config['kp_max_steps'] = max_steps
     config['early_stopping'] = False
-    config['batch_size'] = 4
+    config['batch_size'] = 8
     config['kp_lr'] = 1e-4
 
     #for loss_name in ['focal','cce','l2']:
@@ -37,7 +37,7 @@ def experiment_d(args, max_steps = 25000, train_video_ids = None):
         config['kp_train_loss'] = loss_name
         
         print(config,'\n')
-        checkpoint_path = roi_segm.train(config)
+        checkpoint_path = roi_segm.train(config, log_images=False)
         
         clear_session()
 

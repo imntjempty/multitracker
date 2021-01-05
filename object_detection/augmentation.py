@@ -194,11 +194,14 @@ def mixup(image_tensors, gt_boxes, gt_classes):
     return image_tensors, gt_boxes, gt_classes
 
 def augment(config, image_tensors, gt_boxes, gt_classes):
+    bhflip, bvflip, bmixup, brot90 = False,False,False,False 
     if config['object_augm_flip']:
         if np.random.uniform() > 0.5:
             image_tensors, gt_boxes = hflip(image_tensors, gt_boxes)
+            bhflip = True 
         if np.random.uniform() > 0.5:
             image_tensors, gt_boxes = vflip(image_tensors, gt_boxes)
+            bvflip = True 
 
     if len(gt_boxes)>0 and config['object_augm_stitch'] and np.random.uniform() < 0.2:
         if np.random.uniform() > .5:
@@ -208,16 +211,19 @@ def augment(config, image_tensors, gt_boxes, gt_classes):
 
     if config['object_augm_mixup'] and np.random.uniform() < 0.5:
         image_tensors, gt_boxes, gt_classes = mixup(image_tensors, gt_boxes, gt_classes)
+        bmixup = True 
 
     if config['object_augm_gaussian'] and np.random.uniform() > 0.5:
         image_tensors, gt_boxes = gaussian_noise(image_tensors, gt_boxes)
     if config['object_augm_rot90'] and np.random.uniform() > 0.5:
         image_tensors, gt_boxes = random_rot90(image_tensors, gt_boxes)
+        brot90 = True 
     if config['object_augm_crop'] and np.random.uniform() > 0.5:
         image_tensors, gt_boxes = random_crop(image_tensors, gt_boxes)
     if config['object_augm_image'] and np.random.uniform() > 0.5:
         image_tensors, gt_boxes = random_image_transformation(image_tensors, gt_boxes)
     
+    #print('[*] augment','hflip',bhflip,'vflip',bvflip,'rot90',brot90,'mixup',bmixup)
     return image_tensors, gt_boxes, gt_classes
 
 def test():

@@ -10,8 +10,7 @@ from multitracker.tracking.inference import get_heatmaps_keypoints
 from multitracker.keypoint_detection import roi_segm, model
 from multitracker.object_detection import finetune
 
-colors = {1: 'tab:brown', 10: 'tab:blue',20: 'tab:orange', 50: 'tab:green', 100: 'tab:red',200: 'tab:black',300: 'tab:yellow', 400: 'tab:gray'}
-
+from multitracker.experiments import plot_experiments
 
 def calc_iou(boxA,boxB):
     ## box encoded y_min, x_min, y_max, x_max
@@ -33,7 +32,7 @@ def calc_iou(boxA,boxB):
     
     return iou
 
-def objectdetection_draw_predicision_recall_curves(video_id, title, experiment_dirs, experiment_names, output_file, mode='test'):
+def objectdetection_draw_predicision_recall_curves(video_ids, title, experiment_dirs, experiment_names, output_file, mode='test'):
     num_classes, label_id_offset = 1,1
     thresh_detections = np.arange(0.1,1.,step=.05)
 
@@ -62,61 +61,70 @@ def objectdetection_draw_predicision_recall_curves(video_id, title, experiment_d
         config['objectdetection_model'] = experiment_dir
         #config['object_detection_batch_size'] = 2
         
-        frame_bboxes, data_train, data_test = finetune.get_bbox_data(config, video_id)
-        data = data_train
+        frame_bboxes_in, data_train, data_test = finetune.get_bbox_data(config, str(plot_experiments.test_id_in))
+        data_in = data_train
         if mode == 'test':
-            data = data_test 
-        gt_boxes, gt_classes = [], []
+            data_in = data_test 
+        frame_bboxes_out, data_train, data_test = finetune.get_bbox_data(config, str(plot_experiments.test_id_out))
+        data_out = data_train
+        if mode == 'test':
+            data_out = data_test 
+
+        frame_bboxes = frame_bboxes_in 
+        frame_bboxes.update(frame_bboxes_out)
+
         detection_model = finetune.load_trained_model(config)
 
-        precisions, recalls = {},{}
-        cnt_true_positives, cnt_false_positives, cnt_false_negatives = {},{},{}
-        for thresh_detection in thresh_detections:
-            cnt_true_positives[thresh_detection], cnt_false_positives[thresh_detection], cnt_false_negatives[thresh_detection] = 0,0,0
 
-        for frame_idx, image_tensors in data:
-            gt_boxes, gt_classes = [],[]
-            for ii in range(len(frame_idx)):
-                gt_boxes.append(tf.convert_to_tensor(frame_bboxes[str(frame_idx[ii].numpy().decode("utf-8") )], dtype=tf.float32))
-                gt_classes.append(tf.one_hot(tf.convert_to_tensor(np.ones(shape=[frame_bboxes[str(frame_idx[ii].numpy().decode("utf-8") )].shape[0]], dtype=np.int32) - label_id_offset), num_classes))
-        
-            preprocessed_images, shapes = detection_model.preprocess(image_tensors) 
-            prediction_dict = detection_model.predict(preprocessed_images, shapes)
-            prediction_dict = detection_model.postprocess(prediction_dict, shapes)
-            
+        for line_style, video_label, data in [['dashed','test seen video: ', data_in],['solid','test unseen video: ', data_out]]:
+            precisions, recalls = {},{}
+            cnt_true_positives, cnt_false_positives, cnt_false_negatives = {},{},{}
             for thresh_detection in thresh_detections:
-                for b in range(len(frame_idx)):
-                    detections = [ prediction_dict['detection_boxes'][b][j] for j in range(len(prediction_dict['detection_boxes'][b])) if prediction_dict['detection_scores'][b][j] > thresh_detection]
-                    
-                    for j in range(len(detections)):
-                        det_matched = False
-                        for k in range(len(gt_boxes[b])):
-                            iou = calc_iou(detections[j],gt_boxes[b][k])
-                            if iou > iou_threshold:
-                                det_matched = True 
-                        if det_matched:
-                            cnt_true_positives[thresh_detection]+=1
-                        else:
-                            cnt_false_positives[thresh_detection]+=1 
-
-                    for k in range(len(gt_boxes[b])):
-                        gt_matched = False
-                        for j in range(len(detections)):
-                            iou = calc_iou(detections[j],gt_boxes[b][k])
-                            if iou > iou_threshold:
-                                gt_matched = True 
-                        if not gt_matched:
-                            cnt_false_negatives[thresh_detection]+=1 
-
-
-        # calculate precision and recall for this experiment
-        for thresh_detection in thresh_detections:
-            precisions[thresh_detection] = cnt_true_positives[thresh_detection] / max(1e-5,cnt_true_positives[thresh_detection] + cnt_false_positives[thresh_detection])
-            recalls[thresh_detection] = cnt_true_positives[thresh_detection] / max(1e-5,cnt_true_positives[thresh_detection] + cnt_false_negatives[thresh_detection])
-            print('exp',experiment_names[i],thresh_detection,'->',precisions[thresh_detection],recalls[thresh_detection])
+                cnt_true_positives[thresh_detection], cnt_false_positives[thresh_detection], cnt_false_negatives[thresh_detection] = 0,0,0
+        
+            for frame_idx, image_tensors in data:
+                gt_boxes, gt_classes = [],[]
+                for ii in range(len(frame_idx)):
+                    gt_boxes.append(tf.convert_to_tensor(frame_bboxes[str(frame_idx[ii].numpy().decode("utf-8") )], dtype=tf.float32))
+                    gt_classes.append(tf.one_hot(tf.convert_to_tensor(np.ones(shape=[frame_bboxes[str(frame_idx[ii].numpy().decode("utf-8") )].shape[0]], dtype=np.int32) - label_id_offset), num_classes))
+            
+                preprocessed_images, shapes = detection_model.preprocess(image_tensors) 
+                prediction_dict = detection_model.predict(preprocessed_images, shapes)
+                prediction_dict = detection_model.postprocess(prediction_dict, shapes)
                 
-        axs.plot([recalls[th] for th in thresh_detections],[precisions[th] for th in thresh_detections],color=colors[[1,10,50,100,200,300,400][i%7]],linestyle='-',label=experiment_names[i])
-        #axs[0].plot([c[0] for c in test_random],[c[1] for c in test_random],color=colors[50],linestyle='-',label='test  randomly initialised backbone')
+                for thresh_detection in thresh_detections:
+                    for b in range(len(frame_idx)):
+                        detections = [ prediction_dict['detection_boxes'][b][j] for j in range(len(prediction_dict['detection_boxes'][b])) if prediction_dict['detection_scores'][b][j] > thresh_detection]
+                        
+                        for j in range(len(detections)):
+                            det_matched = False
+                            for k in range(len(gt_boxes[b])):
+                                iou = calc_iou(detections[j],gt_boxes[b][k])
+                                if iou > iou_threshold:
+                                    det_matched = True 
+                            if det_matched:
+                                cnt_true_positives[thresh_detection]+=1
+                            else:
+                                cnt_false_positives[thresh_detection]+=1 
+
+                        for k in range(len(gt_boxes[b])):
+                            gt_matched = False
+                            for j in range(len(detections)):
+                                iou = calc_iou(detections[j],gt_boxes[b][k])
+                                if iou > iou_threshold:
+                                    gt_matched = True 
+                            if not gt_matched:
+                                cnt_false_negatives[thresh_detection]+=1 
+
+
+            # calculate precision and recall for this experiment
+            for thresh_detection in thresh_detections:
+                precisions[thresh_detection] = cnt_true_positives[thresh_detection] / max(1e-5,cnt_true_positives[thresh_detection] + cnt_false_positives[thresh_detection])
+                recalls[thresh_detection] = cnt_true_positives[thresh_detection] / max(1e-5,cnt_true_positives[thresh_detection] + cnt_false_negatives[thresh_detection])
+                print(video_label, 'exp',experiment_names[i],thresh_detection,'->',precisions[thresh_detection],recalls[thresh_detection])
+                    
+            axs.plot([recalls[th] for th in thresh_detections],[precisions[th] for th in thresh_detections],color=plot_experiments.colors[i%len(plot_experiments.colors)],linestyle=line_style,label=video_label + experiment_names[i])
+            #axs[0].plot([c[0] for c in test_random],[c[1] for c in test_random],color=colors[50],linestyle='-',label='test  randomly initialised backbone')
 
     print('[*] %s time took %f seconds' % (output_file,time.time()-ts))
     axs.legend()
@@ -150,8 +158,8 @@ def keypoints_draw_predicision_recall_curves(video_ids, title, experiment_dirs, 
     axs.set_xlabel('Recall')
     axs.set_ylabel('Precision')
     #axs[0].hlines(bg_accuracy.mice_bg_focal_loss, 0, config['kp_max_steps'], colors='k', linestyles='solid', label='baseline - no keypoints')
-    
-    axs.set_ylim([.5,1.])
+    axs.set_xlim([0.6,1])
+    axs.set_ylim([.6,1.])
     axs.grid(True)
 
 
@@ -165,10 +173,11 @@ def keypoints_draw_predicision_recall_curves(video_ids, title, experiment_dirs, 
         config['batch_size'] = 128
         print(config)
         
-        dataset = roi_segm.load_roi_dataset(config,mode=mode,video_ids=str(video_id))
+        dataset_test_in = roi_segm.load_roi_dataset(config,mode='test', video_id = str(plot_experiments.test_id_in))
+        dataset_test_out = roi_segm.load_roi_dataset(config,mode='test', video_id = str(plot_experiments.test_id_out))
 
         # load net 
-        net = model.get_model(config) # outputs: keypoints + background
+        net = model.get_model(config, verbose = False) # outputs: keypoints + background
         ckpt = tf.train.Checkpoint(net = net)
         ckpt_manager = tf.train.CheckpointManager(ckpt, experiment_dir, max_to_keep=5)
 
@@ -187,45 +196,46 @@ def keypoints_draw_predicision_recall_curves(video_ids, title, experiment_dirs, 
             cnt_false_positives[thresh_detection] = 0 
         
         cnt_batches = -1
-        for xt,yt in dataset:
-            cnt_batches += 1 
-            predicted_test = net(xt,training=False)[-1].numpy()
-            for b in range(0,predicted_test.shape[0],1):
-                keypoints_gt = get_heatmaps_keypoints(yt.numpy()[b,:,:,:],thresh_detection=0.8)
+        for linestyle, seen, dataset in [['dashed','seen',dataset_test_in], ['solid','unseen',dataset_test_out]]:
+            for xt,yt in dataset:
+                cnt_batches += 1 
+                predicted_test = net(xt,training=False)[-1].numpy()
+                for b in range(0,predicted_test.shape[0],1):
+                    keypoints_gt = get_heatmaps_keypoints(yt.numpy()[b,:,:,:],thresh_detection=0.8)
 
-                for thresh_detection in thresh_detections:
-                    keypoints = get_heatmaps_keypoints(predicted_test[b,:,:,:], thresh_detection=thresh_detection)
-                    # nearest neighbour to all ground truth points
-                    for jgt, kp_gt in enumerate(keypoints_gt):
-                        gt_kp_matched = False
-                        for j, kp in enumerate(keypoints):
-                            # match iff small distance and same class
-                            _dist = np.linalg.norm(np.array(kp[:2])-np.array(kp_gt[:2]))
-                            if _dist < max_neighbor_dist and kp[2]==kp_gt[2]:
-                                count_matches[thresh_detection] += 1
-                                gt_kp_matched = True 
-                        if not gt_kp_matched:
-                            cnt_false_negatives[thresh_detection] += 1 # unmatched ground truth
-
-                    for j, kp in enumerate(keypoints):
-                        kp_matched = False
+                    for thresh_detection in thresh_detections:
+                        keypoints = get_heatmaps_keypoints(predicted_test[b,:,:,:], thresh_detection=thresh_detection)
+                        # nearest neighbour to all ground truth points
                         for jgt, kp_gt in enumerate(keypoints_gt):
-                            # match iff small distance and same class
-                            _dist = np.linalg.norm(np.array(kp[:2])-np.array(kp_gt[:2]))
-                            if _dist < max_neighbor_dist and kp[2]==kp_gt[2]:
-                                kp_matched = True 
-                        if kp_matched: # unmatched prediction
-                            cnt_true_positives[thresh_detection] += 1
-                        else:
-                            cnt_false_positives[thresh_detection] += 1
-            
-        # calculate precision and recall for this experiment
-        for thresh_detection in thresh_detections:
-            precisions[thresh_detection] = cnt_true_positives[thresh_detection] / max(1e-5,cnt_true_positives[thresh_detection] + cnt_false_positives[thresh_detection])
-            recalls[thresh_detection] = cnt_true_positives[thresh_detection] / max(1e-5,cnt_true_positives[thresh_detection] + cnt_false_negatives[thresh_detection])
-            print('exp',experiment_names[i],thresh_detection,'->',precisions[thresh_detection],recalls[thresh_detection])
-            
-        axs.plot([recalls[th] for th in thresh_detections],[precisions[th] for th in thresh_detections],color=colors[[1,10,50,100,200,300,400][i%7]],linestyle='-',label=experiment_names[i])
+                            gt_kp_matched = False
+                            for j, kp in enumerate(keypoints):
+                                # match iff small distance and same class
+                                _dist = np.linalg.norm(np.array(kp[:2])-np.array(kp_gt[:2]))
+                                if _dist < max_neighbor_dist and kp[2]==kp_gt[2]:
+                                    count_matches[thresh_detection] += 1
+                                    gt_kp_matched = True 
+                            if not gt_kp_matched:
+                                cnt_false_negatives[thresh_detection] += 1 # unmatched ground truth
+
+                        for j, kp in enumerate(keypoints):
+                            kp_matched = False
+                            for jgt, kp_gt in enumerate(keypoints_gt):
+                                # match iff small distance and same class
+                                _dist = np.linalg.norm(np.array(kp[:2])-np.array(kp_gt[:2]))
+                                if _dist < max_neighbor_dist and kp[2]==kp_gt[2]:
+                                    kp_matched = True 
+                            if kp_matched: # unmatched prediction
+                                cnt_true_positives[thresh_detection] += 1
+                            else:
+                                cnt_false_positives[thresh_detection] += 1
+                
+            # calculate precision and recall for this experiment
+            for thresh_detection in thresh_detections:
+                precisions[thresh_detection] = cnt_true_positives[thresh_detection] / max(1e-5,cnt_true_positives[thresh_detection] + cnt_false_positives[thresh_detection])
+                recalls[thresh_detection] = cnt_true_positives[thresh_detection] / max(1e-5,cnt_true_positives[thresh_detection] + cnt_false_negatives[thresh_detection])
+                print(seen,'exp',experiment_names[i],thresh_detection,'->',precisions[thresh_detection],recalls[thresh_detection])
+                
+            axs.plot([recalls[th] for th in thresh_detections],[precisions[th] for th in thresh_detections],color=plot_experiments.colors[i%len(plot_experiments.colors)],linestyle=linestyle,label='test %s video %s' % ( seen, experiment_names[i]))
         #axs[0].plot([c[0] for c in test_random],[c[1] for c in test_random],color=colors[50],linestyle='-',label='test  randomly initialised backbone')
 
         print('[*] %s time took %f seconds' % (output_file, time.time()-ts))

@@ -117,6 +117,8 @@ def get_bbox_data(config, video_ids, vis_input_data=0):
             ddata_train.append(train_image_tensors[i])
     for i in range(len(test_image_tensors)):
         ddata_test.append(test_image_tensors[i])
+        
+    if not 'data_ratio' in config: config['data_ratio'] = 1.0 
     print('[*] loaded object detection %s data: training on %i samples, testing on %i samples (data_ratio %f)' % (config['object_detection_backbone'], len(ddata_train),len(ddata_test),config['data_ratio']))
     labeling_list_train = tf.data.Dataset.from_tensor_slices(ddata_train)
     labeling_list_test = tf.data.Dataset.from_tensor_slices(ddata_test)
@@ -209,34 +211,36 @@ def restore_weights(config, checkpoint_path = None, gt_boxes = None, gt_classes 
             #    (i.e., the classification head that we *will not* restore)
             _box_prediction_head=detection_model._box_predictor._box_prediction_head,
         )
+        if config['object_pretrained']:
+            fake_model = tf.compat.v2.train.Checkpoint(
+                    _feature_extractor=detection_model._feature_extractor,
+                    _box_predictor=fake_box_predictor)
+            ckpt = tf.compat.v2.train.Checkpoint(model=fake_model)
+            ckpt.restore(checkpoint_path).expect_partial()
         
-        fake_model = tf.compat.v2.train.Checkpoint(
-                _feature_extractor=detection_model._feature_extractor,
-                _box_predictor=fake_box_predictor)
-        ckpt = tf.compat.v2.train.Checkpoint(model=fake_model)
-        ckpt.restore(checkpoint_path).expect_partial()
-    
     elif config['object_detection_backbone'] == 'fasterrcnn':
     
         detection_model._extract_proposal_features(detection_model.preprocess(tf.zeros([2, 640, 640, 3]))[0])
         detection_model._extract_box_classifier_features(tf.zeros((2,4,4,1088)))
-        fake_model = detection_model.restore_from_objects('detection')['model']
-        ckpt = tf.train.Checkpoint(model=fake_model)
-        ckpt.restore(checkpoint_path).expect_partial()
+        if config['object_pretrained']:
+            fake_model = detection_model.restore_from_objects('detection')['model']
+            ckpt = tf.train.Checkpoint(model=fake_model)
+            ckpt.restore(checkpoint_path).expect_partial()
 
     elif config['object_detection_backbone'] == 'efficient':
-        fake_box_predictor = tf.compat.v2.train.Checkpoint(
-            _base_tower_layers_for_heads=detection_model._box_predictor._base_tower_layers_for_heads,
-            # _prediction_heads=detection_model._box_predictor._prediction_heads,
-            #    (i.e., the classification head that we *will not* restore)
-            _box_prediction_head=detection_model._box_predictor._box_prediction_head,
-        )
-        
-        fake_model = tf.compat.v2.train.Checkpoint(
-                _feature_extractor=detection_model._feature_extractor,
-                _box_predictor=fake_box_predictor)
-        ckpt = tf.compat.v2.train.Checkpoint(model=fake_model)
-        ckpt.restore(checkpoint_path).expect_partial()
+        if config['object_pretrained']:
+            fake_box_predictor = tf.compat.v2.train.Checkpoint(
+                _base_tower_layers_for_heads=detection_model._box_predictor._base_tower_layers_for_heads,
+                # _prediction_heads=detection_model._box_predictor._prediction_heads,
+                #    (i.e., the classification head that we *will not* restore)
+                _box_prediction_head=detection_model._box_predictor._box_prediction_head,
+            )
+            
+            fake_model = tf.compat.v2.train.Checkpoint(
+                    _feature_extractor=detection_model._feature_extractor,
+                    _box_predictor=fake_box_predictor)
+            ckpt = tf.compat.v2.train.Checkpoint(model=fake_model)
+            ckpt.restore(checkpoint_path).expect_partial()
     detection_model.provide_groundtruth(
                     groundtruth_boxes_list=[tf.zeros((7,4))],
                     groundtruth_classes_list=[tf.zeros((7,1))])
@@ -246,26 +250,25 @@ def restore_weights(config, checkpoint_path = None, gt_boxes = None, gt_classes 
     prediction_dict = detection_model.predict(image, shapes)
     _ = detection_model.postprocess(prediction_dict, shapes)
     print('[*] object detection weights restored from %s' % checkpoint_path)
-    return ckpt, model_config, detection_model
+    return model_config, detection_model
 
 def get_trainable_variables(detection_model, mode):
     if mode == 'transfer':
         to_fine_tune = []
-        prefixes_to_train = [
-            'WeightSharedConvolutionalBoxPredictor/WeightSharedConvolutionalBoxHead',
-            'WeightSharedConvolutionalBoxPredictor/WeightSharedConvolutionalClassHead']
-        for var in detection_model.trainable_variables:
-            if any([var.name.startswith(prefix) for prefix in prefixes_to_train]):
+        for i,var in enumerate(detection_model.trainable_variables):
+            if 'BoxPredictor' in var.name or 'RPNConv' in var.name or 'ClassPredictor' in var.name or 'BoxEncodingPredictor' in var.name:
                 to_fine_tune.append(var)
+                #print(i,'    finetuning',var.name)
+            else:
+                ''#print(i,'not finetuning',var.name)
     else:
         to_fine_tune = detection_model.trainable_variables
+
     return to_fine_tune 
 
 def finetune(config, checkpoint_directory, checkpoint_restore = None):
     #setup_oo_api() 
-    if not 'finetune' in config:
-        config['finetune'] = False 
-
+    
     if not os.path.isdir(checkpoint_directory): os.makedirs(checkpoint_directory)
 
     # write config as JSON
@@ -288,8 +291,7 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
         frame_bboxes.update(frame_bboxes_test)
         datas_test[int(test_video_id)] = data_test
     
-    #print('gt_boxes',gt_boxes,'gt_classes',gt_classes)
-    ckpt, model_config, detection_model = restore_weights(config, checkpoint_restore, gt_boxes, gt_classes)
+    model_config, detection_model = restore_weights(config, checkpoint_restore, gt_boxes, gt_classes)
     if checkpoint_restore is None:
         tf.keras.backend.set_learning_phase(True)
 
@@ -298,8 +300,6 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
         # fit more examples in memory if we wanted to.
         learning_rate = config['lr_objectdetection']
         num_batches = int(1e7) # was 100 with 5 examples
-
-        
 
         # Set up forward + backward pass for a single train step.
         def get_model_train_step_function(model, optimizer, mode):
@@ -438,7 +438,9 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
                     print('[*] switching from transfer learning to fine tuning after %i steps.' % idx)
                     
                 # <augmentation>
+                s0 = image_tensors.shape
                 image_tensors, gt_boxes, gt_classes = augmentation.augment(config, image_tensors, gt_boxes, gt_classes)
+                #print('transform',s0,'=->',image_tensors.shape)
                 # </augmentation>
 
                 # Training step (forward pass + backwards pass)

@@ -140,14 +140,15 @@ def update_config_object_detection(config):
     config['lr_objectdetection'] = 0.0005 
     if config['object_detection_backbone'] == 'efficient':
         config['lr_objectdetection'] *= 10.
+    config['object_pretrained'] = True
     config['maxsteps_objectdetection'] = 250000 #50000
-    config['minsteps_objectdetection'] = 50000 #25000
-    config['object_finetune_warmup'] = 5000
+    config['minsteps_objectdetection'] = 20000 #25000
+    config['object_finetune_warmup'] = 1000
     config['object_augm_flip'] = bool(1)
     config['object_augm_rot90'] = bool(1)
-    config['object_augm_gaussian'] = bool(1)
+    config['object_augm_gaussian'] = bool(0) # 1
     config['object_augm_image'] = bool(0)
-    config['object_augm_mixup'] = bool(1)
+    config['object_augm_mixup'] = bool(0) # 1
     config['object_augm_crop'] = bool(0)
     config['object_augm_stitch'] = bool(0)
     return config 

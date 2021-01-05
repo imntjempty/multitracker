@@ -39,7 +39,7 @@ def calc_cce_loss(ytrue, ypred):
 def calc_l2_loss(ytrue, ypred):
     return tf.reduce_mean( l2_loss(ytrue, ypred) )
 
-def calc_accuracy(config, ytrue, ypred):
+def calc_accuracy(ytrue, ypred):
     correct_prediction = tf.equal(tf.argmax(ytrue,3),tf.argmax(ypred,3))
     correct_prediction = tf.cast(correct_prediction, "float")
     acc = tf.reduce_mean(tf.cast(correct_prediction, "float"))
@@ -303,7 +303,7 @@ def get_center(x1,y1,x2,y2,H,W,crop_dim):
     center[1] = max(crop_dim//2,center[1] )
     return center 
     
-def train(config):
+def train(config, log_images = True):
     #config['kp_cutmix'] = False
     #config['kp_mixup'] = True
     if 'hourglass' in config['kp_backbone']:
@@ -404,7 +404,7 @@ def train(config):
                         test_losses['cce'] += calc_cce_loss(yt, predicted_test)
                     if 'l2' in config['kp_test_losses']:
                         test_losses['l2'] += calc_l2_loss(yt, predicted_test)
-                    test_accuracy += calc_accuracy(config, yt, predicted_test)
+                    test_accuracy += calc_accuracy( yt, predicted_test)
                     nt += 1 
                 test_losses['focal'] = test_losses['focal'] / nt
                 test_losses['cce'] = test_losses['cce'] / nt
@@ -413,14 +413,15 @@ def train(config):
 
                 with tf.device("cpu:0"):
                     with writers_test[test_video_id].as_default():
-                        im_summary('image',xt/256.)
-                        tf.summary.scalar('pixel accuracy', test_accuracy,step=global_step)
-                        for kk, keypoint_name in enumerate(config['keypoint_names']):
-                            im_summary('heatmap_%s' % keypoint_name, tf.concat((tf.expand_dims(yt[:,:,:,kk],axis=3), tf.expand_dims(predicted_test[:,:,:,kk],axis=3)),axis=2))
-                        im_summary('background', tf.concat((tf.expand_dims(yt[:,:,:,-1],axis=3),tf.expand_dims(predicted_test[:,:,:,-1],axis=3)),axis=2))
+                        tf.summary.scalar('pixel_accuracy', test_accuracy,step=global_step)
                         for k,v in test_losses.items():
                             tf.summary.scalar("loss %s" % k,v,step=global_step)
                         
+                        if log_images:
+                            im_summary('image',xt/256.)
+                            for kk, keypoint_name in enumerate(config['keypoint_names']):
+                                im_summary('heatmap_%s' % keypoint_name, tf.concat((tf.expand_dims(yt[:,:,:,kk],axis=3), tf.expand_dims(predicted_test[:,:,:,kk],axis=3)),axis=2))
+                            im_summary('background', tf.concat((tf.expand_dims(yt[:,:,:,-1],axis=3),tf.expand_dims(predicted_test[:,:,:,-1],axis=3)),axis=2))
                         writers_test[test_video_id].flush()
 
                         with open(csv_test % test_video_id,'a+') as ftest:
@@ -430,21 +431,21 @@ def train(config):
         if should_summarize:
             with tf.device("cpu:0"):
                 with writer_train.as_default():
+                    tf.summary.scalar("learning rate", lr(global_step), step = global_step)
                     tf.summary.scalar("loss %s" % config['kp_train_loss'],loss,step=global_step)
                     tf.summary.scalar('min',tf.reduce_min(predicted_heatmaps[:,:,:,:-1]),step=global_step)
                     tf.summary.scalar('max',tf.reduce_max(predicted_heatmaps[:,:,:,:-1]),step=global_step)
-                    accuracy = calc_accuracy(config, y,predicted_heatmaps)
+                    accuracy = calc_accuracy(y,predicted_heatmaps)
                     tf.summary.scalar('pixel_accuracy', accuracy,step=global_step)
-                    im_summary('image',inp/256.)
-                    for kk, keypoint_name in enumerate(config['keypoint_names']):
-                        im_summary('heatmap_%s' % keypoint_name, tf.concat((tf.expand_dims(y[:,:,:,kk],axis=3), tf.expand_dims(predicted_heatmaps[:,:,:,kk],axis=3)),axis=2))
-                        #tf.summary.scalar(keypoint_name+'_gt_min',tf.reduce_min(y[:,:,:,kk]),step=global_step)
-                        #tf.summary.scalar(keypoint_name+'_gt_max',tf.reduce_max(y[:,:,:,kk]),step=global_step)
-                        #tf.summary.scalar(keypoint_name+'_pr_min',tf.reduce_min(predicted_heatmaps[:,:,:,kk]),step=global_step)
-                        #tf.summary.scalar(keypoint_name+'_pr_max',tf.reduce_max(predicted_heatmaps[:,:,:,kk]),step=global_step)
-                    im_summary('background', tf.concat((tf.expand_dims(y[:,:,:,-1],axis=3),tf.expand_dims(predicted_heatmaps[:,:,:,-1],axis=3)),axis=2))
-                    
-                    tf.summary.scalar("learning rate", lr(global_step), step = global_step)
+                    if log_images:
+                        im_summary('image',inp/256.)
+                        for kk, keypoint_name in enumerate(config['keypoint_names']):
+                            im_summary('heatmap_%s' % keypoint_name, tf.concat((tf.expand_dims(y[:,:,:,kk],axis=3), tf.expand_dims(predicted_heatmaps[:,:,:,kk],axis=3)),axis=2))
+                            #tf.summary.scalar(keypoint_name+'_gt_min',tf.reduce_min(y[:,:,:,kk]),step=global_step)
+                            #tf.summary.scalar(keypoint_name+'_gt_max',tf.reduce_max(y[:,:,:,kk]),step=global_step)
+                            #tf.summary.scalar(keypoint_name+'_pr_min',tf.reduce_min(predicted_heatmaps[:,:,:,kk]),step=global_step)
+                            #tf.summary.scalar(keypoint_name+'_pr_max',tf.reduce_max(predicted_heatmaps[:,:,:,kk]),step=global_step)
+                        im_summary('background', tf.concat((tf.expand_dims(y[:,:,:,-1],axis=3),tf.expand_dims(predicted_heatmaps[:,:,:,-1],axis=3)),axis=2))
                     writer_train.flush()    
 
                 with open(csv_train,'a+') as ftrain:
