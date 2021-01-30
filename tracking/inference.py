@@ -166,12 +166,8 @@ def detect_bounding_boxes(detection_model, input_tensor):
     #if len(inp_tensor.shape)==3:
     #    input_tensor = tf.expand_dims(input_tensor, 0)
     input_tensor = tf.cast(input_tensor,tf.float32)
-    #print('SHAPES',input_tensor.shape)
-    shapes = tf.constant(1 * [[640, 640, 3]], dtype=tf.int32)
-    #input_tensor = tf.expand_dims(input_tensor,axis=0)
+    shapes = tf.constant(1 * [[config['object_detection_resolution'][1], config['object_detection_resolution'][0], 3]], dtype=tf.int32)
     preprocessed_image, shapes = detection_model.preprocess(input_tensor)
-    #preprocessed_image = tf.image.resize(preprocessed_image,(640,640))
-    #print('preprocessed_image',preprocessed_image.shape,'shapes',shapes)
     prediction_dict = detection_model.predict(preprocessed_image, shapes)
     detections = detection_model.postprocess(prediction_dict, shapes)
     detections['detection_boxes'] = detections['detection_boxes'][0,:,:]
@@ -221,7 +217,7 @@ def detect_batch_bounding_boxes(detection_model, frames, seq_info, thresh_detect
 def detect_frame_boundingboxes(config, detection_model, encoder_model, seq_info, frame, frame_idx, thresh_detection = 0.3):
     inp_tensor = frame #cv.imread(frame_file)
     H,W = inp_tensor.shape[:2]
-    inp_tensor = cv.resize(inp_tensor,(640,640))
+    inp_tensor = cv.resize(inp_tensor,(config['object_detection_resolution'][0],config['object_detection_resolution'][1]))
     inp_tensor = tf.expand_dims(inp_tensor,0)
     features, _ = encoder_model(autoencoder.preprocess(inp_tensor),training=False)
     features = tf.image.resize(features,[H,W])

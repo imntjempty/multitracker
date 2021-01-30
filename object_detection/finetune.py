@@ -185,19 +185,25 @@ def restore_weights(config, checkpoint_path = None, gt_boxes = None, gt_classes 
     # Since we are working off of a COCO architecture which predicts 90
     # class slots by default, we override the `num_classes` field here to be just
     # one (for our new rubber ducky class).
+    
     configs = config_util.get_configs_from_pipeline_file(pipeline_config)
     model_config = configs['model']
     if config['object_detection_backbone'] == 'ssd':
         model_config.ssd.num_classes = num_classes
-        model_config.ssd.freeze_batchnorm = True
+        model_config.ssd.freeze_batchnorm = config['object_pretrained']
+        model_config.ssd.image_resizer.fixed_shape_resizer.height = config['object_detection_resolution'][1]
+        model_config.ssd.image_resizer.fixed_shape_resizer.width = config['object_detection_resolution'][0]
     elif config['object_detection_backbone'] == 'fasterrcnn':
         model_config.faster_rcnn.num_classes = num_classes
-        #model_config.faster_rcnn.freeze_batchnorm = True
+        model_config.faster_rcnn.freeze_batchnorm = config['object_pretrained']
+        model_config.faster_rcnn.image_resizer.fixed_shape_resizer.height = config['object_detection_resolution'][1]
+        model_config.faster_rcnn.image_resizer.fixed_shape_resizer.width = config['object_detection_resolution'][0]
     else:
         model_config.ssd.num_classes = num_classes
-
+    
     detection_model = model_builder.build(
         model_config=model_config, is_training=True)
+    
 
     if config['object_detection_backbone'] == 'ssd':
         # Set up object-based checkpoint restore --- RetinaNet has two prediction
@@ -220,7 +226,7 @@ def restore_weights(config, checkpoint_path = None, gt_boxes = None, gt_classes 
         
     elif config['object_detection_backbone'] == 'fasterrcnn':
     
-        detection_model._extract_proposal_features(detection_model.preprocess(tf.zeros([2, 640, 640, 3]))[0])
+        detection_model._extract_proposal_features(detection_model.preprocess(tf.zeros([2, config['object_detection_resolution'][1], config['object_detection_resolution'][0], 3]))[0])
         detection_model._extract_box_classifier_features(tf.zeros((2,4,4,1088)))
         if config['object_pretrained']:
             fake_model = detection_model.restore_from_objects('detection')['model']
@@ -246,10 +252,11 @@ def restore_weights(config, checkpoint_path = None, gt_boxes = None, gt_classes 
                     groundtruth_classes_list=[tf.zeros((7,1))])
 
     # Run model through a dummy image so that variables are created
-    image, shapes = detection_model.preprocess(tf.zeros([1, 640, 640, 3]))
+    image, shapes = detection_model.preprocess(tf.zeros([1, config['object_detection_resolution'][1], config['object_detection_resolution'][0], 3]))
     prediction_dict = detection_model.predict(image, shapes)
     _ = detection_model.postprocess(prediction_dict, shapes)
-    print('[*] object detection weights restored from %s' % checkpoint_path)
+    if config['object_pretrained']:
+        print('[*] object detection weights restored from %s' % checkpoint_path)
     return model_config, detection_model
 
 def get_trainable_variables(detection_model, mode):
@@ -276,6 +283,11 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
     with open(file_json, 'w') as f:
         json.dump(config, f, indent=4)
 
+    ## disable pretrained model loading if resolution not exactly like tensorflow model zoo 640x640
+    print('[*] training object detection on resolution X: %i Y: %i' % (config['object_detection_resolution'][0],config['object_detection_resolution'][1]))
+    if config['object_pretrained'] and not (config['object_detection_resolution'][0]==640 and config['object_detection_resolution'][1]==640):
+        config['object_pretrained'] = False 
+    
     ## load and prepare data 
     #  train video ids
     frame_bboxes, data_train, _ = get_bbox_data(config, config['train_video_ids'])
@@ -300,11 +312,12 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
         # fit more examples in memory if we wanted to.
         learning_rate = config['lr_objectdetection']
         num_batches = int(1e7) # was 100 with 5 examples
+        
 
         # Set up forward + backward pass for a single train step.
         def get_model_train_step_function(model, optimizer, mode):
-            """Get a tf.function for training step."""
             vars_to_fine_tune = get_trainable_variables(model, mode)
+            """Get a tf.function for training step."""
             # Use tf.function for a bit of speed.
             # Comment out the tf.function decorator if you want the inside of the
             # function to run eagerly.
@@ -378,7 +391,7 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
             return train_step_fn, test_step_fn
 
         optimizer = tf.keras.optimizers.SGD(learning_rate=learning_rate, momentum=0.9)
-        train_step_fn, test_step_fn = get_model_train_step_function(detection_model, optimizer, 'transfer')
+        train_step_fn, test_step_fn = get_model_train_step_function(detection_model, optimizer, ['scratch','transfer'][int(config['object_pretrained'])])
         writer_train = tf.summary.create_file_writer(checkpoint_directory+'/train_%s' % config['train_video_ids'])
         writers_test = {} 
         for test_video_id in config['test_video_ids'].split(','):
@@ -433,7 +446,7 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
                     gt_boxes.append(tf.convert_to_tensor(frame_bboxes[str(frame_idx[ii].numpy().decode("utf-8") )], dtype=tf.float32))
                     gt_classes.append(tf.one_hot(tf.convert_to_tensor(np.ones(shape=[frame_bboxes[str(frame_idx[ii].numpy().decode("utf-8") )].shape[0]], dtype=np.int32) - label_id_offset), num_classes))
                 
-                if idx == config['object_finetune_warmup']:
+                if idx == config['object_finetune_warmup'] and config['object_pretrained']:
                     train_step_fn, test_step_fn = get_model_train_step_function(detection_model, optimizer, 'finetune')
                     print('[*] switching from transfer learning to fine tuning after %i steps.' % idx)
                     
@@ -494,13 +507,13 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
                         ckpt_saver = tf.compat.v2.train.Checkpoint(detection_model=detection_model)
                         ckpt_manager = tf.train.CheckpointManager(ckpt_saver, checkpoint_directory, max_to_keep=5)
                         saved_path = ckpt_manager.save()
-                        print('[*] saved object detection model to',checkpoint_directory,'->',saved_path)
+                        print('[*] saved object detection model to',checkpoint_directory,'->',saved_path,'at step',idx)
                         return detection_model
                     if idx % 5000 ==0 :
                         ckpt_saver = tf.compat.v2.train.Checkpoint(detection_model=detection_model)
                         ckpt_manager = tf.train.CheckpointManager(ckpt_saver, checkpoint_directory, max_to_keep=5)
                         saved_path = ckpt_manager.save()
-                        print('[*] saved object detection model to',checkpoint_directory,'->',saved_path)
+                        print('[*] saved object detection model to',checkpoint_directory,'->',saved_path,'at step',idx)
                         
                 idx += 1 
         

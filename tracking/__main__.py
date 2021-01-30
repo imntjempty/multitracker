@@ -18,6 +18,7 @@ from datetime import datetime
 import cv2 as cv 
 import h5py
 import json 
+import shutil
 
 from multitracker import util 
 from multitracker.be import video
@@ -60,11 +61,19 @@ def main(args):
     config['file_tracking_results'] = args.output_tracking_results
     
     config['object_detection_backbone'] = args.objectdetection_method
+    config = model.update_config_object_detection(config)
+    config['object_detection_resolution'] = [int(r) for r in args.objectdetection_resolution.split('x')]
+    config['keypoint_resolution'] = [int(r) for r in args.keypoint_resolution.split('x')]
+    config['img_height'], config['img_width'] = config['keypoint_resolution'][::-1]
     config['kp_backbone'] = args.keypoint_method
     if 'hourglass' in args.keypoint_method:
         config['kp_num_hourglass'] = int(args.keypoint_method[9:])
         config['kp_backbone'] = 'efficientnetLarge'
     
+    if args.delete_all_checkpoints:
+        if os.path.isdir(os.path.expanduser('~/checkpoints/multitracker')):
+            shutil.rmtree(os.path.expanduser('~/checkpoints/multitracker'))
+
     # <train models>
     # 1) animal bounding box finetuning -> trains and inferences 
     config['objectdetection_max_steps'] = 30000
@@ -164,10 +173,14 @@ if __name__ == '__main__':
     parser.add_argument('--track_tail',required=False,default=100,type=int,help="How many steps back in the past should the path of each animal be drawn? -1 -> draw complete path")
     parser.add_argument('--sketch_file',required=False,default=None, help="Black and White Sketch of the frame without animals")
     parser.add_argument('--video',required=False,default=None)
-    parser.add_argument('--tracking_method',required=False,default='DeepSORT',type=str,help="Tracking Algorithm to use: [DeepSORT, VIoU, UpperBound] defaults to DeepSORT")
+    parser.add_argument('--tracking_method',required=False,default='VIoU',type=str,help="Tracking Algorithm to use: [DeepSORT, VIoU, UpperBound] defaults to VIoU")
     parser.add_argument('--objectdetection_method',required=False,default="fasterrcnn", help="Object Detection Algorithm to use [fasterrcnn, ssd] defaults to fasterrcnn") 
+    parser.add_argument('--objectdetection_resolution', required=False, default="640x640", help="xy resolution for object detection. coco pretrained model only available for 640x640, but smaller resolution saves time")
+    parser.add_argument('--keypoint_resolution', required=False, default="224x224",help="patch size to analzye keypoints of individual animals")
     parser.add_argument('--keypoint_method',required=False,default="hourglass2", help="Keypoint Detection Algorithm to use [none, hourglass2, hourglass4, hourglass8, vgg16, efficientnet, efficientnetLarge, psp]. defaults to hourglass2") 
     parser.add_argument('--upper_bound',required=False,default=0,type=int)
+    parser.add_argument('--delete_all_checkpoints', required=False, action="store_true")
+    
     args = parser.parse_args()
     assert args.tracking_method in ['DeepSORT', 'VIoU', 'UpperBound']
     assert args.objectdetection_method in ['fasterrcnn', 'ssd']
