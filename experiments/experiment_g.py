@@ -23,14 +23,17 @@ def experiment_g(args, train_video_ids = None):
     config['object_augm_image'] = bool(0)
     config['object_augm_mixup'] = bool(0)
     
-    #for should_init_pretrained in [False,True]:
-    #    for augm in [False,True]:
-    for should_init_pretrained in [True]:
-        for augm in [True]:
+    #for should_init_pretrained in [True]:
+    #    for augm in [True]:
+    for should_init_pretrained in [False,True]:
+        for augm in [False,True]:
             now = str(datetime.now()).replace(' ','_').replace(':','-').split('.')[0]
             if not augm:
                 config['object_augm_flip'] = bool(0)
                 config['object_augm_rot90'] = bool(0)
+            else:
+                config['object_augm_flip'] = bool(1)
+                config['object_augm_rot90'] = bool(1)
             config['object_pretrained'] = should_init_pretrained    
             str_augm = 'augm' if augm else 'noaugm'
             str_pretrained = 'pretrained' if should_init_pretrained else 'scratch'
