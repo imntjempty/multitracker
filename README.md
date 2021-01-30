@@ -25,7 +25,7 @@ Go to the url http://localhost:8888/home . You should see a list of your project
 ### Track Animals
 Now you can call the actual tracking algorithm . If not provided with pretrained models for object detection and keypoint models, it will train those based on annotations of the supplied video ids.
 
-```python3.7 -m multitracker.tracking --project_id 7 --video_id 13 --train_video_ids 9,14 --video /path/to/target_video.mp4```
+```python3.7 -m multitracker.tracking --project_id 7 --test_video_ids 13,14 --train_video_ids 9,14 --video /path/to/target_video.mp4```
 
 This will create a video showing the results of the tracking process.
 
@@ -40,7 +40,7 @@ Tensorboard summaries and images are logged periodically while training. Start t
 ### Track with pretrained models
 If no paths to the three possible model types are given with arguments `--objectdetection_model`, `--keypoint_model`, `--autoencoder_model`
 
-```python3.7 -m multitracker.tracking --project_id 7 --video_id 13 --train_video_ids 9,14 --video /path/to/target_video.mp4 --objectdetection_model /path/to/objdetect --keypoint_model /path/to/keypoint --autoencoder_model /path/to/ae```
+```python3.7 -m multitracker.tracking --project_id 7 --test_video_ids 13,14 --train_video_ids 9,14 --video /path/to/target_video.mp4 --objectdetection_model /path/to/objdetect --keypoint_model /path/to/keypoint --autoencoder_model /path/to/ae```
 
 ### Arguments to choose tracking receipe
 There are several options for object detection, keypoint estimation and tracking. Each combination might give different results and can be easily changed.
