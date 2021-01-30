@@ -58,6 +58,12 @@ Each predicted bounding box and keypoint comes with its own confidence score ind
 `--min_confidence_keypoints` minimum confidence for an detected limb keypoint, defaults to 0.5
 
 ## Troubleshooting
+### Out Of Memory Errors or very long runtime
+- Faster R-CNN is a big model, try the smaller SSD ```--objectdetection_method ssd``` 
+- lower the resolution for object detection ```--objectdetection_resolution 320x320```
+- lower the resolution for keypoint detection ```--keypoint_resolution 96x96```
+- downsample the input video 
+
 ### No boxes are detected
 - Check out tensorboard images called 'object detection'. If the train predictions look great, but the test predictions are awful, label more bounding boxes!
 - Faster R-CNN sometimes fails on very small boxes, try changing the backbone to SSD ```--objectdetection_method ssd``` 
