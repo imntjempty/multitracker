@@ -188,8 +188,9 @@ def get_config(project_id = 3):
 
     config['keypoint_names'] = db.get_keypoint_names(config['project_id'])
 
-    config['kp_backbone'] = ["vgg16","efficientnet","efficientnetLarge",'psp'][2]
-    
+    config['kp_backbone'] = ["vgg16","efficientnet","efficientnetLarge",'psp'][3]
+    config['inference_keypoint_batchsize'] = 16
+
     config['object_detection_backbone'] = ['efficient','ssd','fasterrcnn'][2] ## https://github.com/tensorflow/models/blob/master/research/object_detection/g3doc/tf2_detection_zoo.md
     config = update_config_object_detection(config)
     

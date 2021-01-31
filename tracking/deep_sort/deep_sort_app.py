@@ -211,7 +211,7 @@ def visualize(vis, frame, tracker, detections, keypoint_tracker, keypoints, trac
     out = append_crop_mosaic(vis.viewer.image,vis_crops)
     return out 
 
-def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_confidence, min_confidence_keypoints, crop_dim, 
+def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_confidence, min_confidence_keypoints,  
         nms_max_overlap, max_cosine_distance,
         nn_budget, display):
             
@@ -261,7 +261,7 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
         video_reader = None 
     
     [Hframe,Wframe,_] = cv.imread(glob(os.path.join(os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'test'),'*.png'))[0]).shape
-    
+    crop_dim = roi_segm.get_roi_crop_dim(config['project_id'], config['test_video_ids'].split(',')[0],Hframe)
     video_file_out = inference.get_video_output_filepath(config)
     if os.path.isfile(video_file_out): os.remove(video_file_out)
     import skvideo.io

@@ -45,7 +45,7 @@ def calc_accuracy(ytrue, ypred):
     acc = tf.reduce_mean(tf.cast(correct_prediction, "float"))
     return acc 
 
-def get_roi_crop_dim(project_id, video_id):
+def get_roi_crop_dim(project_id, video_id, target_frame_height):
     """
         we need to crop around the centers of bounding boxes
         the crop dimension should be high enough to see the whole animal but as small as possible
@@ -83,6 +83,8 @@ def get_roi_crop_dim(project_id, video_id):
 
     # not bigger than image 
     crop_dim = min(crop_dim,Hframe)
+
+    crop_dim = int(crop_dim * target_frame_height/Hframe)
     return crop_dim
     #return int(Htarget/3.)
 
@@ -178,7 +180,7 @@ def load_roi_dataset(config, mode = 'train', batch_size = None, video_id = None)
     w = int(Wframe*Hcomp/Hframe)
 
     len_parts = Wcomp // w  
-    crop_dim = get_roi_crop_dim(config['project_id'], video_ids.split(',')[0])
+    crop_dim = get_roi_crop_dim(config['project_id'], video_ids.split(',')[0],Hframe)
     crop_dim_extended_ratio = 1.5
     crop_dim_extended = min(Hcomp, crop_dim * crop_dim_extended_ratio)
     crop_dim_extended = int(crop_dim_extended)

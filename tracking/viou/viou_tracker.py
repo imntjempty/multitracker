@@ -236,7 +236,7 @@ class VIoUTracker(Tracker):
     
 
 
-def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_confidence_boxes, min_confidence_keypoints, tracker = None):
+def run(config, detection_model, encoder_model, keypoint_model,  min_confidence_boxes, min_confidence_keypoints, tracker = None):
     #config['upper_bound'] = None # ---> force VIOU tracker
     
     nms_max_overlap = 1.
@@ -250,7 +250,7 @@ def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_co
     print('[*] total_frame_number',total_frame_number)
 
     [Hframe,Wframe,_] = cv.imread(glob(os.path.join(os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), '*'),'test'),'*.png'))[0]).shape
-    
+    crop_dim = roi_segm.get_roi_crop_dim(config['project_id'], config['test_video_ids'].split(',')[0],Hframe)
     video_file_out = inference.get_video_output_filepath(config)
     if config['file_tracking_results'] is None:
         config['file_tracking_results'] = video_file_out.replace('.%s'%video_file_out.split('.')[-1],'.csv')
@@ -308,7 +308,7 @@ def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_co
             if len(detection_buffer) == 0:
                 # fill up frame buffer and then detect boxes for complete frame buffer
                 dettensor = np.array(list(frame_buffer)).astype(np.float32)
-                batch_detections = inference.detect_batch_bounding_boxes(detection_model, dettensor, seq_info, min_confidence_boxes)
+                batch_detections = inference.detect_batch_bounding_boxes(config, detection_model, dettensor, seq_info, min_confidence_boxes)
                 [detection_buffer.append(batch_detections[ib]) for ib in range(config['inference_objectdetection_batchsize'])]
 
             frame = frame_buffer.popleft()

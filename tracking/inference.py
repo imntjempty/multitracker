@@ -9,6 +9,7 @@ from datetime import datetime
 import cv2 as cv 
 import h5py
 import multiprocessing as mp 
+from collections import deque
 
 from multitracker import util 
 from multitracker.keypoint_detection import heatmap_drawing, model 
@@ -132,7 +133,7 @@ def inference_keypoints(config, frame, detections, keypoint_model, crop_dim, min
             center[1] = int(round(center[1]))
             centers.append(center)
             roi = frame_kp[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:]
-            roi = tf.image.resize(roi,[224,224])
+            roi = tf.image.resize(roi,[config['img_height'],config['img_width']])
             #roi = tf.expand_dims(tf.convert_to_tensor(roi),axis=0)
             rois.append(roi)
         rois = tf.stack(rois,axis=0)
@@ -147,6 +148,49 @@ def inference_keypoints(config, frame, detections, keypoint_model, crop_dim, min
         keypoints = get_heatmaps_keypoints(y_kpheatmaps, thresh_detection=min_confidence_keypoints)
     return keypoints
 
+def inference_batch_keypoints(config, keypoint_model, crop_dim, frames_tensor, detection_buffer, min_confidence_keypoints):
+    # crop all the detections from all the frames and stack them batches on which you run inference. 
+    # be careful to keep track of how many kps per frame, because we need to resort them afterwards
+    keypoints_per_frame = deque()
+
+    rois = []
+    centers = [] 
+    lens = []
+    y_kpheatmaps = {}
+    for j in range(frames_tensor.shape[0]):
+        frame = frames_tensor[j,:,:,:]
+        detections = detection_buffer[j]
+        lens.append(len(detections))
+        for i, detection in enumerate(detections):
+            x1,y1,x2,y2 = detection.to_tlbr()
+            # crop region around center of bounding box
+            center = roi_segm.get_center(x1,y1,x2,y2, frames_tensor.shape[1], frames_tensor.shape[2], crop_dim)
+            center[0] = int(round(center[0]))
+            center[1] = int(round(center[1]))
+            centers.append(center)
+            roi = frame[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:]
+            roi = tf.image.resize(roi,[config['img_height'],config['img_width']])
+            rois.append(roi)
+        
+        if len(rois) >= len(detection_buffer) or j == frames_tensor.shape[0]-1:
+            rois = tf.stack(rois,axis=0)
+            yroi = keypoint_model(rois, training=False)[-1]
+            yroi = tf.image.resize(yroi,(crop_dim//2*2,crop_dim//2*2)).numpy()
+            while len(lens)>0:
+                y_kpheatmaps = np.zeros((frame.shape[0],frame.shape[1],1+len(config['keypoint_names'])),np.float32)
+                for kd in range(lens[0]):
+                    y_kpheatmaps[centers[kd][0]-crop_dim//2:centers[kd][0]+crop_dim//2,centers[kd][1]-crop_dim//2:centers[kd][1]+crop_dim//2,:] = yroi[kd,:,:,:]
+                yroi = yroi[lens[0]:,:,:,:]
+                centers = centers[lens[0]:]
+                keypoints = get_heatmaps_keypoints(y_kpheatmaps, thresh_detection=min_confidence_keypoints)
+                keypoints_per_frame.append(keypoints)
+                lens = lens[1:]
+            lens=[]
+            rois = []
+            center = []
+        
+        
+    return keypoints_per_frame
 
 # Again, uncomment this decorator if you want to run inference eagerly
 #@tf.function
@@ -174,20 +218,13 @@ def detect_bounding_boxes(detection_model, input_tensor):
     detections['detection_scores'] = detections['detection_scores'][0]
     return detections
 
-def _downscale_mp(im):
-    scale = 650. / min(im.shape[:2])
-    return cv.resize(im,None,None,fx=scale,fy=scale)
-    
 #@tf.function
-def detect_batch_bounding_boxes(detection_model, frames, seq_info, thresh_detection):
+def detect_batch_bounding_boxes(config, detection_model, frames, seq_info, thresh_detection):
     scaled = []
-    with mp.Pool(processes=os.cpu_count()) as pool:
-        detresults = []
-        for i in range(frames.shape[0]):
-            detresults.append(pool.apply_async(_downscale_mp,(frames[i,:,:,:],)))
-        for result in detresults:
-            scaled.append(result.get())
+    for i in range(frames.shape[0]):
+        scaled.append(cv.resize( frames[i,:,:,:] ,(config['object_detection_resolution'][0],config['object_detection_resolution'][1])))
     scaled = np.stack(scaled,axis=0)
+    
     preprocessed_image, shapes = detection_model.preprocess(tf.convert_to_tensor(scaled))
     prediction_dict = detection_model.predict(preprocessed_image, shapes)
     bboxes = detection_model.postprocess(prediction_dict, shapes)
@@ -223,7 +260,6 @@ def detect_frame_boundingboxes(config, detection_model, encoder_model, seq_info,
     features = tf.image.resize(features,[H,W])
     
     bboxes = detect_bounding_boxes(detection_model, inp_tensor)
-    #for i in range(bboxes['detection_boxes'].shape[0]):
     results = []
     for j in range(bboxes['detection_boxes'].shape[0]):
         class_id = 1

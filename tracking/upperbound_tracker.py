@@ -203,12 +203,14 @@ class UpperBoundTracker(Tracker):
                         #if nearest_inactive_track_idx >= 0:
                         if nearest_inactive_track_distance < self.maximum_nearest_inactive_track_distance:
                             ## the old estimation was obvisiouly wrong, so correct last means and add interpolated track
-                            self.last_means[nearest_inactive_track_idx] = self.last_means[nearest_inactive_track_idx][:-self.steps_without_detection[nearest_inactive_track_idx]]
-                            for ims in range(self.steps_without_detection[nearest_inactive_track_idx]):
-                                ratio = ims / float(self.steps_without_detection[nearest_inactive_track_idx])
-                                interpolated_box = (1. - ratio) * self.last_means[nearest_inactive_track_idx][-1] + ratio * detected_boxes[j]
-                                self.last_means[nearest_inactive_track_idx].append(interpolated_box)
-
+                            try:
+                                self.last_means[nearest_inactive_track_idx] = self.last_means[nearest_inactive_track_idx][:-self.steps_without_detection[nearest_inactive_track_idx]]
+                                for ims in range(self.steps_without_detection[nearest_inactive_track_idx]):
+                                    ratio = ims / float(self.steps_without_detection[nearest_inactive_track_idx])
+                                    interpolated_box = (1. - ratio) * self.last_means[nearest_inactive_track_idx][-1] + ratio * detected_boxes[j]
+                                    self.last_means[nearest_inactive_track_idx].append(interpolated_box)
+                            except Exception as e:
+                                print('[* ERROR %s] when correcting wrong path'% ob['frame_idx'],e)
                             matched_detections[j] = True
                             matched_tracks[nearest_inactive_track_idx] = True
                             obs[nearest_inactive_track_idx] = detected_boxes[j]
@@ -236,7 +238,7 @@ class UpperBoundTracker(Tracker):
             print()
 
 
-def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_confidence_boxes, min_confidence_keypoints, tracker = None):
+def run(config, detection_model, encoder_model, keypoint_model, min_confidence_boxes, min_confidence_keypoints, tracker = None):
     assert 'upper_bound' in config and config['upper_bound'] is not None and int(config['upper_bound'])>0
     #config['upper_bound'] = None # ---> force VIOU tracker
     
@@ -248,6 +250,7 @@ def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_co
     for _ in range(5):
         ret, frame = video_reader.read()
     [Hframe,Wframe,_] = frame.shape
+    crop_dim = roi_segm.get_roi_crop_dim(config['project_id'], config['test_video_ids'].split(',')[0],Hframe)
     total_frame_number = int(video_reader.get(cv.CAP_PROP_FRAME_COUNT))
     print('[*] total_frame_number',total_frame_number)
     
@@ -275,13 +278,14 @@ def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_co
     frame_idx = -1
     frame_buffer = deque()
     detection_buffer = deque()
+    keypoint_buffer = deque()
     results = []
     running = True 
     scale = None 
     
-    
+    tbenchstart = time.time()
     # fill up initial frame buffer for batch inference
-    for ib in range(config['inference_objectdetection_batchsize']):
+    for ib in range(config['inference_objectdetection_batchsize']-1):
         ret, frame = video_reader.read()
         frame_buffer.append(frame[:,:,::-1]) # trained on TF RGB, cv2 yields BGR
 
@@ -289,7 +293,9 @@ def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_co
     for frame_idx in tqdm(range(total_frame_number)):
         #frame_idx += 1 
         config['count'] = frame_idx
-        
+        if frame_idx == 10:
+            tbenchstart = time.time()
+
         # fill up frame buffer as you take something from it to reduce lag 
         if video_reader.isOpened():
             ret, frame = video_reader.read()
@@ -302,13 +308,23 @@ def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_co
             running = False 
             return True 
         
+        showing = True # frame_idx % 1000 == 0
+
         if running:
             if len(detection_buffer) == 0:
+                frames_tensor = np.array(list(frame_buffer)).astype(np.float32)
                 # fill up frame buffer and then detect boxes for complete frame buffer
-                dettensor = np.array(list(frame_buffer)).astype(np.float32)
-                batch_detections = inference.detect_batch_bounding_boxes(detection_model, dettensor, seq_info, min_confidence_boxes)
+                t_odet_inf_start = time.time()
+                batch_detections = inference.detect_batch_bounding_boxes(config, detection_model, frames_tensor, seq_info, min_confidence_boxes)
                 [detection_buffer.append(batch_detections[ib]) for ib in range(config['inference_objectdetection_batchsize'])]
+                t_odet_inf_end = time.time()
+                #print('  object detection ms',(t_odet_inf_end-t_odet_inf_start)*1000.,"batch", len(batch_detections),len(detection_buffer) ) #   roughly 70ms
 
+                t_kp_inf_start = time.time()
+                keypoint_buffer = inference.inference_batch_keypoints(config, keypoint_model, crop_dim, frames_tensor, detection_buffer, min_confidence_keypoints)
+                #[keypoint_buffer.append(batch_keypoints[ib]) for ib in range(config['inference_objectdetection_batchsize'])]
+                t_kp_inf_end = time.time()
+                #print('  keypoint ms',(t_kp_inf_end-t_kp_inf_start)*1000.,"batch", len(keypoint_buffer) ) #   roughly 70ms
             # if detection buffer not empty use preloaded frames and preloaded detections
             frame = frame_buffer.popleft()
             detections = detection_buffer.popleft()
@@ -323,12 +339,15 @@ def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_co
             # Update tracker
             tracker.step({'img':frame,'detections':[boxes, scores, features], 'frame_idx': frame_idx})
 
-            if keypoint_model is None:
-                keypoints, tracked_keypoints = [], []
+            if 1:
+                keypoints = keypoint_buffer.popleft()
             else:
-                keypoints = inference.inference_keypoints(config, frame, detections, keypoint_model, crop_dim, min_confidence_keypoints)
+                t_keypoint_inf_start = time.time()
+                keypoints = inference.inference_keypoints(config, frame, tracker.tracks , keypoint_model, crop_dim, min_confidence_keypoints)
+                t_keypoint_inf_end = time.time()
+                #print('  keypoints ms',(t_keypoint_inf_end-t_keypoint_inf_start)*1000. )    roughly 70ms
                 # update tracked keypoints with new detections
-                tracked_keypoints = keypoint_tracker.update(keypoints)
+            tracked_keypoints = keypoint_tracker.update(keypoints)
 
             # Store results.        
             for track in tracker.tracks:
@@ -338,12 +357,20 @@ def run(config, detection_model, encoder_model, keypoint_model, crop_dim, min_co
                 results.append(result)
             
             #print('[%i/%i] - %i detections. %i keypoints' % (config['count'], total_frame_number, len(detections), len(keypoints)))
-            out = deep_sort_app.visualize(visualizer, frame, tracker, detections, keypoint_tracker, keypoints, tracked_keypoints, crop_dim, results, sketch_file=config['sketch_file'])
-            video_writer.writeFrame(cv.cvtColor(out, cv.COLOR_BGR2RGB))
+            if showing:
+                out = deep_sort_app.visualize(visualizer, frame, tracker, detections, keypoint_tracker, keypoints, tracked_keypoints, crop_dim, results, sketch_file=config['sketch_file'])
+                video_writer.writeFrame(cv.cvtColor(out, cv.COLOR_BGR2RGB))
             
-            if 1:
-                cv.imshow("tracking visualization", cv.resize(out,None,None,fx=0.75,fy=0.75))
-                cv.waitKey(5)
+            if int(frame_idx) == 1010:
+                tbenchend = time.time()
+                print('[*] 1000 steps took',tbenchend-tbenchstart,'seconds')
+                step_dur_ms = 1000.*(tbenchend-tbenchstart)/1000.
+                fps = 1. / ( (tbenchend-tbenchstart)/1000. )
+                print('[*] one time step takes on average',step_dur_ms,'ms',fps,'fps')
+
+            if showing:
+                cv.imshow("tracking visualization", out)#cv.resize(out,None,None,fx=0.75,fy=0.75))
+                cv.waitKey(1)
         
         if frame_idx % 30 == 0:
             with open( config['file_tracking_results'], 'w') as f:

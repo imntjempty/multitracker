@@ -131,7 +131,8 @@ def get_bbox_data(config, video_ids, vis_input_data=0):
         image = tf.io.read_file(image_file)
         image = tf.image.decode_png(image,channels=3)
         image = tf.cast(image,tf.float32)
-        image = tf.image.resize(image,[H//2,W//2])
+        #image = tf.image.resize(image,[H//2,W//2])
+        image = tf.image.resize(image, (config['object_detection_resolution'][1],config['object_detection_resolution'][0]))
         return _key, image
 
     data_train = labeling_list_train.map(load_im, num_parallel_calls = tf.data.experimental.AUTOTUNE).shuffle(256).batch(config['object_detection_batch_size']).prefetch(4*config['object_detection_batch_size'])#.cache()
@@ -151,10 +152,16 @@ def load_trained_model(config):
     
     if config['object_detection_backbone'] == 'ssd':
         model_config.ssd.num_classes = 1
+        model_config.ssd.image_resizer.fixed_shape_resizer.height = config['object_detection_resolution'][1]
+        model_config.ssd.image_resizer.fixed_shape_resizer.width = config['object_detection_resolution'][0]
     elif config['object_detection_backbone'] == 'fasterrcnn':
         model_config.faster_rcnn.num_classes = 1
+        model_config.faster_rcnn.image_resizer.fixed_shape_resizer.height = config['object_detection_resolution'][1]
+        model_config.faster_rcnn.image_resizer.fixed_shape_resizer.width = config['object_detection_resolution'][0]
     else:
         model_config.ssd.num_classes = 1
+        model_config.ssd.image_resizer.fixed_shape_resizer.height = config['object_detection_resolution'][1]
+        model_config.ssd.image_resizer.fixed_shape_resizer.width = config['object_detection_resolution'][0]
     detection_model = model_builder.build(model_config=model_config, is_training=False)
     ckpt = tf.compat.v2.train.Checkpoint(detection_model=detection_model)
     ckpt.restore(tf.train.latest_checkpoint(config['objectdetection_model'])).expect_partial()
@@ -200,6 +207,8 @@ def restore_weights(config, checkpoint_path = None, gt_boxes = None, gt_classes 
         model_config.faster_rcnn.image_resizer.fixed_shape_resizer.width = config['object_detection_resolution'][0]
     else:
         model_config.ssd.num_classes = num_classes
+        model_config.ssd.image_resizer.fixed_shape_resizer.height = config['object_detection_resolution'][1]
+        model_config.ssd.image_resizer.fixed_shape_resizer.width = config['object_detection_resolution'][0]
     
     detection_model = model_builder.build(
         model_config=model_config, is_training=True)

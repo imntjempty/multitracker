@@ -35,10 +35,12 @@ from multitracker.tracking.deep_sort import deep_sort_app
 from multitracker.tracking.viou import viou_tracker
 from multitracker.tracking import upperbound_tracker
 
-from multitracker.be import dbconnection
-db = dbconnection.DatabaseConnection()
 
 def main(args):
+    os.environ['MULTITRACKER_DATA_DIR'] = args.data_dir
+    from multitracker.be import dbconnection
+    db = dbconnection.DatabaseConnection()
+
     tstart = time.time()
     config = model.get_config(project_id = args.project_id)
     config['project_id'] = args.project_id
@@ -53,8 +55,6 @@ def main(args):
     #config['upper_bound'] = None
     config['upper_bound'] = args.upper_bound
     config['n_blocks'] = 4
-    if args.inference_objectdetection_batchsize > 0:
-        config['inference_objectdetection_batchsize'] = args.inference_objectdetection_batchsize
     config['tracking_method'] = args.tracking_method
     config['track_tail'] = args.track_tail
     config['sketch_file'] = args.sketch_file
@@ -70,6 +70,11 @@ def main(args):
         config['kp_num_hourglass'] = int(args.keypoint_method[9:])
         config['kp_backbone'] = 'efficientnetLarge'
     
+    if args.inference_objectdetection_batchsize > 0:
+        config['inference_objectdetection_batchsize'] = args.inference_objectdetection_batchsize
+    if args.inference_keypoint_batchsize > 0:
+        config['inference_keypoint_batchsize'] = args.inference_keypoint_batchsize
+
     if args.delete_all_checkpoints:
         if os.path.isdir(os.path.expanduser('~/checkpoints/multitracker')):
             shutil.rmtree(os.path.expanduser('~/checkpoints/multitracker'))
@@ -136,14 +141,13 @@ def main(args):
     nn_budget = None # Maximum size of the appearance descriptors gallery. If None, no budget is enforced.
     display = True # dont write vis images
 
-    crop_dim = roi_segm.get_roi_crop_dim(config['project_id'], config['test_video_ids'].split(',')[0])
     if config['tracking_method'] == 'DeepSORT':
         deep_sort_app.run(config, detection_model, encoder_model, keypoint_model, output_dir, 
-            args.min_confidence_boxes, args.min_confidence_keypoints, crop_dim, nms_max_overlap, max_cosine_distance, nn_budget, display)
+            args.min_confidence_boxes, args.min_confidence_keypoints, nms_max_overlap, max_cosine_distance, nn_budget, display)
     elif config['tracking_method'] == 'UpperBound':
-        upperbound_tracker.run(config, detection_model, encoder_model, keypoint_model, crop_dim, args.min_confidence_boxes, args.min_confidence_keypoints  )
+        upperbound_tracker.run(config, detection_model, encoder_model, keypoint_model, args.min_confidence_boxes, args.min_confidence_keypoints  )
     elif config['tracking_method'] == 'VIoU':
-        viou_tracker.run(config, detection_model, encoder_model, keypoint_model, crop_dim, args.min_confidence_boxes, args.min_confidence_keypoints  )
+        viou_tracker.run(config, detection_model, encoder_model, keypoint_model, args.min_confidence_boxes, args.min_confidence_keypoints  )
 
     video_file_out = inference.get_video_output_filepath(config)
     convert_video_h265(video_file_out.replace('.mp4','.avi'), video_file_out)
@@ -169,6 +173,7 @@ if __name__ == '__main__':
     parser.add_argument('--min_confidence_boxes',required=False,default=0.5,type=float)
     parser.add_argument('--min_confidence_keypoints',required=False,default=0.5,type=float)
     parser.add_argument('--inference_objectdetection_batchsize',required=False,default=0,type=int)
+    parser.add_argument('--inference_keypoint_batchsize',required=False,default=0,type=int)
     parser.add_argument('--output_tracking_results',required=False,default=None)
     parser.add_argument('--track_tail',required=False,default=100,type=int,help="How many steps back in the past should the path of each animal be drawn? -1 -> draw complete path")
     parser.add_argument('--sketch_file',required=False,default=None, help="Black and White Sketch of the frame without animals")
@@ -177,8 +182,9 @@ if __name__ == '__main__':
     parser.add_argument('--objectdetection_method',required=False,default="fasterrcnn", help="Object Detection Algorithm to use [fasterrcnn, ssd] defaults to fasterrcnn") 
     parser.add_argument('--objectdetection_resolution', required=False, default="640x640", help="xy resolution for object detection. coco pretrained model only available for 640x640, but smaller resolution saves time")
     parser.add_argument('--keypoint_resolution', required=False, default="224x224",help="patch size to analzye keypoints of individual animals")
-    parser.add_argument('--keypoint_method',required=False,default="hourglass2", help="Keypoint Detection Algorithm to use [none, hourglass2, hourglass4, hourglass8, vgg16, efficientnet, efficientnetLarge, psp]. defaults to hourglass2") 
+    parser.add_argument('--keypoint_method',required=False,default="psp", help="Keypoint Detection Algorithm to use [none, hourglass2, hourglass4, hourglass8, vgg16, efficientnet, efficientnetLarge, psp]. defaults to hourglass2") 
     parser.add_argument('--upper_bound',required=False,default=0,type=int)
+    parser.add_argument('--data_dir', required=False, default = os.path.expanduser('~/data/multitracker'))
     parser.add_argument('--delete_all_checkpoints', required=False, action="store_true")
     
     args = parser.parse_args()

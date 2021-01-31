@@ -8,7 +8,13 @@ try:
 except:
     print('[*] not using global context for flask!')
 
-base_data_dir = os.path.expanduser('~/data/multitracker')
+base_data_dir = os.path.expanduser('~/data/multitracker') #os.getenv('MULTITRACKER_DATA_DIR') #
+if base_data_dir is None:
+    ## ask the user where to put the data dir
+    print(3*'\n',10* '*','\n*\n*   The data directory is not set yet. where would you like to put the database and files? (default ~/data/multitracker)')
+    base_data_dir = os.path.expanduser(input("Please enter the data directory:"))
+    os.environ['MULTITRACKER_DATA_DIR'] = base_data_dir
+    print('[*] set data directory to', base_data_dir)
 
 class DatabaseConnection(object):
     def __init__(self,file_db = os.path.join(base_data_dir, "data.db")):

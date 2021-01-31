@@ -31,18 +31,18 @@ from multitracker.tracking import inference
 
 app = Flask(__name__)
 
-from multitracker.be import dbconnection
-db = dbconnection.DatabaseConnection()
-
-
 if __name__ == "__main__":
     import argparse 
     parser = argparse.ArgumentParser() 
     parser.add_argument('--model',default=None)
     parser.add_argument('--project_id',type=int,default=None)
-    parser.add_argument('--num_labeling_base',type=int,default=250)
+    parser.add_argument('--num_labeling_base',type=int,default=100)
     parser.add_argument('--open_gallery', dest='open_gallery', action='store_true')
+    parser.add_argument('--data_dir', required=False, default = os.path.expanduser('~/data/multitracker'))
     args = parser.parse_args()
+    os.environ['MULTITRACKER_DATA_DIR'] = args.data_dir
+from multitracker.be import dbconnection
+db = dbconnection.DatabaseConnection()
 
 # load neural network from disk (or init new one)
 if args.model is not None and os.path.isfile(args.model):

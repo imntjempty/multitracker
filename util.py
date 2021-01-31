@@ -29,11 +29,23 @@ def get_colors():
     colors = [ color_dicts[k] for k in ['red','blue','yellow','green','magenta','cyan','lightblue','pink','lightgreen','orange']]
     return colors 
 
+def delete_video(video_id):
+    from multitracker.be import dbconnection
+    db = dbconnection.DatabaseConnection()
+    print('''
+        TODO: 
+            delete all entries from db 
+            delete all files from disk
+    ''')
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dir',required=True,help="Directory containing frames")
+    parser.add_argument('--delete_video', default=None,help='VideoID that gets deleted from database. also all files and frames are deleted.')
+
+    '''parser.add_argument('--dir',required=True,help="Directory containing frames")
     parser.add_argument('--out',required=True,help="mp4 file to save video")
-    parser.add_argument('--query',required=True,help="query for frames like predict-%05d.png")
+    parser.add_argument('--query',required=True,help="query for frames like predict-%05d.png")'''
     args = parser.parse_args()
-    make_video(args.dir,args.out,args.query)
+    #make_video(args.dir,args.out,args.query)
+    if args.delete_video is not None:
+        delete_video(int(args.delete_video))
