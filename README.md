@@ -27,7 +27,9 @@ Now you can call the actual tracking algorithm . If not provided with pretrained
 
 ```python3.7 -m multitracker.tracking --project_id 7 --test_video_ids 13,14 --train_video_ids 9,14 --video /path/to/target_video.mp4```
 
-This will create a video showing the results of the tracking process.
+This will create a video showing the results of the tracking process. The default configuration is optimized for highest quality. To speed up calculation, try this low resolution configuration:
+
+```python3.7 -m multitracker.tracking --project_id 7 --train_video_ids 9,14 --test_video_ids 13,14 --objectdetection_resolution 320x320 --objectdetection_method ssd --keypoint_resolution 96x96```
 
 ## Advanced Usage
 Multitracker is a top-down pipeline, that first uses Google's Object Detection framework to detect and crop all animals, followed by a custom semantic segmentation for keypoint detection on these crops. The tracking method DeepSORT also needs an autoencoder to extract visual features for reidentification. Therefore two or three models are needed for tracking. Multitracker implements a variety of different neural networks for solving object detection and keypoint estimation. 
@@ -50,6 +52,18 @@ There are several options for object detection, keypoint estimation and tracking
 `--keypoint_method` options: none, hourglass2, hourglass4, hourglass8, vgg16, efficientnet, efficientnetLarge, psp. defaults to hourglass2. option none tracks objects without keypoints.
 
 `--tracking_method` options: DeepSORT, VIoU, UpperBound
+
+`--upper_bound` upper bound number of animals observed
+
+`--objectdetection_resolution` resolution used in object detection. defaults to 640x640
+
+`--keypoint_resolution` resolution used in keypoint detection. defaults to 224x224
+
+`--track_tail` length of drawn tail for all animals in visualization
+
+`--data_dir` directory to save all data and database. defaults to ~/data/multitracker
+
+`--delete_all_checkpoints` delete all checkpoints from directory ~/checkpoints/multitracker
 
 Each predicted bounding box and keypoint comes with its own confidence score indicating how sure the algorithm is the object or keypoint to actually be there. We filter these predictions based on two thresholds, that can be changed:
 
