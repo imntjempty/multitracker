@@ -215,25 +215,29 @@ def get_psp_model(config):
     inputs = tf.keras.layers.Input(shape=(config['img_height'], config['img_width'], 3))
     #x = tf.keras.layers.GaussianNoise(20)(inputs)
     x = inputs 
-    from tensorflow.keras.applications import EfficientNetB6
+    from tensorflow.keras.applications import EfficientNetB1, EfficientNetB6
     weights = 'imagenet'
     if 'should_init_pretrained' in config and config['should_init_pretrained']==False:
         weights = None 
     
-    encoder = EfficientNetB6(include_top=False, weights=weights, drop_connect_rate=0.2,input_tensor=x)
+    encoder = EfficientNetB1(include_top=False, weights=weights, drop_connect_rate=0.2,input_tensor=x)
     encoder.trainable = False 
     for l in encoder.layers:
         l.trainable = False
     
+    if 0:
+        for i , l in enumerate(encoder.layers):
+            print(i, l.name, l.output.shape )
+            if l.name == encoded_layer_name:
+                x = l.output
+    
     encoded_layer_name = 'block4a_expand_activation' # (28,28,240)
-    for i , l in enumerate(encoder.layers):
-        if l.name == encoded_layer_name:
-            x = l.output
-     
+    x = encoder.get_layer(encoded_layer_name).output
+
     nf = 256 
     x = upsample(nf,1,strides=1)(x)
     # add some extra resnet blocks 
-    for i_block in range(16):
+    for i_block in range(4):
         y = upsample(nf,3,strides=1,act=None)(x)
         y = tf.keras.layers.Dropout(0.5)(y)
         y = upsample(nf,3,strides=1)(y)
@@ -242,8 +246,8 @@ def get_psp_model(config):
     x = pyramid_pooling_block(x, [2,4,6,12])
     x = upsample(64,3,strides=1)(x)    
     # final classification layer
-    x = tf.keras.layers.Lambda(lambda x: tf.image.resize(x, (config['img_height'],config['img_width'])))(x)
     x = upsample(1+len(config['keypoint_names']),1,1,norm_type=None,act=tf.keras.layers.Activation('softmax'))(x)     
+    x = tf.keras.layers.Lambda(lambda x: tf.image.resize(x, (config['img_height'],config['img_width'])))(x)
     
     net = tf.keras.Model(inputs=encoder.inputs, outputs=[[x]], name="PSP")
     return encoder, net 

@@ -311,6 +311,8 @@ def train(config, log_images = True):
     if 'hourglass' in config['kp_backbone']:
         config['kp_num_hourglass'] = int(config['kp_backbone'][9:])
         config['kp_backbone'] = 'efficientnetLarge'
+    else:
+        config['kp_num_hourglass'] = 1 
     print('[*] config', config)
     
     dataset_train = load_roi_dataset(config,mode='train')

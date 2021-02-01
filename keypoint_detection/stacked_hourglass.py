@@ -46,8 +46,8 @@ def get_model(config):
         
     inputs = tf.keras.layers.Input(shape=(config['img_height'], config['img_width'], 3))
     
-    from tensorflow.keras.applications import EfficientNetB6
-    encoder = EfficientNetB6(include_top=False, weights='imagenet', drop_connect_rate=0.2,input_tensor=inputs)
+    from tensorflow.keras.applications import EfficientNetB1, EfficientNetB6
+    encoder = EfficientNetB1(include_top=False, weights='imagenet', drop_connect_rate=0.2,input_tensor=inputs)
     # start training with untrainable base
     encoder.trainable = False 
     for l in encoder.layers:

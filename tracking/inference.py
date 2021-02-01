@@ -174,7 +174,10 @@ def inference_batch_keypoints(config, keypoint_model, crop_dim, frames_tensor, d
         
         if len(rois) >= len(detection_buffer) or j == frames_tensor.shape[0]-1:
             rois = tf.stack(rois,axis=0)
-            yroi = keypoint_model(rois, training=False)[-1]
+            yroi = keypoint_model(rois, training=False)#[-1]
+            if len(yroi[-1].shape) == 4:
+                yroi = yroi[-1]
+
             yroi = tf.image.resize(yroi,(crop_dim//2*2,crop_dim//2*2)).numpy()
             while len(lens)>0:
                 y_kpheatmaps = np.zeros((frame.shape[0],frame.shape[1],1+len(config['keypoint_names'])),np.float32)

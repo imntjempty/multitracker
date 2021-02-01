@@ -155,12 +155,12 @@ def update_config_object_detection(config):
 
 # </train>
 def get_config(project_id = 3):
-    config = {'batch_size': 8}
+    config = {'batch_size': 64}
     config.update({'img_height': 224,'img_width': 224})
     config['kp_max_steps'] = 200000
     config['kp_min_steps'] = 50000
     config['kp_lr'] = 2e-5 * 5   *5 *2.
-    config['kp_lr'] = 2e-5
+    config['kp_lr'] = 2e-5 * 5
     config['kp_blurpool'] = True
     config['ae_pretrained_encoder'] = [False,True][1]
 
