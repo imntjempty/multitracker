@@ -29,7 +29,7 @@ Now you can call the actual tracking algorithm . If not provided with pretrained
 
 This will create a video showing the results of the tracking process. The default configuration is optimized for highest quality. To speed up calculation, try this low resolution configuration:
 
-```python3.7 -m multitracker.tracking --project_id 7 --train_video_ids 9,14 --test_video_ids 13,14 --objectdetection_resolution 320x320 --objectdetection_method ssd --keypoint_resolution 96x96```
+```python3.7 -m multitracker.tracking --project_id 7 --train_video_ids 9,14 --test_video_ids 13,14 --objectdetection_resolution 320x320 --objectdetection_method ssd --keypoint_resolution 96x96 --video /path/to/target_video.mp4```
 
 ## Advanced Usage
 Multitracker is a top-down pipeline, that first uses Google's Object Detection framework to detect and crop all animals, followed by a custom semantic segmentation for keypoint detection on these crops. The tracking method DeepSORT also needs an autoencoder to extract visual features for reidentification. Therefore two or three models are needed for tracking. Multitracker implements a variety of different neural networks for solving object detection and keypoint estimation. 
