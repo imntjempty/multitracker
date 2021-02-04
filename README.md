@@ -44,24 +44,34 @@ If no paths to the three possible model types are given with arguments `--object
 
 ```python3.7 -m multitracker.tracking --project_id 7 --test_video_ids 13,14 --train_video_ids 9,14 --video /path/to/target_video.mp4 --objectdetection_model /path/to/objdetect --keypoint_model /path/to/keypoint --autoencoder_model /path/to/ae```
 
-### Arguments to choose tracking receipe
+### Arguments 
+
+
 There are several options for object detection, keypoint estimation and tracking. Each combination might give different results and can be easily changed.
 
-`--objectdetection_method` options: fasterrcnn, ssd. fasterrcnn is slower but usually achieves higher accuracy. ssd is faster but might fail to generalize to new videos
+`--project_id` ID of the project. Each project has a unique label map.
 
-`--keypoint_method` options: none, hourglass2, hourglass4, hourglass8, vgg16, efficientnet, efficientnetLarge, psp. defaults to hourglass2. option none tracks objects without keypoints.
+`--video` path of the MP4 video that should be tracked.
+
+`--train_video_ids` list of video ids that are trained on (eg 1,2,3)
+
+`--test_video_ids` list of video ids that are tested on (eg 3,4)
+ 
+`--data_dir` directory to save all data and database. defaults to ~/data/multitracker
 
 `--tracking_method` options: DeepSORT, VIoU, UpperBound
 
 `--upper_bound` upper bound number of animals observed
+
+`--objectdetection_method` options: fasterrcnn, ssd. fasterrcnn is slower but usually achieves higher accuracy. ssd is faster but might fail to generalize to new videos
+
+`--keypoint_method` options: none, hourglass2, hourglass4, hourglass8, vgg16, efficientnet, efficientnetLarge, psp. defaults to hourglass2. option none tracks objects without keypoints.
 
 `--objectdetection_resolution` resolution used in object detection. defaults to 640x640
 
 `--keypoint_resolution` resolution used in keypoint detection. defaults to 224x224
 
 `--track_tail` length of drawn tail for all animals in visualization
-
-`--data_dir` directory to save all data and database. defaults to ~/data/multitracker
 
 `--delete_all_checkpoints` delete all checkpoints from directory ~/checkpoints/multitracker
 
