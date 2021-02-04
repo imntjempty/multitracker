@@ -83,6 +83,7 @@ Each predicted bounding box and keypoint comes with its own confidence score ind
 
 ## Troubleshooting
 ### Out Of Memory Errors or very long runtime
+ß 
 - Faster R-CNN is a big model, try the smaller SSD ```--objectdetection_method ssd``` 
 - lower the resolution for object detection ```--objectdetection_resolution 320x320```
 - lower the resolution for keypoint detection ```--keypoint_resolution 96x96```
