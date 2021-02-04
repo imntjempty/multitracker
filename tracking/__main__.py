@@ -19,7 +19,7 @@ import cv2 as cv
 import h5py
 import json 
 import shutil
-
+from natsort import natsorted
 from multitracker import util 
 from multitracker.be import video
 from multitracker.keypoint_detection import heatmap_drawing, model , roi_segm
@@ -102,7 +102,7 @@ def main(args):
     if config['autoencoder_model'] is None and config['tracking_method'] == 'DeepSORT':
         config_autoencoder = autoencoder.get_autoencoder_config()
         config_autoencoder['project_id'] = config['project_id']
-        config_autoencoder['video_id'] = config['video_id']
+        config_autoencoder['video_ids'] = natsorted(list(set([int(iid) for iid in config['train_video_ids'].split(',')]+[int(iid) for iid in config['test_video_ids'].split(',')])))
         config_autoencoder['project_name'] = config['project_name']
         config['autoencoder_model'] = autoencoder.train(config_autoencoder)
     print('[*] trained autoencoder model',config['autoencoder_model'])
@@ -142,7 +142,7 @@ def main(args):
     display = True # dont write vis images
 
     if config['tracking_method'] == 'DeepSORT':
-        deep_sort_app.run(config, detection_model, encoder_model, keypoint_model, output_dir, 
+        deep_sort_app.run(config, detection_model, encoder_model, keypoint_model,  
             args.min_confidence_boxes, args.min_confidence_keypoints, nms_max_overlap, max_cosine_distance, nn_budget, display)
     elif config['tracking_method'] == 'UpperBound':
         upperbound_tracker.run(config, detection_model, encoder_model, keypoint_model, args.min_confidence_boxes, args.min_confidence_keypoints  )

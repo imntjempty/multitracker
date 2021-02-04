@@ -211,33 +211,9 @@ def visualize(vis, frame, tracker, detections, keypoint_tracker, keypoints, trac
     out = append_crop_mosaic(vis.viewer.image,vis_crops)
     return out 
 
-def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_confidence, min_confidence_keypoints,  
+def run(config, detection_model, encoder_model, keypoint_model, min_confidence, min_confidence_keypoints,  
         nms_max_overlap, max_cosine_distance,
         nn_budget, display):
-            
-    """Run multi-target tracker on a particular sequence.
-
-    Parameters
-    ----------
-    detection_file : str
-        Path to the detections file.
-    output_file : str
-        Path to the tracking output file. This file will contain the tracking
-        results on completion.
-    min_confidence : float
-        Detection confidence threshold. Disregard all detections that have
-        a confidence lower than this value.
-    nms_max_overlap: float
-        Maximum detection overlap (non-maxima suppression threshold).
-    max_cosine_distance : float
-        Gating threshold for cosine distance metric (object appearance).
-    nn_budget : Optional[int]
-        Maximum size of the appearance descriptor gallery. If None, no budget
-        is enforced.
-    display : bool
-        If True, show visualization of intermediate tracking results.
-
-    """
 
     seq_info = gather_sequence_info(config)
     #print('seq_info',seq_info.keys())
@@ -260,7 +236,7 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
     else:
         video_reader = None 
     
-    [Hframe,Wframe,_] = cv.imread(glob(os.path.join(os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'test'),'*.png'))[0]).shape
+    [Hframe,Wframe,_] = cv.imread(glob(os.path.join(os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['train_video_ids'].split(',')[0]),'test'),'*.png'))[0]).shape
     crop_dim = roi_segm.get_roi_crop_dim(config['project_id'], config['test_video_ids'].split(',')[0],Hframe)
     video_file_out = inference.get_video_output_filepath(config)
     if os.path.isfile(video_file_out): os.remove(video_file_out)
@@ -280,7 +256,7 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
         global count_failed
         global count_ok
         #print("Processing frame %05d" % frame_idx)
-        frame_directory = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['video_id']),'train')
+        frame_directory = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['train_video_ids'].split(',')[0]),'train')
         frame_file = os.path.join(frame_directory, '%05d.png' % frame_idx)
         
         if video_reader is not None and video_reader.isOpened():
@@ -341,58 +317,3 @@ def run(config, detection_model, encoder_model, keypoint_model, output_dir, min_
     else:
         visualizer = visualization.NoVisualization(seq_info)
     visualizer.run(frame_callback)
-
-    
-def bool_string(input_string):
-    if input_string not in {"True","False"}:
-        raise ValueError("Please Enter a valid Ture/False choice")
-    else:
-        return (input_string == "True")
-
-def parse_args():
-    """ Parse command line arguments.
-    """
-    parser = argparse.ArgumentParser(description="Deep SORT")
-    parser.add_argument(
-        "--project_id", help="Project ID", default=None,
-        required=True)
-    parser.add_argument(
-        "--video_id", help="Video ID", default=None,
-        required=True)
-    parser.add_argument(
-        "--detection_file", help="Path to custom detections.", default=None,
-        required=True)
-    parser.add_argument(
-        "--output_file", help="Path to the tracking output file. This file will"
-        " contain the tracking results on completion.",
-        default="/tmp/hypotheses.txt")
-    parser.add_argument(
-        "--min_confidence", help="Detection confidence threshold. Disregard "
-        "all detections that have a confidence lower than this value.",
-        default=0.8, type=float)
-    parser.add_argument(
-        "--nms_max_overlap",  help="Non-maxima suppression threshold: Maximum "
-        "detection overlap.", default=1.0, type=float)
-    parser.add_argument(
-        "--max_cosine_distance", help="Gating threshold for cosine distance "
-        "metric (object appearance).", type=float, default=0.2)
-    parser.add_argument(
-        "--nn_budget", help="Maximum size of the appearance descriptors "
-        "gallery. If None, no budget is enforced.", type=int, default=None)
-    parser.add_argument(
-        "--display", help="Show intermediate tracking results",
-        default=True, type=bool_string)
-    return parser.parse_args()
-
-
-
-if __name__ == "__main__":
-    from multitracker.keypoint_detection import model
-    config = model.get_config()
-    args = parse_args()
-    config['project_id'] = args.project_id
-    config['video_id'] = args.video_id
-    run(
-        config, args.detection_file, args.output_file,
-        args.min_confidence, args.nms_max_overlap,
-        args.max_cosine_distance, args.nn_budget, args.display)

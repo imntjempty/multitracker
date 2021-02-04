@@ -117,9 +117,14 @@ def preprocess(image):
     return image
 
 def load_raw_dataset(config):
-    image_dir = os.path.join(dbconnection.base_data_dir, 'projects/%i/%i/frames/train' % (config['project_id'],config['train_video_id'].split(',')[0]))
-    file_list = tf.data.Dataset.list_files(os.path.join(image_dir,'*.png'))
-    data = file_list.map(load_im, num_parallel_calls = tf.data.experimental.AUTOTUNE).repeat().batch(config['batch_size']).prefetch(4*config['batch_size'])#.cache()
+    file_list = []
+    for video_id in config['video_ids']:
+        image_dir = os.path.join(dbconnection.base_data_dir, 'projects/%i/%i/frames/train' % (config['project_id'],video_id))
+        file_list.extend(glob(os.path.join(image_dir,'*.png')))
+    shuffle(file_list)
+    file_list_tf = tf.data.Dataset.from_tensor_slices(file_list)
+    #file_list = tf.data.Dataset.list_files(os.path.join(image_dir,'*.png'))
+    data = file_list_tf.map(load_im, num_parallel_calls = tf.data.experimental.AUTOTUNE).repeat().batch(config['batch_size']).prefetch(4*config['batch_size'])#.cache()
     print('[*] loaded images from disk')
     return file_list, data 
     
@@ -142,12 +147,12 @@ def calc_ssim_loss(x, y):
 def train(config=None):
     if config is None:
         config = get_autoencoder_config()
-    #symbol_files, dataset = load_single_symbols_dataset(config)
-    symbol_files, dataset = load_raw_dataset(config)
+    
+    files, dataset = load_raw_dataset(config)
     
     inputs = tf.keras.layers.Input(shape=[config['img_height'], config['img_width'], 3])
     feature_extractor, encoder = Encoder(inputs, config)
-    print('[*] feature_extractor',feature_extractor.shape,'encoded',encoder.get_shape().as_list())
+    print('[*] training autoencoder with video ids %s with %i frames. feature_extractor' % (','.join([str(iid) for iid in config['video_ids']]), len(files)),feature_extractor.shape,'encoded',encoder.get_shape().as_list())
     reconstructed = Decoder(config,encoder)
 
     optimizer = tf.keras.optimizers.Adam(config['kp_lr'])
@@ -156,7 +161,7 @@ def train(config=None):
 
     # checkpoints and tensorboard summary writer
     now = str(datetime.now()).replace(' ','_').replace(':','-').split('.')[0]
-    checkpoint_path = os.path.expanduser("~/checkpoints/multitracker/ae/vid_%s-%s" % (config['video_id'], now))
+    checkpoint_path = os.path.expanduser("~/checkpoints/multitracker/ae/vids_%s-%s" % (','.join([str(vid) for vid in config['video_ids']]), now))
     vis_directory = os.path.join(checkpoint_path,'vis')
     logdir = os.path.join(checkpoint_path,'logs')
     for _directory in [checkpoint_path,logdir]:
