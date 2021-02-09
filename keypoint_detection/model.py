@@ -182,9 +182,9 @@ def get_config(project_id = 3):
     config['max_height'] = 1024
     config['project_id'] = project_id
     config['project_name'] = db.get_project_name(project_id)
-
-    config['data_dir'] = os.path.join(dbconnection.base_data_dir, 'projects/%i/data' % config['project_id'])
-    config['roi_dir'] = os.path.join(dbconnection.base_data_dir, 'projects/%i/data_roi' % config['project_id'])
+    config['data_dir'] = os.path.expanduser('~/data/multitracker')
+    config['kp_data_dir'] = os.path.join(dbconnection.base_data_dir, 'projects/%i/data' % config['project_id'])
+    config['kp_roi_dir'] = os.path.join(dbconnection.base_data_dir, 'projects/%i/data_roi' % config['project_id'])
 
     config['keypoint_names'] = db.get_keypoint_names(config['project_id'])
 

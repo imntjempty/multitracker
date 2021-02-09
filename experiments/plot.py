@@ -81,7 +81,7 @@ def plot_experiment_a(args, plot=True):
     print('plot',args)
     percs = [1, 10,50,100]
     base_dir = os.path.expanduser('~/checkpoints/experiments/MiceTop/A')
-    num_train_samples = len(glob(os.path.join(config['roi_dir'],'train','*.png')))
+    num_train_samples = len(glob(os.path.join(config['kp_roi_dir'],'train','*.png')))
 
     experiment_dirs = { }
     for checkpoint_dir in glob(base_dir+'/*/'):
@@ -206,7 +206,7 @@ def plot_experiment_b(args):
     plt.savefig(os.path.join(output_dir,'B_loss.png'), dpi=dpi)
 
 def plot_experiment_c(args):
-    num_test_samples = len(glob(os.path.join(config['roi_dir'],'test','*.png')))
+    num_test_samples = len(glob(os.path.join(config['kp_roi_dir'],'test','*.png')))
     base_dir = os.path.expanduser('~/checkpoints/experiments/MiceTop/C')
     
     ## plot losses
@@ -283,7 +283,7 @@ def plot_experiment_e_roi(args):
     roi_curve.objectdetection_draw_predicision_recall_curves(str(args.video_id), title, experiment_dirs, experiment_names, output_file)
 
 def plot_experiment_e_loss(args):
-    #num_test_samples = len(glob(os.path.join(config['roi_dir'],'test','*.png')))
+    #num_test_samples = len(glob(os.path.join(config['kp_roi_dir'],'test','*.png')))
     base_dir = os.path.expanduser('~/checkpoints/experiments/MiceTop/E')
     num_train_samples = len(db.get_labeled_bbox_frames(video_id))
     ## plot losses
@@ -330,7 +330,7 @@ def plot_experiment_f_roi(args):
 
 
 def plot_experiment_f_loss(args):
-    #num_test_samples = len(glob(os.path.join(config['roi_dir'],'test','*.png')))
+    #num_test_samples = len(glob(os.path.join(config['kp_roi_dir'],'test','*.png')))
     base_dir = os.path.expanduser('~/checkpoints/experiments/MiceTop/F')
     num_train_samples = len(db.get_labeled_bbox_frames(video_id))
     ## plot losses

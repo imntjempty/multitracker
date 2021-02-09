@@ -45,13 +45,14 @@ def calc_accuracy(ytrue, ypred):
     acc = tf.reduce_mean(tf.cast(correct_prediction, "float"))
     return acc 
 
-def get_roi_crop_dim(project_id, video_id, target_frame_height):
+def get_roi_crop_dim(data_dir, project_id, video_id, target_frame_height):
     """
         we need to crop around the centers of bounding boxes
         the crop dimension should be high enough to see the whole animal but as small as possible
         different videos show animals in different sizes, so we scan the db for all bboxes and take 98% median as size
     """
-    [Hframe,Wframe,_] = cv.imread(glob(os.path.join(os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, project_id), video_id),'test'),'*.png'))[0]).shape
+    [Hframe,Wframe,_] = cv.imread(glob(os.path.join(data_dir, 'projects', str(project_id), str(video_id),'frames','train','*.png'))[0]).shape
+    db = dbconnection.DatabaseConnection(file_db=os.path.join(data_dir,'data.db'))
     db.execute("select * from bboxes where video_id=%s;" % video_id)
     db_boxxes = [x for x in db.cur.fetchall()]
     ref_vid_id = None
@@ -94,6 +95,7 @@ def write_crop_to_disk(obj):
     config = obj['config']
     w, Hcomp,Hframe = obj['w'],obj['Hcomp'],obj['Hframe']
     im = cv.imread( f )
+    
     _mode = 'train'
     if im is None:
         f = f.replace('/train/','/test/')
@@ -109,7 +111,7 @@ def write_crop_to_disk(obj):
     #print('scaling',frame_bboxes[frame_idx][0],'to',(Hcomp/Hframe) * frame_bboxes[frame_idx][0])
     obj['boxes'] = (Hcomp/Hframe) * obj['boxes']
     
-    add_backgrounds = True
+    add_backgrounds = bool(1)
     #obj['boxes'] = [] # WARNING! only for bg debug
     if add_backgrounds: 
         ## add 3 random background patches without keypoints
@@ -119,19 +121,19 @@ def write_crop_to_disk(obj):
             #random_box = [random_box[2],random_box[0],random_box[3],random_box[1]] # (x1,x2,y1,y2)=>(y1,x1,y2,x2)
             rx, ry = int(np.random.uniform(crop_dim_extended//2,im.shape[0]-crop_dim_extended//2)),int(np.random.uniform(crop_dim_extended//2,im.shape[1]-crop_dim_extended//2))
             random_box = [ry-crop_dim_extended//2,rx-crop_dim_extended//2,ry+crop_dim_extended//2,rx+crop_dim_extended//2]
+            if random_box[0]>=0 and random_box[1] and random_box[2]<im.shape[0] and random_box[3]<im.shape[1]:
+                # if not overlaying with other boxes, add as background patch
+                overlapping = True 
+                for ii in range(len(obj['boxes'])):    # l1 = randombox, l2 = 
+                    positive_box = obj['boxes'][ii]
+                    if random_box[1]>=positive_box[3] or positive_box[1]>=random_box[3]:
+                        overlapping = False 
+                    elif random_box[0] <= positive_box[2] or positive_box[2] <= random_box[0]:
+                        overlapping = False
 
-            # if not overlaying with other boxes, add as background patch
-            overlapping = True 
-            for ii in range(len(obj['boxes'])):    # l1 = randombox, l2 = 
-                positive_box = obj['boxes'][ii]
-                if random_box[1]>=positive_box[3] or positive_box[1]>=random_box[3]:
-                    overlapping = False 
-                elif random_box[0] <= positive_box[2] or positive_box[2] <= random_box[0]:
-                    overlapping = False
-
-            if not overlapping:
-                obj['boxes'] = np.vstack((obj['boxes'],random_box))
-                num_random_backgrounds-=1
+                if not overlapping:
+                    obj['boxes'] = np.vstack((obj['boxes'],random_box))
+                    num_random_backgrounds-=1
 
     for j, (y1,x1,y2,x2) in enumerate(obj['boxes']):
         # crop region around center of bounding box
@@ -139,10 +141,12 @@ def write_crop_to_disk(obj):
 
         try:
             rois = [part[center[0]-crop_dim_extended//2:center[0]+crop_dim_extended//2,center[1]-crop_dim_extended//2:center[1]+crop_dim_extended//2,:] for part in parts]
+            rois = [roi for roi in rois if roi.shape[0]==crop_dim_extended and roi.shape[1]==crop_dim_extended]
+            print(obj['f'],j,[rroi.shape for rroi in rois])
             roi_comp = np.hstack(rois)
             #if min(roi_comp.shape[:2])>1:
             
-            f_roi = os.path.join(config['roi_dir'],_mode,'%i_%s_%i.png' % (obj['video_id'], obj['frame_idx'], j))
+            f_roi = os.path.join(config['kp_roi_dir'],_mode,'%i_%s_%i.png' % (obj['video_id'], obj['frame_idx'], j))
             if np.min(roi_comp.shape[:2])>=3:# and roi_comp.shape[1]==(len_parts * crop_dim):
                 cv.imwrite(f_roi, roi_comp)
                     
@@ -166,21 +170,22 @@ def load_roi_dataset(config, mode = 'train', batch_size = None, video_id = None)
         max_height = config['max_height']
     
     ## create heatmaps for whole frames
-    if len(glob(os.path.join(config['data_dir'],'train','*.png')))==0:
+    if len(glob(os.path.join(config['kp_data_dir'],'train','*.png')))==0:
         _video_ids = ','.join(list(set(config['train_video_ids'].split(',') + config['test_video_ids'].split(','))))
         for _video_id in _video_ids.split(','):
             _video_id = int(_video_id)
-            heatmap_drawing.randomly_drop_visualiztions(config['project_id'], _video_id, dst_dir=config['data_dir'],max_height=max_height)
+            heatmap_drawing.randomly_drop_visualiztions(config, config['project_id'], _video_id, dst_dir=config['kp_data_dir'],max_height=max_height)
 
-    image_directory = os.path.join(config['data_dir'],'%s' % mode)
-    [Hframe,Wframe,_] = cv.imread(glob(os.path.join(os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), video_ids.split(',')[0]),'test'),'*.png'))[0]).shape
-    
+    image_directory = os.path.join(config['kp_data_dir'],'%s' % mode)
+    print('image_directory', image_directory)
+    #[Hframe,Wframe,_] = cv.imread(glob(os.path.join(os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), video_ids.split(',')[0]),'train'),'*.png'))[0]).shape
+    [Hframe,Wframe,_] = cv.imread(glob(os.path.join(config['data_dir'],'projects',str(config['project_id']),video_ids.split(',')[0],'frames','train','*.png'))[0]).shape
     [Hcomp,Wcomp,_] = cv.imread(glob(os.path.join(image_directory,'*.png'))[0]).shape
     H = Hcomp 
     w = int(Wframe*Hcomp/Hframe)
 
     len_parts = Wcomp // w  
-    crop_dim = get_roi_crop_dim(config['project_id'], video_ids.split(',')[0],Hframe)
+    crop_dim = get_roi_crop_dim(config['data_dir'], config['project_id'], video_ids.split(',')[0],Hframe)
     crop_dim_extended_ratio = 1.5
     crop_dim_extended = min(Hcomp, crop_dim * crop_dim_extended_ratio)
     crop_dim_extended = int(crop_dim_extended)
@@ -191,12 +196,13 @@ def load_roi_dataset(config, mode = 'train', batch_size = None, video_id = None)
         batch_size = config['batch_size']
 
     for _mode in ['train','test']:
-        if not os.path.isdir(os.path.join(config['roi_dir'],_mode)): os.makedirs(os.path.join(config['roi_dir'],_mode))
+        if not os.path.isdir(os.path.join(config['kp_roi_dir'],_mode)): os.makedirs(os.path.join(config['kp_roi_dir'],_mode))
         
     ## create data sets if not present for region of interest
-    if len(glob(os.path.join(config['roi_dir'],'train','*.png')))==0:
+    if len(glob(os.path.join(config['kp_roi_dir'],'train','*.png')))==0:
         print('[*] creating cropped regions for each animal to train keypoint prediction ...')
         _video_ids = ','.join(list(set(config['train_video_ids'].split(',') + config['test_video_ids'].split(','))))
+        db = dbconnection.DatabaseConnection(file_db=os.path.join(config['data_dir'],'data.db'))
         for _video_id in _video_ids.split(','):
             _video_id = int(_video_id)
             frame_bboxes = {}
@@ -226,15 +232,17 @@ def load_roi_dataset(config, mode = 'train', batch_size = None, video_id = None)
             results_shapefilter = []
             sampled_shapes = []
             for _mode in ['train','test']:
-                _roicrops = glob(os.path.join(config['roi_dir'],_mode,'*.png'))
-                for ii in range(min(100,len(_roicrops))):
-                    sampled_shapes.append(cv.imread(_roicrops[int(np.random.uniform() * len(_roicrops))]).shape[:2])
-                sampled_H, sampled_W = np.median(np.array(sampled_shapes)[:,0]), np.median(np.array(sampled_shapes)[:,1])
-                for ii,ff in enumerate(glob(os.path.join(config['roi_dir'],_mode,'*.png'))): 
-                    results_shapefilter.append( pool.apply_async(filter_crop_shape,({'f':ff,'H':sampled_H, 'W':sampled_W},)) )
-       
+                _roicrops = glob(os.path.join(config['kp_roi_dir'],_mode,'*.png'))
+                if len(_roicrops) > 0:
+                    for ii in range(min(100,len(_roicrops))):
+                        sampled_shapes.append(cv.imread(_roicrops[int(np.random.uniform() * len(_roicrops))]).shape[:2])
+                    sampled_H, sampled_W = np.median(np.array(sampled_shapes)[:,0]), np.median(np.array(sampled_shapes)[:,1])
+                    for ii,ff in enumerate(glob(os.path.join(config['kp_roi_dir'],_mode,'*.png'))): 
+                        results_shapefilter.append( pool.apply_async(filter_crop_shape,({'f':ff,'H':sampled_H, 'W':sampled_W},)) )
+        
     #mean_rgb = calc_mean_rgb(config)
-    hroi,wroicomp = cv.imread(glob(os.path.join(config['roi_dir'],'train','*.png'))[0]).shape[:2]
+    #print('    globs',glob(os.path.join(config['kp_roi_dir'],'train','*.png')))
+    hroi,wroicomp = cv.imread(glob(os.path.join(config['kp_roi_dir'],'train','*.png'))[0]).shape[:2]
     wroi = hroi#wroicomp // (1+len(config['keypoint_names'])//3)
     h = hroi #int(hroi * 0.98)
 
@@ -270,7 +278,8 @@ def load_roi_dataset(config, mode = 'train', batch_size = None, video_id = None)
         comp = tf.image.resize(comp,[int(config['img_height']*crop_dim_extended_ratio),int(config['img_width']*crop_dim_extended_ratio)])
         # random crop to counteract imperfect bounding box centers
         crop = tf.image.random_crop( comp, [config['img_height'],config['img_width'],1+3+len(config['keypoint_names'])])
-       
+        #crop = comp 
+
         # split stack into images and heatmaps
         image = crop[:,:,:3]
         
@@ -281,7 +290,7 @@ def load_roi_dataset(config, mode = 'train', batch_size = None, video_id = None)
     ## read data files of all videos
     file_list = []
     for _video_id in video_ids.split(','):
-        file_list.extend(glob(os.path.join(config['roi_dir'],mode,'%i_*.png'%int(_video_id))))
+        file_list.extend(glob(os.path.join(config['kp_roi_dir'],mode,'%i_*.png'%int(_video_id))))
     shuffle(file_list)
     if mode == 'train' and 'data_ratio' in config and config['data_ratio']>0 and config['data_ratio']<1: #'experiment' in config and config['experiment']=='A':
         oldlen = len(file_list)
@@ -477,6 +486,7 @@ def train(config, log_images = True):
 
         if 1:#try:
             for x,y in dataset_train:
+                #print('x',x.shape,'y',y.shape,'swaps',swaps)
                 if np.random.random() < 0.5 and 'kp_hflips' in config and config['kp_hflips']:
                     x,y = model.hflip(swaps,x,y)
                 if np.random.random() < 0.5 and 'kp_vflips' in config and config['kp_vflips']:

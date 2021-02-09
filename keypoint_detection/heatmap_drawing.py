@@ -153,7 +153,7 @@ def style_augment(directory, style_directory = os.path.expanduser("~/data/multit
             subprocess.call(['python3.7',os.path.expanduser('~/github/tensorflow-2-style-transfer/main.py'),'-content_path',"%s" % f, '-style_path',"%s" % fs,'-output_dir',"%s" % directory])
         
 def write_mp(frame_data):
-    filepath = os.path.join(dbconnection.base_data_dir, "projects/%i/%i/frames/train/%s.png" % (int(frame_data['project_id']), int(frame_data['video_id']), frame_data['frame_idx']))
+    filepath = os.path.join(frame_data['data_dir'], "projects/%i/%i/frames/train/%s.png" % (int(frame_data['project_id']), int(frame_data['video_id']), frame_data['frame_idx']))
     #keypoints = [x for x in frame_data['frame_data']]
     mode = 'train' if np.random.uniform() > 0.2 else 'test'
     if os.path.isfile(filepath):
@@ -174,12 +174,12 @@ def write_mp(frame_data):
         cv.imwrite(vis_path, vis)
     return True 
 
-def randomly_drop_visualiztions(project_id, video_id, dst_dir = '/tmp/keypoint_heatmap_vis', num = -1, horistack=True,max_height=None, random_maps=False ):
+def randomly_drop_visualiztions(config, project_id, video_id, dst_dir = '/tmp/keypoint_heatmap_vis', num = -1, horistack=True,max_height=None, random_maps=False ):
     # take random frames from the db and show their labeling as gaussian heatmaps
     if not os.path.isdir(dst_dir):
         os.makedirs(dst_dir)
 
-    db = dbconnection.DatabaseConnection()
+    db = dbconnection.DatabaseConnection(file_db=os.path.join(config['data_dir'],'data.db'))
     
     keypoint_names = db.get_keypoint_names(project_id)
     frame_idxs = []
@@ -220,16 +220,13 @@ def randomly_drop_visualiztions(project_id, video_id, dst_dir = '/tmp/keypoint_h
         if not os.path.isdir(mode_dir):
             os.makedirs(mode_dir)
 
-    frames_dir = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, project_id), video_id))
+    frames_dir = os.path.join(config['data_dir'], 'projects', str(project_id), str(video_id), 'frames', 'train') #os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, project_id), video_id))
     with Pool(processes=os.cpu_count()) as pool:
         result_objs=[]
         for i, frame_idx in enumerate(frame_data.keys()):
-            obj = {'frame_idx':frame_idx,'frame_data':frame_data[frame_idx], 'frames_dir': frames_dir, 'project_id':project_id, 'video_id':video_id, 'random_maps':random_maps, 'dst_dir':dst_dir, 'keypoint_names':keypoint_names, 'horistack':horistack,'max_height':max_height}
+            obj = {'frame_idx':frame_idx,'frame_data':frame_data[frame_idx], 'frames_dir': frames_dir, 'project_id':project_id, 'video_id':video_id, 'random_maps':random_maps, 'dst_dir':dst_dir, 'keypoint_names':keypoint_names, 'horistack':horistack,'max_height':max_height, 'data_dir': config['data_dir']}
             result_objs.append(pool.apply_async(write_mp,(obj,)))
             #write_mp(obj)
 
         results = [result.get() for result in result_objs]
 
-if __name__ == '__main__':
-    project_id, video_id = 1, 1
-    randomly_drop_visualiztions(project_id, video_id, horistack = False)

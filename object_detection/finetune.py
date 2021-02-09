@@ -70,7 +70,8 @@ def get_bbox_data(config, video_ids, vis_input_data=0):
     test_gt_classes_one_hot_tensors = []
     test_gt_box_tensors = []
     
-    frames_dir = os.path.join(video.base_dir_default,'%i' % config['project_id'])
+    frames_dir = os.path.join(config['data_dir'],'projects','%i' % config['project_id'])
+    db = dbconnection.DatabaseConnection(file_db=os.path.join(config['data_dir'],'data.db'))
     frame_bboxes = {}
     for _video_id in video_ids.split(','):
         _video_id = int(_video_id)
@@ -92,7 +93,6 @@ def get_bbox_data(config, video_ids, vis_input_data=0):
     while not os.path.isfile(sample_fim):
         k = int(np.random.uniform(len(list(frame_bboxes.keys()))))
         sample_fim = os.path.join(frames_dir, video_ids.split(',')[0],'frames','train','%s.png' % list(frame_bboxes.keys())[k].split('_')[1])
-
     H,W,_ = cv.imread( sample_fim ).shape
     frames = list(frame_bboxes.keys())
     #random.Random(4).shuffle(frames)

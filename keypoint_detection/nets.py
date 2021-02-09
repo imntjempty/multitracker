@@ -1,5 +1,21 @@
 import tensorflow as tf 
 import tensorflow_addons as tfa 
+from keras.engine import InputSpec
+
+class ReflectionPadding2D(tf.keras.layers.Layer):
+    ### https://stackoverflow.com/a/50679524
+    def __init__(self, padding=(1, 1), **kwargs):
+        self.padding = tuple(padding)
+        super(ReflectionPadding2D, self).__init__(**kwargs)
+
+    def get_config(self):
+        config = super().get_config().copy()
+        config.update({'padding':self.padding})
+        return config
+
+    def call(self, x, mask=None):
+        w_pad,h_pad = self.padding
+        return tf.pad(x, [[0,0], [h_pad,h_pad], [w_pad,w_pad], [0,0] ], 'REFLECT')
 
 def upsample(nfilters, kernel_size, strides=2, dilation = (1,1), norm_type='batchnorm', act = tf.keras.layers.Activation('relu')):
     initializer = ['he_normal', tf.random_normal_initializer(0., 0.02)][0]
@@ -11,10 +27,11 @@ def upsample(nfilters, kernel_size, strides=2, dilation = (1,1), norm_type='batc
         func = tf.keras.layers.Conv2DTranspose
 
     result = tf.keras.Sequential()
+    result.add(ReflectionPadding2D(padding=(int(kernel_size/2.),int(kernel_size/2.))))
     result.add(
         func(nfilters, kernel_size, strides=strides,
             dilation_rate=dilation,
-            padding='same',
+            padding='valid',
             kernel_regularizer=tf.keras.regularizers.l2(0.0001),
             kernel_initializer=initializer))
 

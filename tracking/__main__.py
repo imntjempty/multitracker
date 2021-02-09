@@ -11,6 +11,7 @@ import numpy as np
 import tensorflow as tf 
 tf.get_logger().setLevel('INFO')
 tf.get_logger().setLevel('ERROR')
+import subprocess
 from glob import glob 
 from random import shuffle 
 import time 
@@ -39,7 +40,25 @@ from multitracker.tracking import upperbound_tracker
 def main(args):
     os.environ['MULTITRACKER_DATA_DIR'] = args.data_dir
     from multitracker.be import dbconnection
-    db = dbconnection.DatabaseConnection()
+    
+    if args.minutes>0 or args.video_resolution is not None:
+        tpreprocessvideostart = time.time()
+        sscale = args.video_resolution if args.video_resolution is not None else ''
+        smins = str(args.minutes) if args.minutes>0 else ''
+        fvo = args.video[:-4] + sscale + smins + args.video[-4:]
+        if not os.path.isfile(fvo):
+            commands = ['ffmpeg']
+            if args.minutes>0:
+                commands.extend(['-t',str(int(60.*args.minutes))])
+            commands.extend(['-i',args.video])
+            if args.video_resolution is not None:
+                commands.extend(['-vf','scale=%s'%args.video_resolution.replace('x',':')])
+            commands.extend([fvo])
+            print('[*] preprocess video', ' '.join(commands))
+            subprocess.call(commands)
+            tpreprocessvideoend = time.time()
+            print('[*] preprocessing of video to %s took %f seconds' % (fvo, tpreprocessvideoend-tpreprocessvideostart))
+        args.video = fvo
 
     tstart = time.time()
     config = model.get_config(project_id = args.project_id)
@@ -78,6 +97,13 @@ def main(args):
     if args.delete_all_checkpoints:
         if os.path.isdir(os.path.expanduser('~/checkpoints/multitracker')):
             shutil.rmtree(os.path.expanduser('~/checkpoints/multitracker'))
+    if args.data_dir:
+        db = dbconnection.DatabaseConnection(file_db=os.path.join(args.data_dir,'data.db'))
+        config['data_dir'] = args.data_dir 
+        config['kp_data_dir'] = os.path.join(args.data_dir , 'projects/%i/data' % config['project_id'])
+        config['kp_roi_dir'] = os.path.join(args.data_dir , 'projects/%i/data_roi' % config['project_id'])
+        config['keypoint_names'] = db.get_keypoint_names(config['project_id'])
+        config['project_name'] = db.get_project_name(config['project_id'])
 
     # <train models>
     # 1) animal bounding box finetuning -> trains and inferences 
@@ -141,6 +167,7 @@ def main(args):
     nn_budget = None # Maximum size of the appearance descriptors gallery. If None, no budget is enforced.
     display = True # dont write vis images
 
+    ttrack_start = time.time()
     if config['tracking_method'] == 'DeepSORT':
         deep_sort_app.run(config, detection_model, encoder_model, keypoint_model,  
             args.min_confidence_boxes, args.min_confidence_keypoints, nms_max_overlap, max_cosine_distance, nn_budget, display)
@@ -148,10 +175,10 @@ def main(args):
         upperbound_tracker.run(config, detection_model, encoder_model, keypoint_model, args.min_confidence_boxes, args.min_confidence_keypoints  )
     elif config['tracking_method'] == 'VIoU':
         viou_tracker.run(config, detection_model, encoder_model, keypoint_model, args.min_confidence_boxes, args.min_confidence_keypoints  )
-
+    ttrack_end = time.time()
     video_file_out = inference.get_video_output_filepath(config)
-    convert_video_h265(video_file_out.replace('.mp4','.avi'), video_file_out)
-    print('[*] done tracking')
+    #convert_video_h265(video_file_out.replace('.mp4','.avi'), video_file_out)
+    print('[*] done tracking after %f minutes. outputting file' % float(int((ttrack_end-ttrack_start)*10.)/10.),video_file_out)
     
 def convert_video_h265(video_in, video_out):
     import subprocess 
@@ -169,7 +196,7 @@ if __name__ == '__main__':
     parser.add_argument('--project_id',required=True,type=int)
     parser.add_argument('--train_video_ids',default='')
     parser.add_argument('--test_video_ids',default='')
-    parser.add_argument('--minutes',required=False,default=0.0,type=float)
+    parser.add_argument('--minutes',required=False,default=0.0,type=float,help="cut the video to the first n minutes, eg 2.5 cuts after the first 150seconds.")
     parser.add_argument('--min_confidence_boxes',required=False,default=0.5,type=float)
     parser.add_argument('--min_confidence_keypoints',required=False,default=0.5,type=float)
     parser.add_argument('--inference_objectdetection_batchsize',required=False,default=0,type=int)
@@ -186,6 +213,7 @@ if __name__ == '__main__':
     parser.add_argument('--upper_bound',required=False,default=0,type=int)
     parser.add_argument('--data_dir', required=False, default = os.path.expanduser('~/data/multitracker'))
     parser.add_argument('--delete_all_checkpoints', required=False, action="store_true")
+    parser.add_argument('--video_resolution',default=None, help='resolution the video is downscaled to before processing to reduce runtime, eg 640x480. default no downscaling')
     
     args = parser.parse_args()
     assert args.tracking_method in ['DeepSORT', 'VIoU', 'UpperBound']

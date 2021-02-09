@@ -76,7 +76,7 @@ class NoVisualization(object):
         pass
 
     def run(self, frame_callback):
-        while self.frame_idx <= self.last_idx:
+        while 1:#self.frame_idx <= self.last_idx:
             frame_callback(self, self.frame_idx)
             self.frame_idx += 1
 
@@ -86,24 +86,20 @@ class Visualization(object):
     This class shows tracking output in an OpenCV image viewer.
     """
 
-    def __init__(self, seq_info, update_ms, config):
-        image_shape = seq_info["image_size"][::-1]
+    def __init__(self, image_shape, update_ms, config):
+        self.image_shape = image_shape
         aspect_ratio = float(image_shape[1]) / image_shape[0]
         #image_shape = 1024, int(aspect_ratio * 1024)
         self.viewer = ImageViewer(
-            update_ms, image_shape, "Figure %s" % seq_info["sequence_name"])
+            update_ms, tuple(image_shape), "Track Visualization")
         self.viewer.thickness = 2
-        self.frame_idx = int(seq_info["min_frame_idx"])
-        self.last_idx = int(seq_info["max_frame_idx"])
+        self.frame_idx = 0
         self.config = config
 
     def run(self, frame_callback):
         self.viewer.run(lambda: self._update_fun(frame_callback))
 
     def _update_fun(self, frame_callback):
-        #print('[act]',self.frame_idx, self.last_idx)
-        if self.frame_idx > self.last_idx:
-            return False  # Terminate
         frame_callback(self, self.frame_idx)
         self.frame_idx += 1
         return True

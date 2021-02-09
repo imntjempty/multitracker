@@ -56,13 +56,14 @@ def gather_sequence_info(config):
         * max_frame_idx: Index of the last frame.
 
     """
-    image_dir = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['train_video_ids'].split(',')[0]),'train')
+    #image_dir = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['train_video_ids'].split(',')[0]),'train')
+    
     image_filenames = {
         1: sorted(glob(os.path.join(image_dir,'*.png')))
     }
 
     groundtruth = None
-    
+    print('image_filenames',image_filenames)
     min_frame_idx = image_filenames[1][0].split('/')[-1].split('.')[0]
     max_frame_idx = image_filenames[1][-1].split('/')[-1].split('.')[0]
     print('[*] min_frame_idx',min_frame_idx,'max_frame_idx',max_frame_idx)
@@ -237,7 +238,7 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence, 
         video_reader = None 
     
     [Hframe,Wframe,_] = cv.imread(glob(os.path.join(os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['train_video_ids'].split(',')[0]),'test'),'*.png'))[0]).shape
-    crop_dim = roi_segm.get_roi_crop_dim(config['project_id'], config['test_video_ids'].split(',')[0],Hframe)
+    crop_dim = roi_segm.get_roi_crop_dim(config['data_dir'], config['project_id'], config['test_video_ids'].split(',')[0],Hframe)
     video_file_out = inference.get_video_output_filepath(config)
     if os.path.isfile(video_file_out): os.remove(video_file_out)
     import skvideo.io

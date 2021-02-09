@@ -190,7 +190,7 @@ class UpperBoundTracker(Tracker):
                         # check if appropiate minimum distance to other track before initiating
                         other_track_near = False 
                         for tbox in self.trackers.getObjects():
-                            other_track_near = other_track_near or np.linalg.norm(dbox-tbox) < self.maximum_other_track_init_distance
+                            other_track_near = other_track_near or np.linalg.norm(dbox-tbox) < self.maximum_other_track_init_distance*frame.shape[0]/1080.
                                 
                         if not other_track_near:
                             # add new track
@@ -219,7 +219,7 @@ class UpperBoundTracker(Tracker):
                             # replace tracker in multilist by init again with new general bounding box
                             obs = self.trackers.getObjects()
                             #if nearest_inactive_track_idx >= 0:
-                            if nearest_inactive_track_distance < self.maximum_nearest_inactive_track_distance:
+                            if nearest_inactive_track_distance < self.maximum_nearest_inactive_track_distance * frame.shape[0]/1000.:
                                 ## the old estimation was obvisiouly wrong, so correct last means and add interpolated track
                                 try:
                                     self.last_means[nearest_inactive_track_idx] = self.last_means[nearest_inactive_track_idx][:-self.steps_without_detection[nearest_inactive_track_idx]]
@@ -268,9 +268,9 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
     for _ in range(5):
         ret, frame = video_reader.read()
     [Hframe,Wframe,_] = frame.shape
-    crop_dim = roi_segm.get_roi_crop_dim(config['project_id'], config['test_video_ids'].split(',')[0],Hframe)
+    crop_dim = roi_segm.get_roi_crop_dim(config['data_dir'], config['project_id'], config['test_video_ids'].split(',')[0],Hframe)
     total_frame_number = int(video_reader.get(cv.CAP_PROP_FRAME_COUNT))
-    print('[*] total_frame_number',total_frame_number)
+    print('[*] total_frame_number',total_frame_number,'Hframe,Wframe',Hframe,Wframe,'crop_dim',crop_dim)
     
     video_file_out = inference.get_video_output_filepath(config)
     if config['file_tracking_results'] is None:
@@ -285,8 +285,9 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
                                 #other options see https://trac.ffmpeg.org/wiki/Encode/H.264
     }) 
 
-    seq_info = deep_sort_app.gather_sequence_info(config)
-    visualizer = visualization.Visualization(seq_info, update_ms=5, config=config)
+    #seq_info = deep_sort_app.gather_sequence_info(config)
+    
+    visualizer = visualization.Visualization([Wframe, Hframe], update_ms=5, config=config)
     print('[*] writing video file %s' % video_file_out)
     
     ## initialize tracker for boxes and keypoints
@@ -305,6 +306,7 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
     # fill up initial frame buffer for batch inference
     for ib in range(config['inference_objectdetection_batchsize']-1):
         ret, frame = video_reader.read()
+        #cv.imshow('huhu',frame); cv.waitKey(10)
         frame_buffer.append(frame[:,:,::-1]) # trained on TF RGB, cv2 yields BGR
 
     #while running: #video_reader.isOpened():
@@ -333,7 +335,7 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
                 frames_tensor = np.array(list(frame_buffer)).astype(np.float32)
                 # fill up frame buffer and then detect boxes for complete frame buffer
                 t_odet_inf_start = time.time()
-                batch_detections = inference.detect_batch_bounding_boxes(config, detection_model, frames_tensor, seq_info, min_confidence_boxes)
+                batch_detections = inference.detect_batch_bounding_boxes(config, detection_model, frames_tensor, min_confidence_boxes)
                 [detection_buffer.append(batch_detections[ib]) for ib in range(config['inference_objectdetection_batchsize'])]
                 t_odet_inf_end = time.time()
                 if frame_idx < 300:
@@ -344,7 +346,7 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
                 #[keypoint_buffer.append(batch_keypoints[ib]) for ib in range(config['inference_objectdetection_batchsize'])]
                 t_kp_inf_end = time.time()
                 if frame_idx < 300:
-                    print('  keypoint ms',(t_kp_inf_end-t_kp_inf_start)*1000.,"batch", len(keypoint_buffer),(t_kp_inf_end-t_kp_inf_start)*1000./ len(keypoint_buffer) ) #   roughly 70ms
+                    print('  keypoint ms',(t_kp_inf_end-t_kp_inf_start)*1000.,"batch", len(keypoint_buffer),(t_kp_inf_end-t_kp_inf_start)*1000./ (1e-6+len(keypoint_buffer)) ) #   roughly 70ms
             # if detection buffer not empty use preloaded frames and preloaded detections
             frame = frame_buffer.popleft()
             detections = detection_buffer.popleft()

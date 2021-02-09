@@ -109,8 +109,9 @@ class ImageViewer(object):
         self.image = np.zeros(self._window_shape + (3, ), dtype=np.uint8)
         self._color = (0, 0, 0)
         self.text_color = (255, 255, 255)
-        self.thickness = 1
-
+        self.thickness = 1 + int(self.image.shape[0]/500.)
+        self.font_scale = self.image.shape[0]/1000.
+        
     @property
     def color(self):
         return self._color
@@ -143,15 +144,16 @@ class ImageViewer(object):
         pt2 = int(x + w), int(y + h)
         cv2.rectangle(self.image, pt1, pt2, self._color, self.thickness)
         if label is not None:
+            
             text_size = cv2.getTextSize(
-                label, cv2.FONT_HERSHEY_PLAIN, 1, self.thickness)
+                label, cv2.FONT_HERSHEY_PLAIN, self.font_scale, self.thickness)
 
             center = pt1[0] + 5, pt1[1] + 5 + text_size[0][1]
             pt2 = pt1[0] + 10 + text_size[0][0], pt1[1] + 10 + \
                 text_size[0][1]
             cv2.rectangle(self.image, pt1, pt2, self._color, -1)
             cv2.putText(self.image, label, center, cv2.FONT_HERSHEY_PLAIN,
-                        1, (255, 255, 255), self.thickness)
+                        self.font_scale, (255, 255, 255), self.thickness)
 
     def circle(self, x, y, radius, label=None):
         """Draw a circle.
