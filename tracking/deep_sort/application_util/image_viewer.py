@@ -110,7 +110,7 @@ class ImageViewer(object):
         self._color = (0, 0, 0)
         self.text_color = (255, 255, 255)
         self.thickness = 1 + int(self.image.shape[0]/500.)
-        self.font_scale = self.image.shape[0]/1000.
+        self.font_scale = self.image.shape[0]/1250.
         
     @property
     def color(self):

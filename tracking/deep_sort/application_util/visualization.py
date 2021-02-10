@@ -132,7 +132,7 @@ class Visualization(object):
             except:
                 _active = int(track.is_confirmed())
                 _score = ""
-            label = 'id: %s M: %i A: %i S: %s' % (str(track.track_id), track.time_since_update, _active, _score)
+            label = 'id:%sM:%iA:%iS:%s' % (str(track.track_id), track.time_since_update, _active, _score)
             self.viewer.rectangle(
                 *np.array(track.to_tlwh()).astype(np.int), label=label)
             # self.viewer.gaussian(track.mean[:2], track.covariance[:2, :2],
