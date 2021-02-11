@@ -20,6 +20,7 @@ from multitracker.tracking import inference
 from multitracker.tracking.deep_sort import deep_sort_app
 from multitracker.tracking.deep_sort.application_util import visualization
 from multitracker.tracking.keypoint_tracking import tracker as keypoint_tracking
+from multitracker.keypoint_detection import roi_segm
 
 def iou(bbox1, bbox2):
     """
@@ -249,8 +250,6 @@ def run(config, detection_model, encoder_model, keypoint_model,  min_confidence_
     total_frame_number = int(video_reader.get(cv.CAP_PROP_FRAME_COUNT))
     print('[*] total_frame_number',total_frame_number)
 
-    [Hframe,Wframe,_] = cv.imread(glob(os.path.join(os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), '*'),'test'),'*.png'))[0]).shape
-    crop_dim = roi_segm.get_roi_crop_dim(config['data_dir'], config['project_id'], config['test_video_ids'].split(',')[0],Hframe)
     video_file_out = inference.get_video_output_filepath(config)
     if config['file_tracking_results'] is None:
         config['file_tracking_results'] = video_file_out.replace('.%s'%video_file_out.split('.')[-1],'.csv')
@@ -264,8 +263,6 @@ def run(config, detection_model, encoder_model, keypoint_model,  min_confidence_
                                 #other options see https://trac.ffmpeg.org/wiki/Encode/H.264
     }) 
 
-    seq_info = deep_sort_app.gather_sequence_info(config)
-    visualizer = visualization.Visualization(seq_info, update_ms=5, config=config)
     print('[*] writing video file %s' % video_file_out)
     
     ## initialize tracker for boxes and keypoints
@@ -283,14 +280,17 @@ def run(config, detection_model, encoder_model, keypoint_model,  min_confidence_
     # ignore first 5 frames
     for _ in range(5):
         _, _ = video_reader.read()
+    _, frame = video_reader.read()
+    [Hframe,Wframe,_] = frame.shape
+    visualizer = visualization.Visualization([Wframe, Hframe], update_ms=5, config=config)
+    crop_dim = roi_segm.get_roi_crop_dim(config['data_dir'], config['project_id'], config['test_video_ids'].split(',')[0],Hframe)
     
     # fill up initial frame buffer for batch inference
-    for ib in range(config['inference_objectdetection_batchsize']):
+    for ib in range(config['inference_objectdetection_batchsize']-1):
         ret, frame = video_reader.read()
         frame_buffer.append(frame[:,:,::-1]) # trained on TF RGB, cv2 yields BGR
 
-    while running: #video_reader.isOpened():
-        frame_idx += 1 
+    for frame_idx in tqdm(range(total_frame_number)):
         config['count'] = frame_idx
         # if buffer not empty use preloaded frames and preloaded detections
         
@@ -310,7 +310,8 @@ def run(config, detection_model, encoder_model, keypoint_model,  min_confidence_
                 dettensor = np.array(list(frame_buffer)).astype(np.float32)
                 batch_detections = inference.detect_batch_bounding_boxes(config, detection_model, dettensor, min_confidence_boxes)
                 [detection_buffer.append(batch_detections[ib]) for ib in range(config['inference_objectdetection_batchsize'])]
-
+                keypoint_buffer = inference.inference_batch_keypoints(config, keypoint_model, crop_dim, dettensor, detection_buffer, min_confidence_keypoints)
+                
             frame = frame_buffer.popleft()
             detections = detection_buffer.popleft()
                 
@@ -327,7 +328,7 @@ def run(config, detection_model, encoder_model, keypoint_model,  min_confidence_
             if keypoint_model is None:
                 keypoints, tracked_keypoints = [], []
             else:
-                keypoints = inference.inference_keypoints(config, frame, detections, keypoint_model, crop_dim, min_confidence_keypoints)
+                keypoints = keypoint_buffer.popleft()
                 # update tracked keypoints with new detections
                 tracked_keypoints = keypoint_tracker.update(keypoints)
 
@@ -338,7 +339,7 @@ def run(config, detection_model, encoder_model, keypoint_model,  min_confidence_
                 result = [frame_idx, track.track_id, center0, center1, bbox[0], bbox[1], bbox[2], bbox[3], track.is_confirmed(), track.time_since_update]
                 results.append(result)'''
             
-            print('[%i/%i] - %i detections. %i keypoints' % (config['count'], total_frame_number, len(detections), len(keypoints)),[kp for kp in keypoints])
+            #print('[%i/%i] - %i detections. %i keypoints' % (config['count'], total_frame_number, len(detections), len(keypoints)),[kp for kp in keypoints])
             out = deep_sort_app.visualize(visualizer, frame, tracker, detections, keypoint_tracker, keypoints, tracked_keypoints, crop_dim, results, sketch_file=config['sketch_file'])
             video_writer.writeFrame(cv.cvtColor(out, cv.COLOR_BGR2RGB))
             #video_writer.writeFrame(cv.cvtColor(out, cv.COLOR_BGR2RGB)) #out[:,:,::-1])

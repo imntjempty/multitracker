@@ -158,11 +158,9 @@ def inference_batch_keypoints(config, keypoint_model, crop_dim, frames_tensor, d
     centers = [] 
     lens = []
     y_kpheatmaps = {}
-    #print('frames_tensor',frames_tensor.shape)
     for j in range(frames_tensor.shape[0]):
         frame = frames_tensor[j,:,:,:]
         detections = detection_buffer[j]
-        #print(j, 'detections',len(detections))
         lens.append(len(detections))
         for i, detection in enumerate(detections):
             x1,y1,x2,y2 = detection.to_tlbr()
@@ -179,7 +177,6 @@ def inference_batch_keypoints(config, keypoint_model, crop_dim, frames_tensor, d
             rois = tf.stack(rois,axis=0)
             #print('   rois',j,rois.shape,frames_tensor.shape,'len(detection_buffer)',len(detection_buffer),'len(detections)',len(detections))
             if rois.shape[0] > 0:
-
                 yroi = keypoint_model(rois, training=False)
                 if len(yroi[-1].shape) == 4:
                     yroi = yroi[-1]
