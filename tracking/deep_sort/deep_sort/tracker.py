@@ -131,10 +131,10 @@ class Tracker:
         ## we can hard assign unmatched tracks to unmatched detections 
         ## and delete the other unmatched detections
         
-        if len(unmatched_tracks) > 0: print('unmatched_tracks',unmatched_tracks)
-        if len(unmatched_detections) > 0: print('unmatched_detections',unmatched_detections)
         
         if 0:
+            if len(unmatched_tracks) > 0: print('unmatched_tracks',unmatched_tracks)
+            if len(unmatched_detections) > 0: print('unmatched_detections',unmatched_detections)
             for tt in unmatched_tracks:
                 print('unmatched track',self.tracks[tt].mean)
             for tt in unmatched_detections:

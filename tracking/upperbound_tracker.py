@@ -285,8 +285,6 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
                                 #other options see https://trac.ffmpeg.org/wiki/Encode/H.264
     }) 
 
-    #seq_info = deep_sort_app.gather_sequence_info(config)
-    
     visualizer = visualization.Visualization([Wframe, Hframe], update_ms=5, config=config)
     print('[*] writing video file %s' % video_file_out)
     
@@ -306,7 +304,6 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
     # fill up initial frame buffer for batch inference
     for ib in range(config['inference_objectdetection_batchsize']-1):
         ret, frame = video_reader.read()
-        #cv.imshow('huhu',frame); cv.waitKey(10)
         frame_buffer.append(frame[:,:,::-1]) # trained on TF RGB, cv2 yields BGR
 
     #while running: #video_reader.isOpened():
@@ -354,21 +351,12 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
             boxes = np.array([d.tlwh for d in detections])
             scores = np.array([d.confidence for d in detections])
             features = np.array([d.feature for d in detections])
-            #indices = preprocessing.non_max_suppression(
-            #    boxes, nms_max_overlap, scores)
-            #detections = [detections[i] for i in indices]
-            #print('[*] found %i detections' % len(detections))
             # Update tracker
             tracker.step({'img':frame,'detections':[boxes, scores, features], 'frame_idx': frame_idx})
 
-            if 1:
-                keypoints = keypoint_buffer.popleft()
-            else:
-                t_keypoint_inf_start = time.time()
-                keypoints = inference.inference_keypoints(config, frame, tracker.tracks , keypoint_model, crop_dim, min_confidence_keypoints)
-                t_keypoint_inf_end = time.time()
-                #print('  keypoints ms',(t_keypoint_inf_end-t_keypoint_inf_start)*1000. )    roughly 70ms
-                # update tracked keypoints with new detections
+            keypoints = keypoint_buffer.popleft()
+            
+            # update tracked keypoints with new detections
             tracked_keypoints = keypoint_tracker.update(keypoints)
 
             # Store results.        

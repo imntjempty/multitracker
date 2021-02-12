@@ -130,6 +130,7 @@ def main(args):
         config_autoencoder['project_id'] = config['project_id']
         config_autoencoder['video_ids'] = natsorted(list(set([int(iid) for iid in config['train_video_ids'].split(',')]+[int(iid) for iid in config['test_video_ids'].split(',')])))
         config_autoencoder['project_name'] = config['project_name']
+        config_autoencoder['data_dir'] = config['data_dir']
         config['autoencoder_model'] = autoencoder.train(config_autoencoder)
     print('[*] trained autoencoder model',config['autoencoder_model'])
 
@@ -165,12 +166,12 @@ def main(args):
     nms_max_overlap = 1.0 # Non-maxima suppression threshold: Maximum detection overlap
     max_cosine_distance = 0.2 # Gating threshold for cosine distance metric (object appearance).
     nn_budget = None # Maximum size of the appearance descriptors gallery. If None, no budget is enforced.
-    display = True # dont write vis images
-
+    print(4*'\n',config)
+    
     ttrack_start = time.time()
     if config['tracking_method'] == 'DeepSORT':
         deep_sort_app.run(config, detection_model, encoder_model, keypoint_model,  
-            args.min_confidence_boxes, args.min_confidence_keypoints, nms_max_overlap, max_cosine_distance, nn_budget, display)
+            args.min_confidence_boxes, args.min_confidence_keypoints, nms_max_overlap, max_cosine_distance, nn_budget)
     elif config['tracking_method'] == 'UpperBound':
         upperbound_tracker.run(config, detection_model, encoder_model, keypoint_model, args.min_confidence_boxes, args.min_confidence_keypoints  )
     elif config['tracking_method'] == 'VIoU':

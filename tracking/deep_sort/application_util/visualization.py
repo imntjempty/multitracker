@@ -53,34 +53,6 @@ def create_unique_color_uchar(tag, hue_step=0.41):
     return int(255*r), int(255*g), int(255*b)
 
 
-class NoVisualization(object):
-    """
-    A dummy visualization object that loops through all frames in a given
-    sequence to update the tracker without performing any visualization.
-    """
-
-    def __init__(self, seq_info):
-        self.frame_idx = int(seq_info["min_frame_idx"])
-        self.last_idx = int(seq_info["max_frame_idx"])
-
-    def set_image(self, image):
-        pass
-
-    def draw_groundtruth(self, track_ids, boxes):
-        pass
-
-    def draw_detections(self, detections):
-        pass
-
-    def draw_trackers(self, trackers):
-        pass
-
-    def run(self, frame_callback):
-        while 1:#self.frame_idx <= self.last_idx:
-            frame_callback(self, self.frame_idx)
-            self.frame_idx += 1
-
-
 class Visualization(object):
     """
     This class shows tracking output in an OpenCV image viewer.

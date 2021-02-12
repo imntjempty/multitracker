@@ -265,7 +265,7 @@ def detect_batch_bounding_boxes(config, detection_model, frames, thresh_detectio
     return results
 
 
-def detect_frame_boundingboxes(config, detection_model, encoder_model, seq_info, frame, frame_idx, thresh_detection = 0.3):
+def detect_frame_boundingboxes(config, detection_model, encoder_model, frame, frame_idx, thresh_detection = 0.3):
     inp_tensor = frame #cv.imread(frame_file)
     H,W = inp_tensor.shape[:2]
     inp_tensor = cv.resize(inp_tensor,(config['object_detection_resolution'][0],config['object_detection_resolution'][1]))
@@ -306,8 +306,8 @@ def detect_frame_boundingboxes(config, detection_model, encoder_model, seq_info,
 
 def load_autoencoder_feature_extractor(config):
     ## feature extractor
-    config.update({'img_height':640, 'img_width': 640})
-    inputs = tf.keras.layers.Input(shape=[config['img_height'], config['img_width'], 3])
+    config_autoencoder = autoencoder.get_autoencoder_config()
+    inputs = tf.keras.layers.Input(shape=[config_autoencoder['img_height'], config_autoencoder['img_width'], 3])
     feature_extractor,encoder = autoencoder.Encoder(inputs)
     encoder_model = tf.keras.Model(inputs = inputs, outputs = [feature_extractor,encoder])
     ckpt = tf.train.Checkpoint(encoder_model=encoder_model)

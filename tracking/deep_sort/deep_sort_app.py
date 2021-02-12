@@ -7,9 +7,11 @@ import argparse
 import os
 from glob import glob 
 import subprocess
-
+from collections import deque
 import cv2 as cv 
+import time 
 import numpy as np
+from tqdm import tqdm
 import tensorflow as tf 
 assert tf.__version__.startswith('2.'), 'YOU MUST INSTALL TENSORFLOW 2.X'
 print('[*] TF version',tf.__version__)
@@ -29,61 +31,6 @@ from multitracker.be import video
 from multitracker import util 
 
 colors = util.get_colors()
-
-def gather_sequence_info(config):
-    """Gather sequence information, such as image filenames, detections,
-    groundtruth (if available).
-
-    Parameters
-    ----------
-    sequence_dir : str
-        Path to the MOTChallenge sequence directory.
-    detection_file : str
-        Path to the detection file.
-
-    Returns
-    -------
-    Dict
-        A dictionary of the following sequence information:
-
-        * sequence_name: Name of the sequence
-        * image_filenames: A dictionary that maps frame indices to image
-          filenames.
-        * detections: A numpy array of detections in MOTChallenge format.
-        * groundtruth: A numpy array of ground truth in MOTChallenge format.
-        * image_size: Image size (height, width).
-        * min_frame_idx: Index of the first frame.
-        * max_frame_idx: Index of the last frame.
-
-    """
-    #image_dir = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['train_video_ids'].split(',')[0]),'train')
-    
-    image_filenames = {
-        1: sorted(glob(os.path.join(image_dir,'*.png')))
-    }
-
-    groundtruth = None
-    print('image_filenames',image_filenames)
-    min_frame_idx = image_filenames[1][0].split('/')[-1].split('.')[0]
-    max_frame_idx = image_filenames[1][-1].split('/')[-1].split('.')[0]
-    print('[*] min_frame_idx',min_frame_idx,'max_frame_idx',max_frame_idx)
-
-    if len(image_filenames) > 0:
-        image_size = cv.imread(image_filenames[list(image_filenames.keys())[0]][0] ,cv.IMREAD_GRAYSCALE).shape
-    else:
-        image_size = None
-
-    feature_dim = 128#detections.shape[1] - 10 if detections is not None else 0
-    seq_info = {
-        "sequence_name": config['project_name'],
-        "image_filenames": image_filenames,
-        "image_size": image_size,
-        "min_frame_idx": min_frame_idx,
-        "max_frame_idx": max_frame_idx,
-        "feature_dim": feature_dim
-    }
-    return seq_info
-
 
 def create_detections(detection_mat, frame_idx, min_height=0):
     """Create detections for given frame index from the raw detection matrix.
@@ -212,12 +159,8 @@ def visualize(vis, frame, tracker, detections, keypoint_tracker, keypoints, trac
     out = append_crop_mosaic(vis.viewer.image,vis_crops)
     return out 
 
-def run(config, detection_model, encoder_model, keypoint_model, min_confidence, min_confidence_keypoints,  
-        nms_max_overlap, max_cosine_distance,
-        nn_budget, display):
-
-    seq_info = gather_sequence_info(config)
-    #print('seq_info',seq_info.keys())
+def run(config, detection_model, encoder_model, keypoint_model, min_confidence_boxes, min_confidence_keypoints,  
+        nms_max_overlap, max_cosine_distance,nn_budget):
     
     max_age = 30 
     #max_age = 5
@@ -229,16 +172,17 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence, 
     
     results = []
 
-    if 'video' in config and config['video'] is not None:
-        video_reader = cv.VideoCapture( config['video'] )
-        # ignore first 5 frames
-        for _ in range(5):
-            _, _ = video_reader.read()
-    else:
-        video_reader = None 
+
+    video_reader = cv.VideoCapture( config['video'] )
+    # ignore first 5 frames
+    for _ in range(5):
+        ret, frame = video_reader.read()
+    [Hframe,Wframe,_] = frame.shape
+    visualizer = visualization.Visualization([Wframe, Hframe], update_ms=5, config=config)
     
-    [Hframe,Wframe,_] = cv.imread(glob(os.path.join(os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['train_video_ids'].split(',')[0]),'test'),'*.png'))[0]).shape
     crop_dim = roi_segm.get_roi_crop_dim(config['data_dir'], config['project_id'], config['test_video_ids'].split(',')[0],Hframe)
+    total_frame_number = int(video_reader.get(cv.CAP_PROP_FRAME_COUNT))
+    print('total_frame_number',total_frame_number,'crop_dim',crop_dim)
     video_file_out = inference.get_video_output_filepath(config)
     if os.path.isfile(video_file_out): os.remove(video_file_out)
     import skvideo.io
@@ -253,23 +197,59 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence, 
     keypoint_tracker = keypoint_tracking.KeypointTracker()
     
 
-    def frame_callback(vis, frame_idx):
-        global count_failed
-        global count_ok
-        #print("Processing frame %05d" % frame_idx)
-        frame_directory = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), config['train_video_ids'].split(',')[0]),'train')
-        frame_file = os.path.join(frame_directory, '%05d.png' % frame_idx)
-        
-        if video_reader is not None and video_reader.isOpened():
+    frame_idx = -1
+    frame_buffer = deque()
+    detection_buffer = deque()
+    keypoint_buffer = deque()
+    results = []
+    running = True 
+    scale = None 
+    
+    tbenchstart = time.time()
+    # fill up initial frame buffer for batch inference
+    for ib in range(config['inference_objectdetection_batchsize']-1):
+        ret, frame = video_reader.read()
+        frame_buffer.append(frame[:,:,::-1]) # trained on TF RGB, cv2 yields BGR
+
+    for frame_idx in tqdm(range(total_frame_number)):
+        config['count'] = frame_idx
+        if frame_idx == 10:
+            tbenchstart = time.time()
+
+        # fill up frame buffer as you take something from it to reduce lag 
+        if video_reader.isOpened():
             ret, frame = video_reader.read()
+            if frame is not None:
+                frame_buffer.append(frame[:,:,::-1]) # trained on TF RGB, cv2 yields BGR
+            else:
+                running = False
+                return True  
         else:
-            frame = cv.imread(frame_file)
-        frame_, detections = inference.detect_frame_boundingboxes(config, detection_model, encoder_model, seq_info, frame, frame_idx)
-            
-        detections = [d for d in detections if d.confidence >= min_confidence]
-        #print('[*] processing frame',frame_idx,'with %i detections ' % len(detections))
-        #if len(detections) > 10:
-        #    detections = []
+            running = False 
+            return True 
+        
+        showing = True # frame_idx % 1000 == 0
+
+    
+        if len(detection_buffer) == 0:
+            frames_tensor = np.array(list(frame_buffer)).astype(np.float32)
+            # fill up frame buffer and then detect boxes for complete frame buffer
+            t_odet_inf_start = time.time()
+            batch_detections = inference.detect_batch_bounding_boxes(config, detection_model, frames_tensor, min_confidence_boxes)
+            [detection_buffer.append(batch_detections[ib]) for ib in range(config['inference_objectdetection_batchsize'])]
+            t_odet_inf_end = time.time()
+            if frame_idx < 300:
+                print('  object detection ms',(t_odet_inf_end-t_odet_inf_start)*1000.,"batch", len(batch_detections),len(detection_buffer), (t_odet_inf_end-t_odet_inf_start)*1000./len(batch_detections) ) #   roughly 70ms
+
+            t_kp_inf_start = time.time()
+            keypoint_buffer = inference.inference_batch_keypoints(config, keypoint_model, crop_dim, frames_tensor, detection_buffer, min_confidence_keypoints)
+            #[keypoint_buffer.append(batch_keypoints[ib]) for ib in range(config['inference_objectdetection_batchsize'])]
+            t_kp_inf_end = time.time()
+            if frame_idx < 300:
+                print('  keypoint ms',(t_kp_inf_end-t_kp_inf_start)*1000.,"batch", len(keypoint_buffer),(t_kp_inf_end-t_kp_inf_start)*1000./ (1e-6+len(keypoint_buffer)) ) #   roughly 70ms
+        # if detection buffer not empty use preloaded frames and preloaded detections
+        frame = frame_buffer.popleft()
+        detections = detection_buffer.popleft()
 
         # Run non-maxima suppression.
         boxes = np.array([d.tlwh for d in detections])
@@ -282,12 +262,9 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence, 
         tracker.predict()
         tracker.update(detections)
         
-        if keypoint_model is None:
-            keypoints, tracked_keypoints = [], []
-        else:
-            keypoints = inference.inference_keypoints(config, frame, detections, keypoint_model, crop_dim, min_confidence_keypoints)
-            # update tracked keypoints with new detections
-            tracked_keypoints = keypoint_tracker.update(keypoints)
+        # update tracked keypoints with new detections
+        keypoints = keypoint_buffer.popleft()
+        tracked_keypoints = keypoint_tracker.update(keypoints)
 
         # Store results.
         for track in tracker.tracks:
@@ -297,24 +274,19 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence, 
             results.append(result)
         
         # Update visualization.
-        out = visualize(vis, frame, tracker, detections, keypoint_tracker, keypoints, tracked_keypoints, crop_dim, results)
+        out = visualize(visualizer, frame, tracker, detections, keypoint_tracker, keypoints, tracked_keypoints, crop_dim, results)
+        #cv.imshow("deepsortapp", out)
         
         # write visualization as frame to video
         try:
             video_writer.writeFrame(cv.cvtColor(out, cv.COLOR_BGR2RGB)) #out[:,:,::-1])
-            count_ok += 1
+            #count_ok += 1
             config['count'] += 1
         except Exception as e:
-            count_failed += 1 
+            #count_failed += 1 
             print('[*] Video Writing for frame_idx %s failed. image shape'%frame_idx,out.shape)
             print(e)
 
-
-        return True
-    # Run tracker.
-    if display:
-        update_ms = 2
-        visualizer = visualization.Visualization(seq_info, update_ms, config)
-    else:
-        visualizer = visualization.NoVisualization(seq_info)
+    update_ms = 2
+    visualizer = visualization.Visualization([Wframe, Hframe], update_ms, config)
     visualizer.run(frame_callback)

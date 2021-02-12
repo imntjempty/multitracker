@@ -105,7 +105,7 @@ def Decoder(config,encoder):
 
 def load_im(image_file):
     image = tf.io.read_file(image_file)
-    image = tf.image.decode_jpeg(image,channels=3)
+    image = tf.image.decode_png(image,channels=3)
     return preprocess(image)
 
 def preprocess(image):
@@ -119,9 +119,10 @@ def preprocess(image):
 def load_raw_dataset(config):
     file_list = []
     for video_id in config['video_ids']:
-        image_dir = os.path.join(dbconnection.base_data_dir, 'projects/%i/%i/frames/train' % (config['project_id'],video_id))
+        image_dir = os.path.join(config['data_dir'], 'projects/%i/%i/frames/train' % (config['project_id'],video_id))
         file_list.extend(glob(os.path.join(image_dir,'*.png')))
     shuffle(file_list)
+    print('[*] training autoencoder on videos',config['video_ids'],'with %i frames in total' % len(file_list))
     file_list_tf = tf.data.Dataset.from_tensor_slices(file_list)
     #file_list = tf.data.Dataset.list_files(os.path.join(image_dir,'*.png'))
     data = file_list_tf.map(load_im, num_parallel_calls = tf.data.experimental.AUTOTUNE).repeat().batch(config['batch_size']).prefetch(4*config['batch_size'])#.cache()
@@ -242,10 +243,10 @@ def train(config=None):
         print('[*] epoch %i took %f seconds.'%(epoch,end-start))
     
 def get_autoencoder_config():
-    config = {'batch_size':8, 'img_height':640,'img_width':640}
-    config['kp_max_steps'] = 15000
-    config['kp_lr'] = 1e-4
-    return config
+    ae_config = {'batch_size':8, 'img_height':640,'img_width':640}
+    ae_config['kp_max_steps'] = 15000
+    ae_config['kp_lr'] = 1e-4
+    return ae_config
 
 if __name__ == '__main__':
     train()
