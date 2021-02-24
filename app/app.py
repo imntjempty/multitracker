@@ -42,7 +42,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     os.environ['MULTITRACKER_DATA_DIR'] = args.data_dir
 from multitracker.be import dbconnection
-db = dbconnection.DatabaseConnection(file_db=os.path.expanduser('~/data/multitrackerTest/data.db'))
+db = dbconnection.DatabaseConnection(file_db=os.path.expanduser('~/data/multitracker/data.db'))
 
 # load neural network from disk (or init new one)
 if args.model is not None and os.path.isfile(args.model):

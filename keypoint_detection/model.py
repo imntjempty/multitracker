@@ -151,12 +151,15 @@ def update_config_object_detection(config):
     config['object_augm_mixup'] = bool(0) # 1
     config['object_augm_crop'] = bool(0)
     config['object_augm_stitch'] = bool(0)
+
+    config['object_detection_resolution'] = [640,640]
     return config 
 
 # </train>
 def get_config(project_id = 3):
     config = {'batch_size': 64}
     config.update({'img_height': 224,'img_width': 224})
+    config['keypoint_resolution'] = [ config[k] for k in ['img_height','img_width'] ]
     config['kp_max_steps'] = 200000
     config['kp_min_steps'] = 50000
     config['kp_lr'] = 2e-5 * 5   *5 *2.

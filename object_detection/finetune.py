@@ -202,7 +202,7 @@ def restore_weights(config, checkpoint_path = None, gt_boxes = None, gt_classes 
         model_config.ssd.image_resizer.fixed_shape_resizer.width = config['object_detection_resolution'][0]
     elif config['object_detection_backbone'] == 'fasterrcnn':
         model_config.faster_rcnn.num_classes = num_classes
-        model_config.faster_rcnn.freeze_batchnorm = config['object_pretrained']
+        #model_config.faster_rcnn.freeze_batchnorm = config['object_pretrained']
         model_config.faster_rcnn.image_resizer.fixed_shape_resizer.height = config['object_detection_resolution'][1]
         model_config.faster_rcnn.image_resizer.fixed_shape_resizer.width = config['object_detection_resolution'][0]
     else:
