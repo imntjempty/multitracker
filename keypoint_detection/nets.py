@@ -20,18 +20,20 @@ class ReflectionPadding2D(tf.keras.layers.Layer):
 def upsample(nfilters, kernel_size, strides=2, dilation = (1,1), norm_type='batchnorm', act = tf.keras.layers.Activation('relu')):
     initializer = ['he_normal', tf.random_normal_initializer(0., 0.02)][0]
 
+    result = tf.keras.Sequential()
     if strides == 1 or strides < 0:
         strides = abs(strides)
         func = tf.keras.layers.Conv2D
+        result.add(ReflectionPadding2D(padding=(int(kernel_size/2.),int(kernel_size/2.))))
+        padding = 'valid'
     else:
         func = tf.keras.layers.Conv2DTranspose
+        padding = 'same'
 
-    result = tf.keras.Sequential()
-    result.add(ReflectionPadding2D(padding=(int(kernel_size/2.),int(kernel_size/2.))))
     result.add(
         func(nfilters, kernel_size, strides=strides,
             dilation_rate=dilation,
-            padding='valid',
+            padding=padding,
             kernel_regularizer=tf.keras.regularizers.l2(0.0001),
             kernel_initializer=initializer))
 

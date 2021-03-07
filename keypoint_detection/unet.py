@@ -103,7 +103,7 @@ def get_efficientB0_model(config):
     encoder.trainable = False
     for l in encoder.layers:
         l.trainable = False 
-    encoder.summary()
+    #encoder.summary()
     encoded_layer_names = [
         'block1a_activation', # (112,112,32)
         'block3a_expand_activation', # (56,56,144)
@@ -159,6 +159,7 @@ def get_decoded(config, encoder, encoded_layer_names):
     
     bf = 64
     x = encoded_layers[-1]
+    print('[*] starting decoder with layer',x.shape)
     if 0:
         for _ in range(2):
             x = upsample(512,3,strides=1)(x)
@@ -166,10 +167,10 @@ def get_decoded(config, encoder, encoded_layer_names):
 
     for i_block in range(len(encoded_layers)-1,-1,-1):
         nf = min(256, bf * 2**i_block)
-        #print('decoder',i_block,nf)
         ne = encoded_layers[i_block].shape[3]
         # append encoder layer
         e = encoded_layers[i_block]
+        #print('  decoder',i_block,nf,'ne',ne,'e',e.shape,'x',x.shape)
         if 0:
             f = upsample(ne,3,strides=1)(e)
             f = tf.keras.layers.Dropout(0.5)(f)

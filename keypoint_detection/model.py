@@ -53,7 +53,7 @@ def get_loss(predicted_heatmaps, y, config, mode = "train"):
         raise Exception("Loss function not supported! try l1, normed_l1, l2, focal or dice")
     return loss 
 
-def get_model(config, verbose = True):
+def get_model(config, verbose = False):
     if config['kp_num_hourglass'] == 1:
         encoder, net = unet.get_model(config)
     else:

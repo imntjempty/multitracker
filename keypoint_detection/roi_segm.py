@@ -104,9 +104,8 @@ def write_crop_to_disk(obj):
     if im is None:
         print('[* ERROR] could not find keypoints data for frame_idx',obj['frame_idx'],' please label!')
         return 0
-
+    
     parts = [ im[:,ii*w:(ii+1)*w,:] for ii in range(obj['len_parts'] )]
-    #print(i,frame_idx,'boxes',frame_bboxes[frame_idx])
     # scale to fit max_height
     #print('scaling',frame_bboxes[frame_idx][0],'to',(Hcomp/Hframe) * frame_bboxes[frame_idx][0])
     obj['boxes'] = (Hcomp/Hframe) * obj['boxes']
@@ -117,8 +116,6 @@ def write_crop_to_disk(obj):
         ## add 3 random background patches without keypoints
         num_random_backgrounds = 4 
         while num_random_backgrounds > 0:
-            #random_box = sorted(tuple(np.int32(np.around(np.random.uniform(0,im.shape[1]))))) + sorted(tuple(np.int32(np.around(np.random.uniform(0,im.shape[0])))))
-            #random_box = [random_box[2],random_box[0],random_box[3],random_box[1]] # (x1,x2,y1,y2)=>(y1,x1,y2,x2)
             rx, ry = int(np.random.uniform(crop_dim_extended//2,im.shape[0]-crop_dim_extended//2)),int(np.random.uniform(crop_dim_extended//2,im.shape[1]-crop_dim_extended//2))
             random_box = [ry-crop_dim_extended//2,rx-crop_dim_extended//2,ry+crop_dim_extended//2,rx+crop_dim_extended//2]
             if random_box[0]>=0 and random_box[1] and random_box[2]<im.shape[0] and random_box[3]<im.shape[1]:
@@ -138,11 +135,9 @@ def write_crop_to_disk(obj):
     for j, (y1,x1,y2,x2) in enumerate(obj['boxes']):
         # crop region around center of bounding box
         center = get_center(x1,y1,x2,y2,im.shape[0], im.shape[1], crop_dim_extended)        
-
         try:
             rois = [part[center[0]-crop_dim_extended//2:center[0]+crop_dim_extended//2,center[1]-crop_dim_extended//2:center[1]+crop_dim_extended//2,:] for part in parts]
             rois = [roi for roi in rois if roi.shape[0]==crop_dim_extended and roi.shape[1]==crop_dim_extended]
-            print(obj['f'],j,[rroi.shape for rroi in rois])
             roi_comp = np.hstack(rois)
             #if min(roi_comp.shape[:2])>1:
             
@@ -177,15 +172,13 @@ def load_roi_dataset(config, mode = 'train', batch_size = None, video_id = None)
             heatmap_drawing.randomly_drop_visualiztions(config, config['project_id'], _video_id, dst_dir=config['kp_data_dir'],max_height=max_height)
 
     image_directory = os.path.join(config['kp_data_dir'],'%s' % mode)
-    print('image_directory', image_directory)
-    #[Hframe,Wframe,_] = cv.imread(glob(os.path.join(os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, config['project_id']), video_ids.split(',')[0]),'train'),'*.png'))[0]).shape
     [Hframe,Wframe,_] = cv.imread(glob(os.path.join(config['data_dir'],'projects',str(config['project_id']),video_ids.split(',')[0],'frames','train','*.png'))[0]).shape
     [Hcomp,Wcomp,_] = cv.imread(glob(os.path.join(image_directory,'*.png'))[0]).shape
     H = Hcomp 
     w = int(Wframe*Hcomp/Hframe)
 
     len_parts = Wcomp // w  
-    crop_dim = get_roi_crop_dim(config['data_dir'], config['project_id'], video_ids.split(',')[0],Hframe)
+    crop_dim = get_roi_crop_dim(config['data_dir'], config['project_id'], video_ids.split(',')[0],Hcomp)#Hframe)
     crop_dim_extended_ratio = 1.5
     crop_dim_extended = min(Hcomp, crop_dim * crop_dim_extended_ratio)
     crop_dim_extended = int(crop_dim_extended)
@@ -199,9 +192,10 @@ def load_roi_dataset(config, mode = 'train', batch_size = None, video_id = None)
         if not os.path.isdir(os.path.join(config['kp_roi_dir'],_mode)): os.makedirs(os.path.join(config['kp_roi_dir'],_mode))
         
     ## create data sets if not present for region of interest
-    if len(glob(os.path.join(config['kp_roi_dir'],'train','*.png')))==0:
+    if len(glob(os.path.join(config['kp_roi_dir'],mode,'*.png')))==0:
         print('[*] creating cropped regions for each animal to train keypoint prediction ...')
         _video_ids = ','.join(list(set(config['train_video_ids'].split(',') + config['test_video_ids'].split(','))))
+        #print('_video_ids',_video_ids)
         db = dbconnection.DatabaseConnection(file_db=os.path.join(config['data_dir'],'data.db'))
         for _video_id in _video_ids.split(','):
             _video_id = int(_video_id)
@@ -214,13 +208,13 @@ def load_roi_dataset(config, mode = 'train', batch_size = None, video_id = None)
                 if not frame_idx in frame_bboxes:
                     frame_bboxes[frame_idx] = [] 
                 frame_bboxes[frame_idx].append(np.array([float(z) for z in [y1,x1,y2,x2]]))
-            
+            #print('[*] found %i frames for video %s' % ( len(list(frame_bboxes.keys())), _video_id))
             with Pool(processes=os.cpu_count()) as pool:
                 result_objs=[]
             
                 for i, frame_idx in enumerate(frame_bboxes.keys()):
                     frame_bboxes[frame_idx] = np.array(frame_bboxes[frame_idx]) 
-                    f = os.path.join(image_directory,'%i_%s.png' % (_video_id,frame_idx)) 
+                    f = os.path.join(os.path.join(config['kp_data_dir'],mode,'%i_%s.png' % (_video_id,frame_idx)) )
                     obj = {'Hframe':Hframe,'Hcomp':Hcomp,'w':w,'f':f, 'video_id':_video_id, 'config':config,'crop_dim_extended':crop_dim_extended,'len_parts':len_parts,'frame_idx':frame_idx,'boxes':frame_bboxes[frame_idx]}
                     result_objs.append(pool.apply_async(write_crop_to_disk,(obj,)))
                     #write_crop_to_disk(obj)
@@ -484,7 +478,7 @@ def train(config, log_images = True):
         epoch_steps = 0
         epoch_loss = 0.0
 
-        if 1:#try:
+        try:
             for x,y in dataset_train:
                 #print('x',x.shape,'y',y.shape,'swaps',swaps)
                 if np.random.random() < 0.5 and 'kp_hflips' in config and config['kp_hflips']:
@@ -515,7 +509,12 @@ def train(config, log_images = True):
                     for l in net.layers:
                         l.trainable = True 
                     print('[*] going from transfer learning to fine-tuning by unfreezing all layers after %i steps' % n)
-                step_result = train_step(x, y, writer_train, writers_test, n, should_summarize=should_summarize)
+                
+                try:
+                    step_result = train_step(x, y, writer_train, writers_test, n, should_summarize=should_summarize)
+                except Exception as e:
+                    print(e)
+                    print('[* ERROR] train on step',n)
                 
                 if n % 2000 == 0:
                     ckpt_save_path = ckpt_manager.save()
@@ -544,6 +543,6 @@ def train(config, log_images = True):
                     return checkpoint_path 
 
                 n+=1
-        #except Exception as e:
-        #    print('step',n,'\n',e)
+        except Exception as e:
+            print('step',n,'\n',e)
     
