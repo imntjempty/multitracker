@@ -136,7 +136,7 @@ def main(args):
 
     # 4) train keypoint estimator model
     if config['keypoint_model'] is None and not config['kp_backbone'] == 'none':
-        config['kp_max_steps'] = 50000
+        config['kp_max_steps'] = 25000
         config['keypoint_model'] = roi_segm.train(config)
     print('[*] trained keypoint_model',config['keypoint_model'])
     # </train models>
@@ -198,7 +198,7 @@ if __name__ == '__main__':
     parser.add_argument('--train_video_ids',default='')
     parser.add_argument('--test_video_ids',default='')
     parser.add_argument('--minutes',required=False,default=0.0,type=float,help="cut the video to the first n minutes, eg 2.5 cuts after the first 150seconds.")
-    parser.add_argument('--min_confidence_boxes',required=False,default=0.5,type=float)
+    parser.add_argument('--min_confidence_boxes',required=False,default=0.65,type=float)
     parser.add_argument('--min_confidence_keypoints',required=False,default=0.5,type=float)
     parser.add_argument('--inference_objectdetection_batchsize',required=False,default=0,type=int)
     parser.add_argument('--inference_keypoint_batchsize',required=False,default=0,type=int)
