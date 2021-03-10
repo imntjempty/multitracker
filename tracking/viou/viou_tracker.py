@@ -87,6 +87,7 @@ class VIoUTracker(Tracker):
         self.tracks_finished = []
         self.frame_buffer = []
         self.last_means = {}
+        self.total_count = 0 
         
     def step(self, ob):
         debug = bool(0) 
@@ -153,6 +154,8 @@ class VIoUTracker(Tracker):
                 tracks_extendable_updated.append(track)
             elif track['max_score'] >= self.sigma_h and track['det_counter'] >= self.t_min:
                 self.tracks_finished.append(track)
+            #elif track['det_counter'] < self.t_min:
+            #    self.total_count -= 1
         self.tracks_extendable = tracks_extendable_updated
 
         new_dets = [dets[idx] for idx in set(range(len(dets))).difference(set(det_ids))]
@@ -203,8 +206,11 @@ class VIoUTracker(Tracker):
                 dets_for_new.append(det)
 
         # create new tracks
-        new_tracks = [{'bboxes': [det['bbox']], 'max_score': det['score'], 'last_score':det['score'], 'start_frame': frame_num, 'ttl': self.ttl,
-                    'classes': [det['class']], 'det_counter': 1, 'visual_tracker': None} for det in dets_for_new]
+        new_tracks = []
+        for det in dets_for_new:
+            new_tracks.append({'bboxes': [det['bbox']], 'max_score': det['score'], 'last_score':det['score'], 'start_frame': frame_num, 'ttl': self.ttl,
+                    'classes': [det['class']], 'det_counter': 1, 'visual_tracker': None, 'track_id': self.total_count})
+            self.total_count += 1 
         self.tracks_active = []
         for track in updated_tracks + new_tracks:
             if track['ttl'] == 0:
@@ -218,7 +224,7 @@ class VIoUTracker(Tracker):
         for active, tt in zip([1,0,0],[self.tracks_active, self.tracks_extendable]):#, self.tracks_finished]):
             for i, tbox in enumerate(tt):
                 steps_without_detection = self.ttl - tbox['ttl'] 
-                self.tracks.append(OpenCVTrack(i,tbox['bboxes'][-1],active,steps_without_detection,tbox['bboxes'],tbox['last_score']))#self.last_means[i],matched_track_scores[i]))
+                self.tracks.append(OpenCVTrack(tbox['track_id'],tbox['bboxes'][-1],active,steps_without_detection,tbox['bboxes'],tbox['last_score']))#self.last_means[i],matched_track_scores[i]))
             
 
     '''# finish all remaining active and extendable tracks
