@@ -229,19 +229,29 @@ def detect_bounding_boxes(config, detection_model, input_tensor):
     return detections
 
 #@tf.function
-def detect_batch_bounding_boxes(config, detection_model, frames, thresh_detection):
+def detect_batch_bounding_boxes(config, detection_model, frames, thresh_detection, encoder_model = None):
     scaled = []
     for i in range(frames.shape[0]):
-        #print('YEAH',i,frames.shape,'minmax',np.min(frames[i,:,:,:]),np.max(frames[i,:,:,:]))
         scaled.append(cv.resize( frames[i,:,:,:] ,(config['object_detection_resolution'][0],config['object_detection_resolution'][1])))
-        #cv.imshow('huhu'+str(i), np.uint8(scaled[-1])); cv.waitKey(5)
         
     scaled = np.stack(scaled,axis=0)
-    #print('scaled',scaled.shape)
     preprocessed_image, shapes = detection_model.preprocess(tf.convert_to_tensor(scaled))
     prediction_dict = detection_model.predict(preprocessed_image, shapes)
     bboxes = detection_model.postprocess(prediction_dict, shapes)
-    #print('bboxes',bboxes)
+    features = np.zeros((bboxes['detection_boxes'].shape[0],4))
+    if encoder_model is not None:
+        ae_config = autoencoder.get_autoencoder_config()
+        ae_scaled = []
+        for i in range(frames.shape[0]):
+            ae_scaled.append(cv.resize( frames[i,:,:,:] ,(ae_config['ae_resolution'][0],ae_config['ae_resolution'][1])))
+        ae_scaled = np.stack(ae_scaled,axis=0)
+        ae_scaled = (ae_scaled / 127.5) - 1 # [0,255] => [-1,1]
+        features = encoder_model( ae_scaled )[0]
+        features = tf.keras.layers.GlobalAveragePooling2D()(features).numpy()
+        #features = (features - features.mean())/features.std()
+        features = features / np.linalg.norm(features)
+        #print('features',features.shape,features.min(),features.max(),'meanstd',features.mean(),features.std())
+        
     results = []
     for b in range(bboxes['detection_boxes'].shape[0]):
         result = []
@@ -250,15 +260,15 @@ def detect_batch_bounding_boxes(config, detection_model, frames, thresh_detectio
             proba = bboxes['detection_scores'][b][j]
             if proba > thresh_detection:
                 #print('box',j,bboxes['detection_boxes'][j])
-                top,left,height,width = bboxes['detection_boxes'][b][j]
+                top, left, height, width = bboxes['detection_boxes'][b][j]
                 top *= frames.shape[1]
                 height *= frames.shape[1] 
                 left *= frames.shape[2]
                 width *= frames.shape[2] 
                 height = height - top  
                 width = width - left
-
-                detection = Detection([left,top,width,height], proba, np.zeros((1)))
+    
+                detection = Detection([left,top,width,height], proba, features[b,:])
                 
                 result.append(detection)  
         results.append(result)

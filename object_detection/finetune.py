@@ -293,7 +293,7 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
         json.dump(config, f, indent=4)
 
     ## disable pretrained model loading if resolution not exactly like tensorflow model zoo 640x640
-    print('[*] training object detection on resolution X: %i Y: %i' % (config['object_detection_resolution'][0],config['object_detection_resolution'][1]))
+    print('[*] training object detection on resolution X: %i Y: %i' % (config['object_detection_resolution'][0],config['object_detection_resolution'][1]),'in directory',checkpoint_directory)
     if config['object_pretrained'] and not (config['object_detection_resolution'][0]==640 and config['object_detection_resolution'][1]==640):
         config['object_pretrained'] = False 
     

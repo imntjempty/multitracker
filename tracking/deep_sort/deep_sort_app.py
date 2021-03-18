@@ -235,17 +235,17 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
             frames_tensor = np.array(list(frame_buffer)).astype(np.float32)
             # fill up frame buffer and then detect boxes for complete frame buffer
             t_odet_inf_start = time.time()
-            batch_detections = inference.detect_batch_bounding_boxes(config, detection_model, frames_tensor, min_confidence_boxes)
+            batch_detections = inference.detect_batch_bounding_boxes(config, detection_model, frames_tensor, min_confidence_boxes, encoder_model)
             [detection_buffer.append(batch_detections[ib]) for ib in range(config['inference_objectdetection_batchsize'])]
             t_odet_inf_end = time.time()
-            if frame_idx < 300:
+            if frame_idx < 200 and frame_idx % 10 == 0:
                 print('  object detection ms',(t_odet_inf_end-t_odet_inf_start)*1000.,"batch", len(batch_detections),len(detection_buffer), (t_odet_inf_end-t_odet_inf_start)*1000./len(batch_detections) ) #   roughly 70ms
 
             t_kp_inf_start = time.time()
             keypoint_buffer = inference.inference_batch_keypoints(config, keypoint_model, crop_dim, frames_tensor, detection_buffer, min_confidence_keypoints)
             #[keypoint_buffer.append(batch_keypoints[ib]) for ib in range(config['inference_objectdetection_batchsize'])]
             t_kp_inf_end = time.time()
-            if frame_idx < 300:
+            if frame_idx < 200 and frame_idx % 10 == 0:
                 print('  keypoint ms',(t_kp_inf_end-t_kp_inf_start)*1000.,"batch", len(keypoint_buffer),(t_kp_inf_end-t_kp_inf_start)*1000./ (1e-6+len(keypoint_buffer)) ) #   roughly 70ms
         # if detection buffer not empty use preloaded frames and preloaded detections
         frame = frame_buffer.popleft()
