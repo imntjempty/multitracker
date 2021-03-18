@@ -20,6 +20,13 @@ test_ids = [13,14]
 test_id_in = 14
 test_id_out = 13
 
+if 0:
+    train_ids = [1,3]
+    test_ids = [2,3]
+    test_id_in = 3
+    test_id_out = 2
+
+
 colors = ['tab:brown', 'tab:blue', 'tab:orange', 'tab:green', 'tab:red', 'tab:purple', 'tab:yellow', 'tab:gray', 'tab:cyan', 'tab:olive']
 
 def parse_train_csv(train_csv):
@@ -243,6 +250,11 @@ def plot_e():
     title = 'Experiment E - Object Detection: using fractions of training data ({0} labeled frames total)'.format(num_train_samples)
     plot_objectdetection_experiment(project_experiment_dir+'/E',title,['1%','10%','100%','50%'])
 
+def plot_f():
+    num_train_samples = get_train_od_samples(train_ids)
+    title = 'Experiment F - Object Detection: Faster R-CNN vs SSD'
+    plot_objectdetection_experiment(project_experiment_dir+'/F',title,['Faster R-CNN','SSD'])
+
 def plot_g():
     num_train_samples = get_train_od_samples(train_ids)
     title = 'Experiment G - Object Detection: pretrained encoder vs randomly initialized encoder w/ and wo/ augmentation'
@@ -256,6 +268,7 @@ if __name__ == '__main__':
     #plot_b()
     #plot_c()
     #plot_e()
+    #plot_f()
     plot_g()
 
     t1 = time.time()

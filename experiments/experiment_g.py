@@ -9,15 +9,17 @@ from multitracker.object_detection.finetune import finetune
 def experiment_g(args, train_video_ids = None):
     print('[*] starting experiment G: object detection pretrained vs random init network, w/wo augmentation')
     config = model.get_config(args.project_id)
+    
+    config['data_dir'] = '/home/alex/data/multitracker'
     if train_video_ids is not None:
         config['train_video_ids'] = train_video_ids
     else:
         config['train_video_ids'] = args.train_video_ids
     config['test_video_ids'] = args.test_video_ids
-    config['experiment'] = 'E'
+    config['experiment'] = 'G'
     config['early_stopping'] = False
     config['object_finetune_warmup'] = 1000
-    config['maxsteps_objectdetection'] = 10000
+    config['maxsteps_objectdetection'] = 20000
     config['lr_objectdetection'] = 0.005 
     config['object_augm_gaussian'] = bool(0)
     config['object_augm_image'] = bool(0)
@@ -41,6 +43,7 @@ def experiment_g(args, train_video_ids = None):
 
             checkpoint_dir = os.path.expanduser('~/checkpoints/experiments/%s/G/%s-%s-%s' %(config['project_name'], str_augm, str_pretrained, now))
             #config['maxsteps_objectdetection'] = {0.01: 12000, 0.1: 15000, 0.5: 20000, 1.0: 25000}[data_ratio]
+            print(finetune)
             finetune(config, checkpoint_dir)
 
             clear_session()

@@ -22,21 +22,27 @@ def experiment_b(args, max_steps = 12000):
     config['kp_lr'] = 1e-4
 
     config_b = deepcopy(config)
-    for should_init_pretrained in [False,True]:
-        for augm in [False,True]:
-            print('[*] starting sub experiment %s weight initialization' % ['without','with'][int(should_init_pretrained)])
-            if not augm:
-                config_b['kp_mixup'] = False 
-                config_b['kp_cutmix'] = False 
-                config_b['kp_hflips'] = False 
-                config_b['kp_vflips'] = False 
-                config_b['kp_rotation_augmentation'] = False 
-                config_b['kp_rot90s'] = False 
-                config_b['kp_im_noise'] = False 
-                config_b['kp_im_transf'] = False 
-            config_b['should_init_pretrained'] = should_init_pretrained
-            print(config_b,'\n')
-            checkpoint_path = roi_segm.train(config_b, log_images=False)
+    run_configs = [
+        [False,False],
+        [False,True],
+        [True,False],
+        [True,True],
+    ]
+     
+    for should_init_pretrained, augm in run_configs:
+        print('[*] starting sub experiment %s weight initialization' % ['without','with'][int(should_init_pretrained)])
+        if not augm:
+            config_b['kp_mixup'] = False 
+            config_b['kp_cutmix'] = False 
+            config_b['kp_hflips'] = False 
+            config_b['kp_vflips'] = False 
+            config_b['kp_rotation_augmentation'] = False 
+            config_b['kp_rot90s'] = False 
+            config_b['kp_im_noise'] = False 
+            config_b['kp_im_transf'] = False 
+        config_b['should_init_pretrained'] = should_init_pretrained
+        print(config_b,'\n')
+        checkpoint_path = roi_segm.train(config_b, log_images=False)
             
         clear_session()
 
