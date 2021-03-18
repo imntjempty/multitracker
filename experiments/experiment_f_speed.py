@@ -1,15 +1,28 @@
 """
-batch size 8
 
+batch size 32
+    SSD : 29.41341929965549 ms
+
+batch size 16
+    SSD : 30.637968911064995 ms
+
+batch size 8
+    SSD : 30.224053064982098 ms
 
 batch size 4
     Faster R-CNN : 254.97011608547638 ms
     SSD : 20.89227835337321 ms
 
+batch size 2
+    Faster R-CNN : 267.22413169013134 ms
+    SSD : 25.42525397406684 ms
+
 batch size 1
     Faster R-CNN : 322.45272530449756 ms
     SSD : 43.092139561971024 ms
 
+
+ on 389 samples, testing on 45 
 """
 
 import numpy as np 
@@ -34,8 +47,9 @@ def experiment_f_speed(checkpoint_base_dir):
 
     
     experiment_names = ['Faster R-CNN','SSD']
-    batch_size = 8
+    batch_size = 16
     for i, experiment_dir in enumerate(experiment_dirs):
+        #if i == 0 : continue ## skip faster
         print(i, experiment_dir, experiment_names[i])
 
         with open(os.path.join(experiment_dir, 'config.json')) as json_file:
@@ -48,7 +62,7 @@ def experiment_f_speed(checkpoint_base_dir):
         detection_model = finetune.load_trained_model(config)
     
         durations[experiment_names[i]] = 0.0
-        for _ in range(3):
+        for _ in range(3): # warmup
             for _, ims in data_test:
                 _ = inference.detect_bounding_boxes(config, detection_model, ims)
 

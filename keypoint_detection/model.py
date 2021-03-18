@@ -136,7 +136,7 @@ def update_config_object_detection(config):
         'fasterrcnn': 'faster_rcnn_inception_resnet_v2_640x640_coco17_tpu-8' # 206ms 37.7mAP
     }[config['object_detection_backbone']]
     config['object_detection_batch_size'] = {'efficient': 4, 'ssd': 4, 'fasterrcnn': 4}[config['object_detection_backbone']]
-    config['inference_objectdetection_batchsize'] = {'efficient': 4, 'ssd': 32, 'fasterrcnn': 4}[config['object_detection_backbone']]
+    config['inference_objectdetection_batchsize'] = {'efficient': 4, 'ssd': 4, 'fasterrcnn': 4}[config['object_detection_backbone']]
     config['lr_objectdetection'] = 0.0005 
     if config['object_detection_backbone'] == 'efficient':
         config['lr_objectdetection'] *= 10.
