@@ -87,17 +87,11 @@ def Encoder(inputs, config={}):
     x = downsample_stridedconv(16,(5,5), norm_type='batchnorm', apply_norm=True)(x) # 20
     x = downsample_stridedconv(32,(5,5), norm_type='batchnorm', apply_norm=True)(x) # 10
     f = x 
-    #x = downsample_stridedconv(128,(3,3), norm_type='batchnorm', apply_norm=True)(x) # 5
-    #x = downsample_stridedconv(256,(3,3), norm_type='batchnorm', apply_norm=True)(x) # 5
-    #x = downsample_stridedconv(n_latentcode,(3,3), norm_type='batchnorm', apply_norm=True)(x) 
+
     return [f,x]
 
-def Decoder(config,encoder):
+def Decoder(config, encoder):
     x = encoder
-    #x = upsample_transpconv(n_latentcode,(3,3), norm_type='batchnorm', apply_norm=True)(x) # 
-    #x = llayers.upsample_transpconv(256,(3,3), norm_type='batchnorm', apply_norm=True)(x) # 5
-    #x = upsample_transpconv(128,(3,3), norm_type='batchnorm', apply_norm=True)(x) # 5
-    #x = upsample_transpconv(128,(3,3), norm_type='batchnorm', apply_norm=True)(x) # 10
     x = upsample_transpconv(32,(3,3), norm_type='batchnorm', apply_norm=True)(x) # 20
     x = upsample_transpconv(16,(3,3), norm_type='batchnorm', apply_norm=True)(x) # 40
     x = upsample_transpconv(3,(3,3), norm_type='batchnorm', apply_norm=False,activation=tf.tanh)(x) # 80
@@ -246,6 +240,7 @@ def get_autoencoder_config():
     ae_config = {'batch_size':8, 'img_height':640,'img_width':640}
     ae_config['kp_max_steps'] = 15000
     ae_config['kp_lr'] = 1e-4
+    ae_config['ae_resolution'] = [640,640]
     return ae_config
 
 if __name__ == '__main__':
