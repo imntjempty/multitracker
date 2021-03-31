@@ -99,5 +99,5 @@ Each predicted bounding box and keypoint comes with its own confidence score ind
 - lower the threshold ```--min_confidence_keypoints 0.25```
 
 ## Replicate Experiments
-All the data used in the thesis can be downloaded [here](https://drive.google.com/file/d/1ABpsj560McDTLVuvpNGqwfMqKiEczUyC/view?usp=sharing). All trained models can be found [here](https://drive.google.com/drive/folders/1O_qQECb1AVBVrSRVsfL23NBaGoBx1Ntg?usp=sharing)
+If you want to have access to the utilized data, send a short request to alexander.dolokov at gmail.
 
