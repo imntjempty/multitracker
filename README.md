@@ -3,7 +3,19 @@
 This is a framework for tracking animals and their corresponding limbs. It assumes, that the number of objects visible in the video is fixed and known. It uses Faster-RCNN or SSD for object detection and Stacked Hourglasses for keypoint detection. A UpperBound Tracker keeps track of their positions. These mice were tracked with Fixed Multitracker https://www.youtube.com/watch?v=mQenxsiJWBQ
 
 ## Installation
+A dedicated conda environment is recommended. You can set it up as follows:
 
+```
+conda create --name multitracker python=3.7
+conda activate multitracker
+conda install ipython
+conda install pip
+pip install -r requirements.txt
+cd /tmp && git clone https://github.com/tensorflow/models && cd models/research
+protoc object_detection/protos/*.proto --python_out=.
+cp object_detection/packages/tf2/setup.py .
+python -m pip install .
+```
 ## Getting Started
 ### Create Project
 First create a new project. A project has a name and a set of keypoint names. It can contain multiple videos.
