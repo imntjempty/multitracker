@@ -72,8 +72,8 @@ class Visualization(object):
         self.viewer.run(lambda: self._update_fun(frame_callback))
 
     def _update_fun(self, frame_callback):
-        frame_callback(self, self.frame_idx)
         self.frame_idx += 1
+        frame_callback(self, self.frame_idx)
         return True
 
     def set_image(self, image):
@@ -86,6 +86,7 @@ class Visualization(object):
             self.viewer.rectangle(*box.astype(np.int), label=str(track_id))
 
     def draw_detections(self, detections):
+        self.frame_idx += 1
         self.viewer.thickness = 2
         self.viewer.color = 0, 0, 255
         for i, detection in enumerate(detections):

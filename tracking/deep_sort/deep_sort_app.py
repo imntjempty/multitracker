@@ -116,6 +116,32 @@ def draw_heatmap(frame, results, sketch_file):
 
     return vis_history_heatmap 
 
+def draw_framecount(vis, im):
+    from PIL import ImageFont, ImageDraw, Image
+    pil_im = Image.fromarray(im)
+
+    draw = ImageDraw.Draw(pil_im)
+
+    # Choose a font
+    font = ImageFont.truetype("Roboto-Regular.ttf", 18)
+
+    # Draw the text
+    draw.text((5, 5), "Frame: %i" % vis.frame_idx, font=font)
+
+    im = np.array(pil_im)
+    return im 
+    
+
+
+
+    cntlabel = 'Frame: %i' % vis.frame_idx
+    text_size = cv.getTextSize(cntlabel, cv.FONT_HERSHEY_PLAIN, vis.viewer.font_scale, vis.viewer.thickness)
+    center = 5, 5 + text_size[0][1]
+    print('frame',frame.shape,frame.dtype)
+    frame = cv.putText(frame, cntlabel, center, cv.FONT_HERSHEY_PLAIN,
+                vis.viewer.font_scale, (255, 255, 255), vis.viewer.thickness)
+    return frame 
+
 def visualize(vis, frame, tracker, detections, keypoint_tracker, keypoints, tracked_keypoints, crop_dim, results, sketch_file = None):
     # draw keypoint detections 'whitish'
     im = np.array(frame, copy=True)
@@ -152,6 +178,9 @@ def visualize(vis, frame, tracker, detections, keypoint_tracker, keypoints, trac
     if len(vis_crops)>0:
         _shape = vis_crops[0].shape[:2]
     
+    ## draw frame counter for evaluation
+    frame = draw_framecount(vis, frame)
+    ## draw trackers and detections
     vis.set_image(frame.copy())
     vis.draw_detections(detections)
     vis.draw_trackers(tracker.tracks)

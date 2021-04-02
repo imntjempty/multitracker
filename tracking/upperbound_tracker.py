@@ -78,7 +78,7 @@ class Tracker(object):
     def __init__(self):
         self.tracks = [] 
         
-    def associate(self, tracked_boxes, detected_boxes, sigma_iou = 0.5):
+    def associate(self, tracked_boxes, detected_boxes, sigma_iou = 0.25):
         """ perform association between tracks and detections in a frame.
         Args:
             tracks (list): input tracks
@@ -203,7 +203,7 @@ class UpperBoundTracker(Tracker):
                         # only consider reactivating old track with this detection if detected box not high iou with any track
                         other_track_overlaps = False 
                         for k, tbox in enumerate(self.trackers.getObjects()):
-                            other_track_overlaps = other_track_overlaps or calc_iou(tlhw2tlbr(dbox),tlhw2tlbr(tbox)) > 0.5 
+                            other_track_overlaps = other_track_overlaps or calc_iou(tlhw2tlbr(dbox),tlhw2tlbr(tbox)) > 0.15 
                         if not other_track_overlaps:
                             # calc center distance to all inactive tracks, merge with nearest track
                             nearest_inactive_track_distance, nearest_inactive_track_idx = 1e7,-1
@@ -335,14 +335,14 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
                 batch_detections = inference.detect_batch_bounding_boxes(config, detection_model, frames_tensor, min_confidence_boxes)
                 [detection_buffer.append(batch_detections[ib]) for ib in range(config['inference_objectdetection_batchsize'])]
                 t_odet_inf_end = time.time()
-                if frame_idx < 300:
+                if frame_idx < 200 and frame_idx % 10 == 0:
                     print('  object detection ms',(t_odet_inf_end-t_odet_inf_start)*1000.,"batch", len(batch_detections),len(detection_buffer), (t_odet_inf_end-t_odet_inf_start)*1000./len(batch_detections) ) #   roughly 70ms
 
                 t_kp_inf_start = time.time()
                 keypoint_buffer = inference.inference_batch_keypoints(config, keypoint_model, crop_dim, frames_tensor, detection_buffer, min_confidence_keypoints)
                 #[keypoint_buffer.append(batch_keypoints[ib]) for ib in range(config['inference_objectdetection_batchsize'])]
                 t_kp_inf_end = time.time()
-                if frame_idx < 300:
+                if frame_idx < 200 and frame_idx % 10 == 0:
                     print('  keypoint ms',(t_kp_inf_end-t_kp_inf_start)*1000.,"batch", len(keypoint_buffer),(t_kp_inf_end-t_kp_inf_start)*1000./ (1e-6+len(keypoint_buffer)) ) #   roughly 70ms
             # if detection buffer not empty use preloaded frames and preloaded detections
             frame = frame_buffer.popleft()
