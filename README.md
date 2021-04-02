@@ -3,12 +3,26 @@
 This is a framework for tracking animals and their corresponding limbs. It assumes, that the number of objects visible in the video is fixed and known. It uses Faster-RCNN or SSD for object detection and Stacked Hourglasses for keypoint detection. A UpperBound Tracker keeps track of their positions. These mice were tracked with Fixed Multitracker https://www.youtube.com/watch?v=mQenxsiJWBQ
 
 ## Installation
+A dedicated conda environment is recommended. You can set it up as follows:
 
+```
+conda create --name multitracker python=3.7
+conda activate multitracker
+conda install ipython
+conda install pip
+pip install -r requirements.txt
+cd /tmp && git clone https://github.com/tensorflow/models && cd models/research
+protoc object_detection/protos/*.proto --python_out=.
+cp object_detection/packages/tf2/setup.py .
+python -m pip install .
+```
 ## Getting Started
 ### Create Project
 First create a new project. A project has a name and a set of keypoint names. It can contain multiple videos.
 
 ```python3.7 -m multitracker.be.project -name MiceTop -manager MyName -keypoint_names nose,body,left_ear,right_ear,left_front_feet,right_front_feet,left_back_feet,right_back_feet ```
+
+Note, that the keypoint detection uses horizontal and vertical flipping for data augmentation while training, which might violate some label maps. This is automatically fixed by dynamically switching labels of pairs of classes that are simliar expect `left` and `right` in the name. (e.g. `left_ear` and `right_ear` are switched, `l_ear` and `r_ear` are not).
 
 ### Add Video
 Then add a video to your project with ID 1. It will write every frame of the video to your local disk for later annotation.
@@ -97,3 +111,7 @@ Each predicted bounding box and keypoint comes with its own confidence score ind
 - Check out tensorboard images. If the train predictions look great, but the test predictions are awful, label more keypoints and bounding boxes!
 - change the backbone ```--keypoint_method psp```
 - lower the threshold ```--min_confidence_keypoints 0.25```
+
+## Replicate Experiments
+If you want to have access to the utilized data, send a short request to alexander.dolokov at gmail.
+
