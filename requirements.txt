@@ -1,0 +1,12 @@
+numpy
+opencv-python
+lapsolver
+tensorflow
+flask
+h5py
+pysqlite3
+pytz
+matplotlib
+tensorflow_addons
+scipy
+keras
