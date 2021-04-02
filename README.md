@@ -10,6 +10,8 @@ First create a new project. A project has a name and a set of keypoint names. It
 
 ```python3.7 -m multitracker.be.project -name MiceTop -manager MyName -keypoint_names nose,body,left_ear,right_ear,left_front_feet,right_front_feet,left_back_feet,right_back_feet ```
 
+Note, that the keypoint detection uses horizontal and vertical flipping which violates some label maps. This is automatically fixed by dynamically switching labels of pairs of classes that are simliar expect `left` and `right` in the name. (e.g. `left_ear` and `right_ear` are switched, `l_ear` and `r_ear` are not).
+
 ### Add Video
 Then add a video to your project with ID 1. It will write every frame of the video to your local disk for later annotation.
 
