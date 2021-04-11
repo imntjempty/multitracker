@@ -1,6 +1,14 @@
 # Upper Bound Multitracker
 
-This is a framework for tracking animals and their corresponding limbs. It assumes, that the number of objects visible in the video is fixed and known. It uses Faster-RCNN or SSD for object detection and Stacked Hourglasses for keypoint detection. A UpperBound Tracker keeps track of their positions. These mice were tracked with Fixed Multitracker https://www.youtube.com/watch?v=mQenxsiJWBQ
+This is a framework for tracking animals and their corresponding limbs. It assumes, that the number of objects visible in the video is fixed and known. It uses Faster-RCNN or SSD for object detection and Stacked Hourglasses for keypoint detection. A UpperBound Tracker keeps track of their positions. These mice were tracked with Fixed Multitracker https://www.youtube.com/watch?v=mQenxsiJWBQ. Note the long continous object and keypoint tracks although no frames of this video were provided for any model training.
+
+## Motivation
+Multiple Object Tracking (MOT) is defined in an open world: for each frame it is unknown how many objects are currently observed, and therefore can be visible at the same time. Also the total number of objects seen in the complete video is unknown.
+
+In this specific use case, requirements differ slightly. Animals are filmed in enclosured environments in fixed and known numbers. These biological studies expect a limited set of very long tracks, each track corresponding to the complete movement of one animal in parts of the video. Tracking algorithms will produce fragmented tracks that have to be merged manually after the tracking process.
+
+This leads to the definition of Upper Bound Tracking, that tries to track multiple animals with a known upper bound `u ∈ N` of the video `v` as the maximum number
+of indivudual animals filmed at the same time. Therefore a new tracking algorithm was developed to improve fragmentation that exploits the upper bound of videos, called Upper Bound Tracker (UBT). It needs, besides the RGB video stream, the upper bound `u ∈ N`. It is inspired by the V-IoU tracker and extended by careful consideration before creating new tracks to never have more than u tracks at the same time. Additionally a novel reidentification step is introduced, that updates an inactive and probably lost track to the position of a new detection if u tracks are already present. By introducing the upper bound u, tracking algorithms can exploit the provided additional knowledge to improve matching or reidentification.
 
 ## Installation
 A dedicated conda environment is recommended. You can set it up as follows:
