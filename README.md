@@ -26,6 +26,7 @@ protoc object_detection/protos/*.proto --python_out=.
 cp object_detection/packages/tf2/setup.py .
 python -m pip install .
 cd ~ && git clone https://github.com/dolokov/multitracker
+conda install cudatoolkit # hotfix for tf bug https://github.com/tensorflow/tensorflow/issues/45930
 ```
 ## Getting Started
 ### Create Project
