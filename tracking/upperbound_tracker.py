@@ -275,6 +275,13 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
     video_file_out = inference.get_video_output_filepath(config)
     if config['file_tracking_results'] is None:
         config['file_tracking_results'] = video_file_out.replace('.%s'%video_file_out.split('.')[-1],'.csv')
+    file_csv = open( config['file_tracking_results'], 'w') 
+    file_csv.write('video_id,frame_id,track_id,center_x,center_y,x1,y1,x2,y2,time_since_update\n')
+    # find out if video is part of the db and has video_id
+    try:
+        video_id = int(db.execute("select id from videos where name == '%s'" % config['video'].split('/')[-1]))
+    except:
+        video_id = -1
 
     if os.path.isfile(video_file_out): os.remove(video_file_out)
     import skvideo.io
@@ -320,9 +327,11 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
                 frame_buffer.append(frame[:,:,::-1]) # trained on TF RGB, cv2 yields BGR
             else:
                 running = False
+                file_csv.close()
                 return True  
         else:
             running = False 
+            file_csv.close()
             return True 
         
         showing = True # frame_idx % 1000 == 0
@@ -363,7 +372,8 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
             for track in tracker.tracks:
                 bbox = track.to_tlwh()
                 center0, center1, _, _ = tlhw2chw(bbox)
-                result = [frame_idx, track.track_id, center0, center1, bbox[0], bbox[1], bbox[2], bbox[3], track.is_confirmed(), track.time_since_update]
+                result = [video_id, frame_idx, track.track_id, center0, center1, bbox[0], bbox[1], bbox[2], bbox[3], track.time_since_update]
+                file_csv.write(','.join([str(r) for r in result])+'\n')
                 results.append(result)
             
             #print('[%i/%i] - %i detections. %i keypoints' % (config['count'], total_frame_number, len(detections), len(keypoints)))
@@ -382,8 +392,3 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
                 cv.imshow("tracking visualization", out)#cv.resize(out,None,None,fx=0.75,fy=0.75))
                 cv.waitKey(1)
         
-        if frame_idx % 30 == 0:
-            with open( config['file_tracking_results'], 'w') as f:
-                for result in results:
-                    f.write(','.join([str(r) for r in result])+'\n')
-

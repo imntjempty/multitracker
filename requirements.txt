@@ -10,3 +10,4 @@ matplotlib
 tensorflow_addons
 scipy
 keras
+natsort

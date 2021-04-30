@@ -35,6 +35,7 @@ class DatabaseConnection(object):
                 create table if not exists keypoint_positions (id integer primary key autoincrement, video_id integer, frame_idx text, keypoint_name text, individual_id integer, keypoint_x real, keypoint_y real);
                 create table if not exists bboxes (id integer primary key autoincrement, video_id integer, frame_idx text, x1 real, y1 real, x2 real, y2 real);
                 create table if not exists frame_jobs (id integer primary key autoincrement, project_id integer, video_id integer, time real, frame_name text);
+                create table if not exists trackdata (id integer primary key autoincrement, project_id integer, video_id integer, frame_id integer, individual_id integer, x1 real, y1 real, x2 real, y2 real, updated_by text);
             """
             self.cur.executescript(query)
     
