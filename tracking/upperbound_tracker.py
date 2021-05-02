@@ -279,9 +279,11 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
     file_csv.write('video_id,frame_id,track_id,center_x,center_y,x1,y1,x2,y2,time_since_update\n')
     # find out if video is part of the db and has video_id
     try:
-        video_id = int(db.execute("select id from videos where name == '%s'" % config['video'].split('/')[-1]))
+        db.execute("select id from videos where name == '%s'" % config['video'].split('/')[-1])
+        video_id = int([x for x in db.cur.fetchall()][0])
     except:
         video_id = -1
+    print('      video_id',video_id)
 
     if os.path.isfile(video_file_out): os.remove(video_file_out)
     import skvideo.io

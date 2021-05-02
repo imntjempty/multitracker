@@ -18,7 +18,9 @@ import subprocess
 import numpy as np 
 import cv2 as cv 
 import h5py 
+import pandas as pd 
 import logging
+from collections import deque
 import tensorflow as tf 
 tf.get_logger().setLevel(logging.ERROR)
 
@@ -38,6 +40,7 @@ if __name__ == "__main__":
     parser.add_argument('--project_id',type=int,default=None)
     parser.add_argument('--num_labeling_base',type=int,default=100)
     parser.add_argument('--open_gallery', dest='open_gallery', action='store_true')
+    parser.add_argument('--postprocess_video_id', type=int,default=None)
     parser.add_argument('--data_dir', required=False, default = os.path.expanduser('~/data/multitracker'))
     args = parser.parse_args()
     os.environ['MULTITRACKER_DATA_DIR'] = args.data_dir
@@ -525,6 +528,32 @@ def skip_labeling():
 
     return json.dumps({'success':True}), 200, {'ContentType':'application/json'} 
 
+
+if args.postprocess_video_id is not None:
+    ## open video file
+    frame_buffer = deque(maxlen=300)
+    db.execute('select name, project_id from videos where id=%i;' % int(args.postprocess_video_id))
+    video_name, project_id = [ x for x in db.cur.fetchall()][0]
+    print('video_name, project_id',video_name, project_id)
+    video_filepath = os.path.join(args.data_dir, 'projects', str(project_id), 'videos', video_name)
+    video_reader = cv.VideoCapture( video_filepath )
+    postprocess_frame_idx = 0
+    # ignore first 5 frames
+    #for _ in range(300):
+    #    ret, frame = video_reader.read()
+    #    frame_buffer.append(frame)
+    #[Hframe,Wframe,_] = frame.shape
+    total_frame_number = int(video_reader.get(cv.CAP_PROP_FRAME_COUNT))
+    
+    ## open tracking csv
+    csv_filepath = video_filepath.replace('.mp4','.csv')
+    tracking_data = pd.read_csv(csv_filepath) 
+
+
+@app.route('/postprocess_tracking')
+def postprocess_tracking():
+    return render_template('postprocess.html',project_id = int(project_id), video_id = int(args.postprocess_video_id), frame_idx = postprocess_frame_idx, num_frames = total_frame_number)
+   
 
 
 if __name__ == "__main__":
