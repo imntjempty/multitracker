@@ -349,12 +349,14 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
                 if frame_idx < 200 and frame_idx % 10 == 0:
                     print('  object detection ms',(t_odet_inf_end-t_odet_inf_start)*1000.,"batch", len(batch_detections),len(detection_buffer), (t_odet_inf_end-t_odet_inf_start)*1000./len(batch_detections) ) #   roughly 70ms
 
-                t_kp_inf_start = time.time()
-                keypoint_buffer = inference.inference_batch_keypoints(config, keypoint_model, crop_dim, frames_tensor, detection_buffer, min_confidence_keypoints)
-                #[keypoint_buffer.append(batch_keypoints[ib]) for ib in range(config['inference_objectdetection_batchsize'])]
-                t_kp_inf_end = time.time()
-                if frame_idx < 200 and frame_idx % 10 == 0:
-                    print('  keypoint ms',(t_kp_inf_end-t_kp_inf_start)*1000.,"batch", len(keypoint_buffer),(t_kp_inf_end-t_kp_inf_start)*1000./ (1e-6+len(keypoint_buffer)) ) #   roughly 70ms
+                if keypoint_model is not None:
+                    t_kp_inf_start = time.time()
+                    keypoint_buffer = inference.inference_batch_keypoints(config, keypoint_model, crop_dim, frames_tensor, detection_buffer, min_confidence_keypoints)
+                    #[keypoint_buffer.append(batch_keypoints[ib]) for ib in range(config['inference_objectdetection_batchsize'])]
+                    t_kp_inf_end = time.time()
+                    if frame_idx < 200 and frame_idx % 10 == 0:
+                        print('  keypoint ms',(t_kp_inf_end-t_kp_inf_start)*1000.,"batch", len(keypoint_buffer),(t_kp_inf_end-t_kp_inf_start)*1000./ (1e-6+len(keypoint_buffer)) ) #   roughly 70ms
+                
             # if detection buffer not empty use preloaded frames and preloaded detections
             frame = frame_buffer.popleft()
             detections = detection_buffer.popleft()
@@ -365,10 +367,12 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
             # Update tracker
             tracker.step({'img':frame,'detections':[boxes, scores, features], 'frame_idx': frame_idx})
 
-            keypoints = keypoint_buffer.popleft()
-            
-            # update tracked keypoints with new detections
-            tracked_keypoints = keypoint_tracker.update(keypoints)
+            if keypoint_model is not None:
+                keypoints = keypoint_buffer.popleft()
+                # update tracked keypoints with new detections
+                tracked_keypoints = keypoint_tracker.update(keypoints)
+            else:
+                keypoints = tracked_keypoints = []
 
             # Store results.        
             for track in tracker.tracks:
