@@ -1,4 +1,4 @@
-function init_gui(){
+function init_keypoint_gui(){
     let width = 50;
     let height = 200;
     let gui = document.getElementById("gui");

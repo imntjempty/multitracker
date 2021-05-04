@@ -115,17 +115,23 @@
     };
     
     if(labeling_mode=='keypoint'){ 
-        init_gui();
+        init_keypoint_gui();
     }else{
-        document.getElementById("bu_undobbox").onclick = function(){
-            stage.findOne("#layer").findOne('#bbox_'+(num_indiv-1).toString()).destroy();
-            stage.draw();
-            num_indiv--;
-        };
+        if(labeling_mode=='bbox'){
+            document.getElementById("bu_undobbox").onclick = function(){
+                stage.findOne("#layer").findOne('#bbox_'+(num_indiv-1).toString()).destroy();
+                stage.draw();
+                num_indiv--;
+            };
 
-        document.getElementById('bu_send').value += " "+num_db_frames.toString();
+            document.getElementById('bu_send').value += " "+num_db_frames.toString();
 
-        init_pointer_cross();
+            init_pointer_cross();
+        }else{
+            if(labeling_mode=='tracking'){
+
+            }
+        }
     }
     //gui.showModal();
 </script>

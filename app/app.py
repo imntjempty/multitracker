@@ -40,7 +40,9 @@ if __name__ == "__main__":
     parser.add_argument('--project_id',type=int,default=None)
     parser.add_argument('--num_labeling_base',type=int,default=100)
     parser.add_argument('--open_gallery', dest='open_gallery', action='store_true')
-    parser.add_argument('--postprocess_video_id', type=int,default=None)
+    parser.add_argument('--postprocess_video', type=str,default=None)
+    parser.add_argument('--postprocess_csv', type=str,default=None)
+    parser.add_argument('--postprocess_upperbound', type=int,default=None)
     parser.add_argument('--data_dir', required=False, default = os.path.expanduser('~/data/multitracker'))
     args = parser.parse_args()
     os.environ['MULTITRACKER_DATA_DIR'] = args.data_dir
@@ -529,14 +531,14 @@ def skip_labeling():
     return json.dumps({'success':True}), 200, {'ContentType':'application/json'} 
 
 
-if args.postprocess_video_id is not None:
+if args.postprocess_video is not None:
     ## open video file
     frame_buffer = deque(maxlen=300)
-    db.execute('select name, project_id from videos where id=%i;' % int(args.postprocess_video_id))
+    '''db.execute('select name, project_id from videos where id=%i;' % int(args.postprocess_video_id))
     video_name, project_id = [ x for x in db.cur.fetchall()][0]
-    print('video_name, project_id',video_name, project_id)
     video_filepath = os.path.join(args.data_dir, 'projects', str(project_id), 'videos', video_name)
-    video_reader = cv.VideoCapture( video_filepath )
+    csv_filepath = video_filepath.replace('.mp4','.csv')'''
+    video_reader = cv.VideoCapture( args.postprocess_video )
     postprocess_frame_idx = 0
     # ignore first 5 frames
     #for _ in range(300):
@@ -546,14 +548,21 @@ if args.postprocess_video_id is not None:
     total_frame_number = int(video_reader.get(cv.CAP_PROP_FRAME_COUNT))
     
     ## open tracking csv
-    csv_filepath = video_filepath.replace('.mp4','.csv')
-    tracking_data = pd.read_csv(csv_filepath) 
-
+    tracking_data = {}#pd.read_csv(csv_filepath) 
+    with open(args.postprocess_csv, 'r' ) as f:
+        lines = [l[:-1].split(',') for l in f.readlines()]
+        header = lines[0]
+        print(header)
+        for line in lines[1:]:
+            video_id,frame_id,track_id,center_x,center_y,x1,y1,x2,y2,time_since_update = line 
+            if not frame_id in tracking_data:
+                tracking_data[frame_id] = {}
+            tracking_data[frame_id][track_id] = x1, y1, x2, y2
 
 @app.route('/postprocess_tracking')
 def postprocess_tracking():
-    return render_template('postprocess.html',project_id = int(project_id), video_id = int(args.postprocess_video_id), frame_idx = postprocess_frame_idx, num_frames = total_frame_number)
-   
+    #return render_template('postprocess.html',project_id = int(project_id), video_id = int(args.postprocess_video_id), frame_idx = postprocess_frame_idx, num_frames = total_frame_number)
+    return render_template('labeling.html', total_frame_number=total_frame_number, tracking_data = json.dumps(tracking_data))
 
 
 if __name__ == "__main__":
