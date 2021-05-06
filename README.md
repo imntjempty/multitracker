@@ -16,6 +16,7 @@ of indivudual animals filmed at the same time. Therefore a new tracking algorith
 A dedicated conda environment is recommended. You can set it up as follows:
 
 ```
+sudo apt install g++ -y && sudo apt install cmake -y && sudo apt install git -y
 conda create --name multitracker python=3.7
 conda activate multitracker
 conda install ipython
