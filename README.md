@@ -29,7 +29,7 @@ python -m pip install .
 cd ~ && git clone https://github.com/dolokov/multitracker
 conda install cudatoolkit # hotfix for tf bug https://github.com/tensorflow/tensorflow/issues/45930
 # install cuDNN8. if you have a different CUDA than 11.2, look for a fitting install on  https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/
-cd /tmp && wget -O libcudnn8.deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/libcudnn8_8.1.1.33-1+cuda11.2_amd64.deb && sudo dpkg -i libcudnn8.deb -y
+cd /tmp && wget -O libcudnn8.deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/libcudnn8_8.1.1.33-1+cuda11.2_amd64.deb && sudo dpkg -i libcudnn8.deb
 ```
 ## Getting Started
 ### Create Project
