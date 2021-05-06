@@ -16,7 +16,7 @@ of indivudual animals filmed at the same time. Therefore a new tracking algorith
 A dedicated conda environment is recommended. You can set it up as follows:
 
 ```
-sudo apt install g++ -y && sudo apt install cmake -y && sudo apt install git -y && sudo apt install protobuf-compiler -y
+sudo apt install g++ wget cmake git protobuf-compiler -y
 conda create --name multitracker python=3.7
 conda activate multitracker
 conda install ipython
@@ -28,6 +28,8 @@ cp object_detection/packages/tf2/setup.py .
 python -m pip install .
 cd ~ && git clone https://github.com/dolokov/multitracker
 conda install cudatoolkit # hotfix for tf bug https://github.com/tensorflow/tensorflow/issues/45930
+# install cuDNN8. if you have a different CUDA than 11.2, look for a fitting install on  https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/
+cd /tmp && wget -O libcudnn8.deb https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/libcudnn8_8.1.1.33-1+cuda11.2_amd64.deb && sudo dpkg -i libcudnn8.deb -y
 ```
 ## Getting Started
 ### Create Project
