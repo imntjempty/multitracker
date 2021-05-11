@@ -9,61 +9,8 @@
         integrity="sha256-hVVnYaiADRTO2PzUGmuLJr8BLUSjGIZsDYGmIJLv2b8="
         crossorigin="anonymous"></script>
     <script src="https://semantic-ui.com/dist/semantic.min.js"></script>
-    <style>
-        body {
-          margin: 0;
-          /*overflow: hidden;*/
-          padding: 0;
-          background-color: #999999;
-        }
-        [data-tip] {
-            position:relative;
-
-        }
-        [data-tip]:before {
-            content:'';
-            /* hides the tooltip when not hovered */
-            display:none;
-            content:'';
-            border-left: 5px solid transparent;
-            border-right: 5px solid transparent;
-            border-bottom: 5px solid #1a1a1a;	
-            position:absolute;
-            top:30px;
-            left:35px;
-            z-index:8;
-            font-size:0;
-            line-height:0;
-            width:0;
-            height:0;
-        }
-        [data-tip]:after {
-            display:none;
-            content:attr(data-tip);
-            position:absolute;
-            top:35px;
-            left:-200px;
-            padding:5px 8px;
-            background:#1a1a1a;
-            color:#fff;
-            z-index:9;
-            font-size: 0.75em;
-            height:18px;
-            line-height:18px;
-            -webkit-border-radius: 3px;
-            -moz-border-radius: 3px;
-            border-radius: 3px;
-            white-space:nowrap;
-            word-wrap:normal;
-        }
-        [data-tip]:hover:before,
-        [data-tip]:hover:after {
-            display:block;
-        }
-        .button {
-            width: 204px
-        }
-    </style>
+    <link rel="stylesheet" type="text/css" href="/static/js/labeling.css">
+    
     <script src="/static/js/network.js"></script>
     <script src="/static/js/util.js"></script>
 </head>
@@ -116,7 +63,7 @@
     
     if(labeling_mode=='keypoint'){ 
         init_gui();
-    }else{
+    }else if(labeling_mode=='bbox'){ 
         document.getElementById("bu_undobbox").onclick = function(){
             stage.findOne("#layer").findOne('#bbox_'+(num_indiv-1).toString()).destroy();
             stage.draw();
@@ -126,6 +73,8 @@
         document.getElementById('bu_send').value += " "+num_db_frames.toString();
 
         init_pointer_cross();
+    }else if(labeling_mode=='tracking'){ 
+        alert('tracking!');
     }
     //gui.showModal();
 </script>

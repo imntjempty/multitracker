@@ -552,7 +552,7 @@ if args.postprocess_video_id is not None:
 
 @app.route('/postprocess_tracking')
 def postprocess_tracking():
-    return render_template('postprocess.html',project_id = int(project_id), video_id = int(args.postprocess_video_id), frame_idx = postprocess_frame_idx, num_frames = total_frame_number)
+    return render_template('labeling.html',keypoint_names = db.list_sep.join(config['keypoint_names']), sep = db.list_sep, project_id = int(project_id), video_id = int(args.postprocess_video_id), frame_idx = postprocess_frame_idx, num_frames = total_frame_number, labeling_mode = 'tracking')
    
 
 
