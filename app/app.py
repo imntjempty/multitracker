@@ -10,6 +10,7 @@
 
 from flask import Flask, render_template, Response, send_file, abort, redirect
 from flask import request
+from flask import jsonify
 import os 
 import json
 from glob import glob 
@@ -554,7 +555,9 @@ if args.postprocess_video is not None:
         header = lines[0]
         print(header)
         for line in lines[1:]:
-            video_id,frame_id,track_id,center_x,center_y,x1,y1,x2,y2,time_since_update = line 
+            video_id,frame_id,track_id,center_x,center_y,x1,y1,x2,y2,time_since_update = line
+            frame_id, track_id = int(frame_id), int(track_id)
+            x1,y1,x2,y2 = [int(round(float(c))) for c in [x1,y1,x2,y2]]
             if not frame_id in tracking_data:
                 tracking_data[frame_id] = {}
             tracking_data[frame_id][track_id] = x1, y1, x2, y2
@@ -562,7 +565,19 @@ if args.postprocess_video is not None:
 @app.route('/postprocess_tracking')
 def postprocess_tracking():
     #return render_template('postprocess.html',project_id = int(project_id), video_id = int(args.postprocess_video_id), frame_idx = postprocess_frame_idx, num_frames = total_frame_number)
-    return render_template('labeling.html', total_frame_number=total_frame_number, tracking_data = json.dumps(tracking_data))
+    json_tracking_data = tracking_data
+    return render_template('postprocess.html', labeling_mode='postprocess', video_name = args.postprocess_video.split('/')[-1], total_frame_number=total_frame_number, tracking_data =json_tracking_data)
+
+@app.route('/get_next_postprocess_frame')
+def get_next_postprocess_frame():
+    ret, frame = video_reader.read()
+    frame_buffer.append(frame)
+    #postprocess_frame_idx += 1 
+
+    ret, buffer = cv.imencode('.jpg', frame)
+    bframe = buffer.tobytes()
+    return (b'--frame\r\n'
+        b'Content-Type: image/jpeg\r\n\r\n' + bframe + b'\r\n')  # concat frame one by one and show result
 
 
 if __name__ == "__main__":
