@@ -9,8 +9,7 @@
         integrity="sha256-hVVnYaiADRTO2PzUGmuLJr8BLUSjGIZsDYGmIJLv2b8="
         crossorigin="anonymous"></script>
     <script src="https://semantic-ui.com/dist/semantic.min.js"></script>
-    <link rel="stylesheet" type="text/css" href="/static/js/labeling.css">
-    
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/labeling.css')}}"  rel="stylesheet"/>
     <script src="/static/js/network.js"></script>
     <script src="/static/js/util.js"></script>
 </head>
@@ -62,19 +61,19 @@
     };
     
     if(labeling_mode=='keypoint'){ 
-        init_gui();
-    }else if(labeling_mode=='bbox'){ 
-        document.getElementById("bu_undobbox").onclick = function(){
-            stage.findOne("#layer").findOne('#bbox_'+(num_indiv-1).toString()).destroy();
-            stage.draw();
-            num_indiv--;
-        };
+        init_keypoint_gui();
+    }else{
+        if(labeling_mode=='bbox'){
+            document.getElementById("bu_undobbox").onclick = function(){
+                stage.findOne("#layer").findOne('#bbox_'+(num_indiv-1).toString()).destroy();
+                stage.draw();
+                num_indiv--;
+            };
 
-        document.getElementById('bu_send').value += " "+num_db_frames.toString();
+            document.getElementById('bu_send').value += " "+num_db_frames.toString();
 
-        init_pointer_cross();
-    }else if(labeling_mode=='tracking'){ 
-        alert('tracking!');
+            init_pointer_cross();
+        }
     }
     //gui.showModal();
 </script>
