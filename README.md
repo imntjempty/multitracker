@@ -35,7 +35,8 @@ cd /tmp && wget -O libcudnn8.deb https://developer.download.nvidia.com/compute/c
 ### Create Project
 First create a new project. A project has a name and a set of keypoint names. It can contain multiple videos.
 
-```python3.7 -m multitracker.be.project -name MiceTop -manager MyName -keypoint_names nose,body,left_ear,right_ear,left_front_feet,right_front_feet,left_back_feet,right_back_feet ```
+```python3.7 -m multitracker.be.project -name MiceTop -manager MyName -keypoint_names nose,tail_base,left_ear,right_ear,left_front_paw,right_front_paw,left_back_paw,right_back_paw ```
+
 
 Note, that the keypoint detection uses horizontal and vertical flipping for data augmentation while training, which might violate some label maps. This is automatically fixed by dynamically switching labels of pairs of classes that are simliar expect `left` and `right` in the name. (e.g. `left_ear` and `right_ear` are switched, `l_ear` and `r_ear` are not).
 
