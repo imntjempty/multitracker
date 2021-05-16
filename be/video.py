@@ -51,7 +51,7 @@ def add_video_to_project(base_dir, project_id, source_video_file, fixed_number, 
     if not os.path.isfile(video_file):
         shutil.copy(source_video_file, video_file)
 
-    # sample frames 
+    '''# sample frames 
     if half_resolution:
         subprocess.call(['ffmpeg','-i',video_file, '-vf', 'fps=30','-vf', "scale=iw/2:ih/2", frames_dir+'/%05d.png'])
     else:
@@ -67,7 +67,7 @@ def add_video_to_project(base_dir, project_id, source_video_file, fixed_number, 
         os.rename(frames[i], os.path.join(frames_dir,'train',frames[i].split('/')[-1]))
     for i in range(split_frame_idx,len(frames),1):
         os.rename(frames[i], os.path.join(frames_dir,'test',frames[i].split('/')[-1]))
-
+    '''
     print('[*] added video %s to project %i with new video id %i.' % (source_video_file, project_id, video_id))
 
     return video_id 
