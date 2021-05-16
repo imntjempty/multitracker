@@ -12,6 +12,7 @@ from flask import Flask, render_template, Response, send_file, abort, redirect
 from flask import request
 from flask import jsonify
 import os 
+import io 
 import json
 from glob import glob 
 from random import shuffle 
@@ -39,6 +40,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser() 
     parser.add_argument('--model',default=None)
     parser.add_argument('--project_id',type=int,default=None)
+    parser.add_argument('--video_id',type=int,default=None)
+    parser.add_argument('--upper_bound',type=int,default=4)
+    
     parser.add_argument('--num_labeling_base',type=int,default=100)
     parser.add_argument('--open_gallery', dest='open_gallery', action='store_true')
     parser.add_argument('--postprocess_video', type=str,default=None)
@@ -69,6 +73,109 @@ def get_frame_time(frame_idx):
     tmin = int(frame_idx/(30.*60.))
     tsec = int(frame_idx/30.-tmin*60.)
     return '%i:%imin'%(tmin,tsec)
+
+
+video_reader = None 
+loaded_video_id = None
+skip_annotation_frames = None
+
+if args.video_id is not None:
+    ## open video file
+    # ignore first 5 frames
+    #for _ in range(300):
+    #    ret, frame = video_reader.read()
+    #    frame_buffer.append(frame)
+    #[Hframe,Wframe,_] = frame.shape
+    total_frame_number = int(video_reader.get(cv.CAP_PROP_FRAME_COUNT))
+    
+    '''## open tracking csv
+    tracking_data = {}#pd.read_csv(csv_filepath) 
+    with open(args.postprocess_csv, 'r' ) as f:
+        lines = [l[:-1].split(',') for l in f.readlines()]
+        header = lines[0]
+        print(header)
+        for line in lines[1:]:
+            video_id,frame_id,track_id,center_x,center_y,x1,y1,x2,y2,time_since_update = line
+            frame_id, track_id = int(frame_id), int(track_id)
+            x1,y1,x2,y2 = [int(round(float(c))) for c in [x1,y1,x2,y2]]
+            if not frame_id in tracking_data:
+                tracking_data[frame_id] = {}
+            tracking_data[frame_id][track_id] = x1, y1, x2, y2'''
+
+
+@app.route('/get_next_annotation/<project_id>/<video_id>')
+def get_next_annotation(project_id, video_id):
+    project_id = int(project_id) 
+    video_id = int(video_id) 
+
+    config = model.get_config(int(project_id))
+    #if args.video_id is None:
+    #    raise Exception("\n   please restart the app with argument --video_id and --upper_bound")
+
+    global loaded_video_id
+    if loaded_video_id is None or not loaded_video_id == video_id:
+        get_next_annotation_frame(project_id, video_id, int(np.random.uniform(1e6)))
+
+    # load labeled frame idxs
+    labeled_frame_idxs = db.get_labeled_frames(video_id)
+    labeled_frame_idxs_boundingboxes = db.get_labeled_bbox_frames(video_id)
+    
+    num_db_frames = len(labeled_frame_idxs)
+    
+    animals = []
+    for i in range(int(args.upper_bound)):
+        x1,y1,x2,y2 = [200*i,200*i,200*(i+1),200*(i+1)]
+        keypoints = [ ]
+        for j,kp_name in enumerate(config['keypoint_names']):
+            keypoints.append({
+                'name': kp_name,
+                'x': x1 + 20*j,
+                'y': y1 + 23*j
+            })
+        
+        animals.append({'id': str(i+1), 'box': [x1,y1,x2,y2], 'keypoints': keypoints})
+    animals_json = json.dumps(animals)
+    return render_template('annotate.html', animals = animals, animals_json = animals_json, project_id = int(project_id), video_id = int(video_id), frame_idx = frame_idx, keypoint_names = db.list_sep.join(config['keypoint_names']), sep = db.list_sep, num_db_frames = num_db_frames, labeling_mode = 'annotate')
+
+@app.route('/get_next_annotation_frame/<project_id>/<video_id>/<randseed>')
+def get_next_annotation_frame(project_id, video_id, randseed):
+    project_id = int(project_id) 
+    video_id = int(video_id) 
+
+    global frame_idx 
+    global loaded_video_id
+    global video_reader
+    global skip_annotation_frames
+    if loaded_video_id is None or not loaded_video_id == video_id:
+        frame_buffer = deque(maxlen=300)
+        db.execute('select name, project_id from videos where id=%i;' % int(video_id))
+        video_name, project_id = [ x for x in db.cur.fetchall()][0]
+        video_filepath = os.path.join(args.data_dir, 'projects', str(project_id), 'videos', video_name)
+        #csv_filepath = video_filepath.replace('.mp4','.csv')
+        video_reader = cv.VideoCapture( video_filepath )
+        total_frame_number = int(video_reader.get(cv.CAP_PROP_FRAME_COUNT))
+        skip_annotation_frames = int(total_frame_number / args.num_labeling_base) -1 
+        print('skip_annotation_frames',skip_annotation_frames)
+        frame_idx = 0
+        loaded_video_id = video_id 
+        print('[*] loaded video', video_filepath)
+    
+    for _ in range(skip_annotation_frames):
+        ret, frame = video_reader.read()
+        frame_idx += 1 
+
+    if frame is None:
+        return '''<html><body>you done annotating :) video over</body></html>'''
+    
+    is_success, im_buf_arr = cv.imencode(".jpg", frame)
+    byte_im = im_buf_arr.tobytes()
+
+    return send_file( io.BytesIO(byte_im),
+        attachment_filename='frame.jpg',
+        mimetype='image/jpeg')  
+    #return (b'--frame\r\n'
+    #           b'Content-Type: image/jpeg\r\n\r\n' + frame.tostring() + b'\r\n')
+
 
 @app.route('/get_next_labeling_frame/<project_id>/<video_id>')
 def render_labeling(project_id,video_id):
@@ -531,53 +638,6 @@ def skip_labeling():
 
     return json.dumps({'success':True}), 200, {'ContentType':'application/json'} 
 
-
-if args.postprocess_video is not None:
-    ## open video file
-    frame_buffer = deque(maxlen=300)
-    '''db.execute('select name, project_id from videos where id=%i;' % int(args.postprocess_video_id))
-    video_name, project_id = [ x for x in db.cur.fetchall()][0]
-    video_filepath = os.path.join(args.data_dir, 'projects', str(project_id), 'videos', video_name)
-    csv_filepath = video_filepath.replace('.mp4','.csv')'''
-    video_reader = cv.VideoCapture( args.postprocess_video )
-    postprocess_frame_idx = 0
-    # ignore first 5 frames
-    #for _ in range(300):
-    #    ret, frame = video_reader.read()
-    #    frame_buffer.append(frame)
-    #[Hframe,Wframe,_] = frame.shape
-    total_frame_number = int(video_reader.get(cv.CAP_PROP_FRAME_COUNT))
-    
-    ## open tracking csv
-    tracking_data = {}#pd.read_csv(csv_filepath) 
-    with open(args.postprocess_csv, 'r' ) as f:
-        lines = [l[:-1].split(',') for l in f.readlines()]
-        header = lines[0]
-        print(header)
-        for line in lines[1:]:
-            video_id,frame_id,track_id,center_x,center_y,x1,y1,x2,y2,time_since_update = line
-            frame_id, track_id = int(frame_id), int(track_id)
-            x1,y1,x2,y2 = [int(round(float(c))) for c in [x1,y1,x2,y2]]
-            if not frame_id in tracking_data:
-                tracking_data[frame_id] = {}
-            tracking_data[frame_id][track_id] = x1, y1, x2, y2
-
-@app.route('/postprocess_tracking')
-def postprocess_tracking():
-    #return render_template('postprocess.html',project_id = int(project_id), video_id = int(args.postprocess_video_id), frame_idx = postprocess_frame_idx, num_frames = total_frame_number)
-    json_tracking_data = tracking_data
-    return render_template('postprocess.html', labeling_mode='postprocess', video_name = args.postprocess_video.split('/')[-1], total_frame_number=total_frame_number, tracking_data =json_tracking_data)
-
-@app.route('/get_next_postprocess_frame')
-def get_next_postprocess_frame():
-    ret, frame = video_reader.read()
-    frame_buffer.append(frame)
-    #postprocess_frame_idx += 1 
-
-    ret, buffer = cv.imencode('.jpg', frame)
-    bframe = buffer.tobytes()
-    return (b'--frame\r\n'
-        b'Content-Type: image/jpeg\r\n\r\n' + bframe + b'\r\n')  # concat frame one by one and show result
 
 
 if __name__ == "__main__":
