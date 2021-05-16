@@ -1,10 +1,13 @@
 let colors = ['red','yellow','blue','green','brown','magenta','cyan','gray','purple','lightblue','lightred'];
 var stage = null;
 var layer = null;
+var idswitch_line =  null;
+var idswitches = [];
 
 let circle_stroke_default = 2;
 let circle_stroke_hovered = 4; 
 let circle_radius = 10;
+let idswitch_stroke_default = 4;
 
 function fill_data_table(){
     //let t = document.getElementById('data_table_body');
@@ -96,12 +99,62 @@ function init_fe(){
             im.on('mouseup', function() { if(is_drawing_bbox) finish_bbox(); is_drawing_bbox = false; });
         }*/
 
+        // create idswitch line
+        idswitch_line = new Konva.Line({
+            id: 'idswitch_line',
+            points: [-100,-100,-100,-100],
+            strokeWidth: idswitch_stroke_default / stage.scaleX(),
+            stroke: 'red'
+        });
+        idswitch_line.listening(false);
+        layer.add(idswitch_line);
+        idswitch_line.moveToTop();
+
         im.moveToBottom();
         stage.draw();
         layer.draw();
     };
     let random_int = Math.floor(Math.random() * 10000);  
     imageObj.src = '/get_next_annotation_frame/'+project_id.toString()+'/'+video_id.toString()+'/'+random_int.toString();
+    
+}
+
+
+function id_switch(){
+    /* this function gets called when the user wants to correct an ID-switch between two different animal ids. 
+         it updates a chain of copy actions to send to the server for a time consistent correction and not just this frame ?!
+         switch konva positions
+    */
+    if( idswitch_id_a == idswitch_id_b){ return 0; }
+    let aobs = stage.find('#bbox_'+idswitch_id_a);
+    let bobs = stage.find('#bbox_'+idswitch_id_b);
+    if(aobs.length > 0 && bobs.length > 0){
+        let aob = aobs[0]; let bob = bobs[0];
+        console.log('[*] id_switch', idswitch_id_a, idswitch_id_b);
+        //console.log('group pos',aobs[0].x(),aobs[0].y(),'2nd',bobs[0].x(),bobs[0].y());
+        //console.log(aob,bob);
+        idswitches.push([idswitch_id_a, idswitch_id_b]);    
+        
+        // switch keypoint positions
+        for(let j = 0; j < keypoint_names.length; j++){    
+            let kp = layer.findOne('#kp_'+ idswitch_id_a + '_' + keypoint_names[j].toString());
+            kp.x( kp.x() - aob.x() + bob.x() );
+            kp.y( kp.y() - aob.y() + bob.y() );
+        }
+        for(let j = 0; j < keypoint_names.length; j++){    
+            let kp = layer.findOne('#kp_'+ idswitch_id_b + '_' + keypoint_names[j].toString());
+            kp.x( kp.x() - bob.x() + aob.x() );
+            kp.y( kp.y() - bob.y() + aob.y() );
+        }
+        // switch bbox positions
+        let tmp = {x: aob.x(), y: aob.y()};
+        aob.x( bob.x() );
+        aob.y( bob.y() );
+        bob.x( tmp.x );
+        bob.y( tmp.y );
+        
+        stage.draw();
+    }
     
 }
 
@@ -118,19 +171,22 @@ function add_animals(){
         
         let bbox = new Konva.Group({
             id: 'bbox_'+animal_id.toString(),
+            name: 'bbox',
+            x: bx1,
+            y: by1,
             draggable: true
         });
         bbox.animal_id=animal_id;
         bbox.add(new Konva.Rect({
-            x: bx1,
-            y: by1,
+            //x: bx1,
+            //y: by1,
             width: bx2-bx1,
             height: by2-by1,
             stroke: color
         }));  
         bbox.add(new Konva.Rect({
-            x: bx1,
-            y: by1,
+            //x: bx1,
+            //y: by1,
             width: bx2-bx1,
             height: by2-by1,
             fill: color,
@@ -139,7 +195,7 @@ function add_animals(){
         }));
         layer.add(bbox);
         bbox.moveToTop();
-        let tr = new Konva.Transformer({rotateEnabled:false});
+        let tr = new Konva.Transformer({rotateEnabled: false});
         layer.add(tr);
         tr.nodes([bbox]);
         //stage.batchDraw();
@@ -152,6 +208,7 @@ function add_animals(){
                 x: animals[i]['keypoints'][j]['x'],
                 y: animals[i]['keypoints'][j]['y']
             });
+            keypoint.animal_id = animal_id;
         
             // add tooltip label showing id indiv and keypoint name
             let label_text = animals[i]['id'].toString() + " - " + keypoint_names[j];
@@ -188,12 +245,8 @@ function add_animals(){
         // when bounding box gets dragged, the keypoints should move as well
         bbox.on('dragstart', function (evt){
             this.dragstart_pos = get_current_mousepos();
-            console.log('dragstart', this.dragstart_pos,keypoint_names.length);
-
             for(let j=0; j< keypoint_names.length; j++){
-
                 let konva_keypoint = layer.findOne('#kp_' + this.animal_id.toString() + '_' + keypoint_names[j]);
-                //console.log('QQ',j,evt.target.x());//.x());
                 konva_keypoint.box_offset = {x: konva_keypoint.x() - this.x(), y: konva_keypoint.y() - this.y()};
             }
         });
@@ -220,6 +273,16 @@ function get_current_mousepos(){
     return get_scaled_mouse_pos(stage);
 }
 
+function make_shapes_nondraggable(){
+    stage.find('.bbox').each(function (box){ box.draggable(false); });
+    stage.find('.keypoint').each(function (kp){ kp.draggable(false); });
+}
+
+function make_shapes_draggable(){
+    stage.find('.bbox').each(function (box){ box.draggable(true); });
+    stage.find('.keypoint').each(function (kp){ kp.draggable(true); });
+}
+
 function zoom(stage,inout,factor = 1.05,ref_point = 0){
     let old_scale = stage.scaleX();
     if(ref_point==0) ref_point = stage.getPointerPosition();   
@@ -244,7 +307,6 @@ function zoom(stage,inout,factor = 1.05,ref_point = 0){
         line.strokeWidth(line.strokeWidth() * old_scale / new_scale);
     });
     
-    
     let new_pos = {
         x: -(mouse_point_to.x - ref_point.x/ new_scale) * new_scale,
         y: -(mouse_point_to.y - ref_point.y/ new_scale) * new_scale
@@ -256,10 +318,14 @@ function zoom(stage,inout,factor = 1.05,ref_point = 0){
 
 
 let shift_pressed = false;
+let idswitch_pressed = false;
+var idswitch_id_a = null;
+var idswitch_id_b = null;
+
 document.addEventListener('keydown', function(event){
     if(event.keyCode == 16){ // SHIFT
         stage.draggable(true);
-        
+        stage.container().style.cursor = 'pointer';
         // disable zoom 
         //document.body.style = ".stop-scrolling { height: 100%; overflow: hidden; }";
         shift_pressed = true;
@@ -274,11 +340,66 @@ document.addEventListener('keydown', function(event){
         let mouse_pos = get_current_mousepos();
         zoom(stage,-1);
     }
+
+    // Identity Switch hotkey I
+    if(event.keyCode == 73){ 
+        stage.container().style.cursor = 'crosshair';
+        let mouse_pos = get_current_mousepos();
+        stage.on('mousedown', function(evt){
+            if(!idswitch_pressed){
+                let _mouse_pos = get_current_mousepos();
+                // set start and end of idswitch line at current mouse position
+                idswitch_line.points([_mouse_pos.x,_mouse_pos.y,_mouse_pos.x,_mouse_pos.y]);
+                idswitch_pressed = true;
+                //layer.batchDraw();
+                idswitch_id_a = evt.target.parent.animal_id;
+                
+                // make all boxes and keypoints not draggable
+                make_shapes_nondraggable();
+            }
+        });
+        stage.on('mouseup', function(evt){
+            if(idswitch_pressed == true){
+                idswitch_pressed = false;
+                idswitch_id_b = evt.target.parent.animal_id;
+                hide_idswitch_line();
+                make_shapes_draggable();
+                id_switch();
+            }
+        });
+        stage.on('mousemove', function(){
+            if(idswitch_pressed){
+                let _mouse_pos = get_current_mousepos();
+                let points = idswitch_line.points();
+                points[2] = _mouse_pos.x;
+                points[3] = _mouse_pos.y;
+                idswitch_line.points(points);
+                //console.log('line',idswitch_line.points());
+                layer.batchDraw();
+            }
+        });
+        idswitch_line.moveToTop();
+    }
+    
 });
+
+function hide_idswitch_line(){
+    stage.container().style.cursor = 'default';
+    stage.off('mousemove'); stage.off('mousedown'); stage.off('mouseup');
+    idswitch_pressed = false;
+    idswitch_line.points([-100,-100,-100,-100]);
+    stage.batchDraw();
+}
 
 document.addEventListener('keyup', function(event){  
     if(event.keyCode == 16){ // shift key
         stage.draggable(false);
         shift_pressed = false;
+        stage.container().style.cursor = 'default';
     } 
+    if(event.keyCode == 73){ // ID switch key I 
+        if(idswitch_pressed == true){
+            hide_idswitch_line();
+        }
+    }
 });
