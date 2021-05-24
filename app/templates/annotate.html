@@ -21,6 +21,7 @@
         <th><div id="container" style="height: 100%;"></div></th>
         <th>
             <table>
+                <tr><td>Annotated Frames {{num_db_frames}} (your goal is 100 :)</td></tr>
                 <tr><td><input type="button" id="bu_send" value="next frame" class="positive ui button"></td></tr>
             </table>
             <table border="1" id='data_table'>
@@ -60,7 +61,7 @@
 
     document.getElementById("bu_send").onclick = function(){
         let url = "/labeling";
-        let package = get_labeling_data();
+        let package = get_annotation_data();
         if(package !== null){
             post(url,package,redirect_next_task);
         }

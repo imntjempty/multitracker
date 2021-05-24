@@ -33,7 +33,7 @@ class DatabaseConnection(object):
                 create table if not exists projects (id integer primary key autoincrement, name text, manager text, keypoint_names text, created_at text);
                 create table if not exists videos (id integer primary key autoincrement, name text, project_id integer, fixed_number integer);
                 create table if not exists keypoint_positions (id integer primary key autoincrement, video_id integer, frame_idx text, keypoint_name text, individual_id integer, keypoint_x real, keypoint_y real);
-                create table if not exists bboxes (id integer primary key autoincrement, video_id integer, frame_idx text, x1 real, y1 real, x2 real, y2 real);
+                create table if not exists bboxes (id integer primary key autoincrement, video_id integer, frame_idx text, individual_id integer, x1 real, y1 real, x2 real, y2 real);
                 create table if not exists frame_jobs (id integer primary key autoincrement, project_id integer, video_id integer, time real, frame_name text);
                 create table if not exists trackdata (id integer primary key autoincrement, project_id integer, video_id integer, frame_id integer, individual_id integer, x1 real, y1 real, x2 real, y2 real, updated_by text);
             """
@@ -141,7 +141,7 @@ class DatabaseConnection(object):
             counts[video_id] += 1 
         return counts 
 
-    def save_labeling(self, data):
+    def save_keypoint_labeling(self, data):
         keypoint_names = self.get_keypoint_names(int(data['project_id']))
         num_parts = len(keypoint_names)
         for i, d in enumerate(data['keypoints']):
@@ -161,8 +161,8 @@ class DatabaseConnection(object):
 
     def save_bbox_labeling(self, data):
         for i, bbox in enumerate(data['bboxes']):
-            query = """ insert into bboxes (video_id, frame_idx, x1, y1, x2, y2) values (?,?,?,?,?,?); """
-            values = (int(data['video_id']), str(data['frame_idx']), bbox['x1'], bbox['y1'], bbox['x2'], bbox['y2'])
+            query = """ insert into bboxes (video_id, frame_idx, individual_id, x1, y1, x2, y2) values (?,?,?,?,?,?,?); """
+            values = (int(data['video_id']), str(data['frame_idx']), bbox['id_ind'], bbox['x1'], bbox['y1'], bbox['x2'], bbox['y2'])
             self.insert(query, values)
         print('[*] saved bbox labeling data to database for video %i, frame %s.' %(int(data['video_id']),str(data['frame_idx'])))
 

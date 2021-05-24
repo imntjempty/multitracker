@@ -21,9 +21,16 @@ function fill_data_table(){
         
         // hide/show konva bounding box and corresponding keypoints
         checkbox.addEventListener('change', function() {
-            let konva_bbox = layer.findOne('#bbox_'+this.animal_id);
+            let konva_bbox = layer.findOne('#bbox_'+this.animal_id.toString());
+            let konva_transfrom = layer.findOne('#transform_'+this.animal_id.toString());
             konva_bbox.draggable(this.checked);
-            if(this.checked) { konva_bbox.show(); } else { konva_bbox.hide(); }
+            if(this.checked) { 
+                konva_bbox.show(); 
+                konva_transfrom.show();
+            } else { 
+                konva_bbox.hide(); 
+                konva_transfrom.hide();
+            }
             for(let j=0; j< keypoint_names.length; j++){
                 let konva_keypoint = layer.findOne('#kp_'+this.animal_id.toString() + '_' + keypoint_names[j]);
                 konva_keypoint.draggable(this.checked);
@@ -195,7 +202,7 @@ function add_animals(){
         }));
         layer.add(bbox);
         bbox.moveToTop();
-        let tr = new Konva.Transformer({rotateEnabled: false});
+        let tr = new Konva.Transformer({rotateEnabled: false, keepRatio: false, id: 'transform_'+animal_id.toString()});
         layer.add(tr);
         tr.nodes([bbox]);
         //stage.batchDraw();
@@ -209,16 +216,19 @@ function add_animals(){
                 y: animals[i]['keypoints'][j]['y']
             });
             keypoint.animal_id = animal_id;
+            keypoint.db_id = animals[i]['keypoints'][j]['db_id'];
         
             // add tooltip label showing id indiv and keypoint name
             let label_text = animals[i]['id'].toString() + " - " + keypoint_names[j];
             let label = new Konva.Text({
                 x: 1.2 * circle_radius / stage.scaleX(),
-                y: 0,
+                y: -1.1 * circle_radius / stage.scaleX(),
                 text: label_text,
                 fontSize: 3 * circle_radius / stage.scaleX(),
                 fontFamily: 'Calibri',
-                fill: color
+                fill: color,
+                stroke: 'white',
+                strokeWidth: 0.5  / stage.scaleX()
             });
             keypoint.add(label);
             
@@ -403,3 +413,46 @@ document.addEventListener('keyup', function(event){
         }
     }
 });
+
+
+function get_annotation_data(){
+    let package = {"project_id": project_id, "video_id": video_id, "frame_idx": frame_idx, "labeling_mode": labeling_mode};
+    
+    package['keypoints'] = [];
+    stage.find('.keypoint').each(function (konva_kp) {
+        let name_parts = konva_kp.name().split('__');
+        package['keypoints'].push({
+            'x': konva_kp.x(), 'y': konva_kp.y(),
+            'keypoint_name': name_parts[0],
+            'id_ind': konva_kp.animal_id,
+            'db_id': konva_kp.db_id
+        });
+    });
+    
+
+    package['bboxes'] = [];
+    for(let i=1; i < animals.length+1; i++){
+        let bbox = layer.findOne('#bbox_'+i.toString()).findOne('Rect');
+        let x1 = bbox.x();
+        let y1 = bbox.y();
+        let x2 = x1 + bbox.width();
+        let y2 = y1 + bbox.height();
+        if(bbox.width()<0){ let tmp = x1; x1 = x2; x2 = tmp; }
+        if(bbox.height()<0){ let tmp = y1; y1 = y2; y2 = tmp; }
+                        
+        package['bboxes'].push({
+            'x1': x1, 'y1': y1,
+            'x2': x2, 'y2': y2,
+            'id_ind': i,
+            'db_id': animals[i]['db_id']
+        });
+    }
+    return package;
+}
+
+
+function redirect_next_task(){
+    // make request to server to get new random task and redirect to that page
+    let url = "/get_next_annotation/" + project_id.toString() + "/"+ video_id.toString();
+    document.location.href = url;
+}

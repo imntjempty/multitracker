@@ -130,10 +130,11 @@ def get_next_annotation(project_id, video_id):
             keypoints.append({
                 'name': kp_name,
                 'x': x1 + 20*j,
-                'y': y1 + 23*j
+                'y': y1 + 23*j,
+                'db_id': None
             })
         
-        animals.append({'id': str(i+1), 'box': [x1,y1,x2,y2], 'keypoints': keypoints})
+        animals.append({'id': str(i+1), 'box': [x1,y1,x2,y2], 'keypoints': keypoints, 'db_id': None})
     animals_json = json.dumps(animals)
     return render_template('annotate.html', animals = animals, animals_json = animals_json, project_id = int(project_id), video_id = int(video_id), frame_idx = frame_idx, keypoint_names = db.list_sep.join(config['keypoint_names']), sep = db.list_sep, num_db_frames = num_db_frames, labeling_mode = 'annotate')
 
@@ -585,9 +586,10 @@ def receive_labeling():
     data = request.get_json(silent=True,force=True)
     print('[*] received labeling for frame %i.'%(int(data['frame_idx']) ))
     
-    if data['labeling_mode'] == 'keypoint':
+    if data['labeling_mode'] in ['keypoint','annotate']:
+        print('   [*] saving keypoints')
         # save labeling to database
-        db.save_labeling(data)
+        db.save_keypoint_labeling(data)
 
         if training_model is not None:
             # draw sent data
@@ -625,8 +627,9 @@ def receive_labeling():
             # sometimes save model to disk
             if count_active_steps % 10 == 0:
                 training_model.save(args.model)
-    elif data['labeling_mode'] == 'bbox':
+    if data['labeling_mode'] in ['bbox','annotate']:
         #print(data)
+        print('   [*] saving bounding boxes')
         db.save_bbox_labeling(data)
 
     return json.dumps({'success':True}), 200, {'ContentType':'application/json'} 
