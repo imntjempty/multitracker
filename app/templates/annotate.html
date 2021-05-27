@@ -29,7 +29,7 @@
                     {% for animal in animals %}
                         <tr name = 'row_animal'><td data-label="animal id" name="animal_id">Animal</td><td></td><td>visible</td><td><input type="checkbox" checked name="checkbox_animal_"></td></tr>
                         {% for keypoint_name in keypoint_names.split(sep) %}
-                            <tr><td></td><td data-label="keypoint name" name="kpname">{{keypoint_name}}</td><td>visible</td><td><input type="checkbox" checked name="checkbox_keypoint_{{keypoint_name}}"></td></tr>
+                            <tr><td></td><td data-label="keypoint name" name="kpname">{{keypoint_name}}</td><td>visible</td><td><input type="checkbox" checked name="checkbox_keypoint_{{ (animal.id|int ) |string}}_{{keypoint_name}}"></td></tr>
                         {% endfor %}
                     {% endfor %}
                 </tbody>

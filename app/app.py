@@ -134,7 +134,7 @@ def get_next_annotation(project_id, video_id):
                 'db_id': None
             })
         
-        animals.append({'id': str(i+1), 'box': [x1,y1,x2,y2], 'keypoints': keypoints, 'db_id': None})
+        animals.append({'id': str(i+1), 'box': [x1,y1,x2,y2], 'keypoints': keypoints, 'db_id': None, 'is_visible': True})
     animals_json = json.dumps(animals)
     return render_template('annotate.html', animals = animals, animals_json = animals_json, project_id = int(project_id), video_id = int(video_id), frame_idx = frame_idx, keypoint_names = db.list_sep.join(config['keypoint_names']), sep = db.list_sep, num_db_frames = num_db_frames, labeling_mode = 'annotate')
 
@@ -142,6 +142,7 @@ def get_next_annotation(project_id, video_id):
 def get_next_annotation_frame(project_id, video_id, randseed):
     project_id = int(project_id) 
     video_id = int(video_id) 
+    frame = None 
 
     global frame_idx 
     global loaded_video_id
@@ -585,9 +586,9 @@ def add_video():
 def receive_labeling():
     data = request.get_json(silent=True,force=True)
     print('[*] received labeling for frame %i.'%(int(data['frame_idx']) ))
+    print(data)
     
     if data['labeling_mode'] in ['keypoint','annotate']:
-        print('   [*] saving keypoints')
         # save labeling to database
         db.save_keypoint_labeling(data)
 
@@ -628,10 +629,8 @@ def receive_labeling():
             if count_active_steps % 10 == 0:
                 training_model.save(args.model)
     if data['labeling_mode'] in ['bbox','annotate']:
-        #print(data)
-        print('   [*] saving bounding boxes')
         db.save_bbox_labeling(data)
-
+        
     return json.dumps({'success':True}), 200, {'ContentType':'application/json'} 
 
 @app.route('/skip_labeling',methods=["POST"])

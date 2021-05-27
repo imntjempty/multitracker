@@ -18,12 +18,14 @@ function fill_data_table(){
         let checkbox = rows[i].cells[3].getElementsByTagName('input')[0];
         checkbox.name = "checkbox_animal_" + animals[i]['id'].toString();
         checkbox.animal_id = animals[i]['id'].toString();
-        
         // hide/show konva bounding box and corresponding keypoints
         checkbox.addEventListener('change', function() {
             let konva_bbox = layer.findOne('#bbox_'+this.animal_id.toString());
             let konva_transfrom = layer.findOne('#transform_'+this.animal_id.toString());
             konva_bbox.draggable(this.checked);
+            
+            animals[this.animal_id-1].is_visible = this.checkbox;
+
             if(this.checked) { 
                 konva_bbox.show(); 
                 konva_transfrom.show();
@@ -44,9 +46,11 @@ function fill_data_table(){
         for(let j in keypoint_names){
             let keypoint_name = keypoint_names[j];
             
-            let keypoint_checkbox = document.getElementsByName('checkbox_keypoint_'+keypoint_name)[i];
+            let keypoint_checkbox = document.getElementsByName('checkbox_keypoint_'+(i+1).toString()+"_"+keypoint_name)[0];
+            //console.log(j,'keypoint_checkbox',keypoint_checkbox);
             keypoint_checkbox.animal_id = animals[i]['id'];
             keypoint_checkbox.keypoint_name = keypoint_name;
+            //keypoint_checkbox.name = "checkbox_keypoint_" + keypoint_checkbox.animal_id + "_" + keypoint_name;
             keypoint_checkbox.addEventListener('change', function() {
                 // hide/show keypoint konva group
                 let konva_keypoint = layer.findOne('#kp_'+this.animal_id.toString() + '_' + this.keypoint_name);
@@ -169,7 +173,7 @@ function add_animals(){
     for(let i = 0 ; i < animals.length; i++){
         let [bx1,by1,bx2,by2] = animals[i]['box'];
         
-        console.log('bx1,by1,bx2,by2',bx1,by1,bx2,by2);
+        //console.log('bx1,by1,bx2,by2',bx1,by1,bx2,by2);
         let animal_id = animals[i]['id'];
         let color = colors[animal_id % colors.length];
 
@@ -216,6 +220,7 @@ function add_animals(){
                 y: animals[i]['keypoints'][j]['y']
             });
             keypoint.animal_id = animal_id;
+            keypoint.keypoint_name = keypoint_names[j];
             keypoint.db_id = animals[i]['keypoints'][j]['db_id'];
         
             // add tooltip label showing id indiv and keypoint name
@@ -418,18 +423,6 @@ document.addEventListener('keyup', function(event){
 function get_annotation_data(){
     let package = {"project_id": project_id, "video_id": video_id, "frame_idx": frame_idx, "labeling_mode": labeling_mode};
     
-    package['keypoints'] = [];
-    stage.find('.keypoint').each(function (konva_kp) {
-        let name_parts = konva_kp.name().split('__');
-        package['keypoints'].push({
-            'x': konva_kp.x(), 'y': konva_kp.y(),
-            'keypoint_name': name_parts[0],
-            'id_ind': konva_kp.animal_id,
-            'db_id': konva_kp.db_id
-        });
-    });
-    
-
     package['bboxes'] = [];
     for(let i=1; i < animals.length+1; i++){
         let bbox = layer.findOne('#bbox_'+i.toString()).findOne('Rect');
@@ -439,14 +432,31 @@ function get_annotation_data(){
         let y2 = y1 + bbox.height();
         if(bbox.width()<0){ let tmp = x1; x1 = x2; x2 = tmp; }
         if(bbox.height()<0){ let tmp = y1; y1 = y2; y2 = tmp; }
-                        
-        package['bboxes'].push({
-            'x1': x1, 'y1': y1,
-            'x2': x2, 'y2': y2,
-            'id_ind': i,
-            'db_id': animals[i]['db_id']
-        });
+        if(animals[i-1].is_visible){
+            package['bboxes'].push({
+                'x1': x1, 'y1': y1,
+                'x2': x2, 'y2': y2,
+                'id_ind': i,
+                'db_id': animals[i-1]['db_id']
+            });
+        }
     }
+    
+    package['keypoints'] = [];
+    stage.find('.keypoint').each(function (konva_kp) {
+        let kp_visible = document.getElementsByName("checkbox_keypoint_" + konva_kp.animal_id.toString() + "_" + konva_kp.keypoint_name)[0].checked
+        if(kp_visible == true && animals[konva_kp.animal_id-1].is_visible){
+            package['keypoints'].push({
+                'x': konva_kp.x(), 'y': konva_kp.y(),
+                'keypoint_name': konva_kp.keypoint_name,
+                'id_ind': konva_kp.animal_id,
+                'db_id': konva_kp.db_id
+            });
+        }
+    });
+    
+
+    
     return package;
 }
 
