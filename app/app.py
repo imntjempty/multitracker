@@ -109,7 +109,7 @@ def get_next_annotation(project_id, video_id):
     
     labeled_frame_idxs_boundingboxes = db.get_labeled_bbox_frames(video_id)
     num_frames = 5000
-    next_frame_idx = int(num_frames * len(labeled_frame_idxs_boundingboxes) / float(args.num_labeling_base) )
+    next_frame_idx = 5 + int(num_frames * len(labeled_frame_idxs_boundingboxes) / float(args.num_labeling_base) )
     return '<script>document.location.href = "/get_annotation/%i/%i/%i";</script>' % ( project_id, video_id, next_frame_idx)
 
 @app.route('/get_annotation/<project_id>/<video_id>/<frame_id>')
