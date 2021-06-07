@@ -102,19 +102,30 @@ if args.video_id is not None:
                 tracking_data[frame_id] = {}
             tracking_data[frame_id][track_id] = x1, y1, x2, y2'''
 
-
 @app.route('/get_next_annotation/<project_id>/<video_id>')
 def get_next_annotation(project_id, video_id):
     project_id = int(project_id) 
     video_id = int(video_id) 
+    
+    labeled_frame_idxs_boundingboxes = db.get_labeled_bbox_frames(video_id)
+    num_frames = 5000
+    next_frame_idx = int(num_frames * len(labeled_frame_idxs_boundingboxes) / float(args.num_labeling_base) )
+    return '<script>document.location.href = "/get_annotation/%i/%i/%i";</script>' % ( project_id, video_id, next_frame_idx)
+
+@app.route('/get_annotation/<project_id>/<video_id>/<frame_id>')
+def get_annotation(project_id, video_id, frame_id):
+    project_id = int(project_id) 
+    video_id = int(video_id) 
+    frame_id = int(frame_id) 
 
     config = model.get_config(int(project_id))
     #if args.video_id is None:
     #    raise Exception("\n   please restart the app with argument --video_id and --upper_bound")
 
     global loaded_video_id
-    if loaded_video_id is None or not loaded_video_id == video_id:
-        get_next_annotation_frame(project_id, video_id, int(np.random.uniform(1e6)))
+    
+    #if loaded_video_id is None or not loaded_video_id == video_id:
+    #    get_next_annotation_frame(project_id, video_id, int(np.random.uniform(1e6)))
 
     # load labeled frame idxs
     labeled_frame_idxs = db.get_labeled_frames(video_id)
@@ -122,33 +133,45 @@ def get_next_annotation(project_id, video_id):
     
     num_db_frames = len(labeled_frame_idxs)
     
-    animals = []
-    for i in range(int(args.upper_bound)):
-        x1,y1,x2,y2 = [200*i,200*i,200*(i+1),200*(i+1)]
-        keypoints = [ ]
-        for j,kp_name in enumerate(config['keypoint_names']):
-            keypoints.append({
-                'name': kp_name,
-                'x': x1 + 20*j,
-                'y': y1 + 23*j,
-                'db_id': None
-            })
-        
-        animals.append({'id': str(i+1), 'box': [x1,y1,x2,y2], 'keypoints': keypoints, 'db_id': None, 'is_visible': True})
-    animals_json = json.dumps(animals)
-    return render_template('annotate.html', animals = animals, animals_json = animals_json, project_id = int(project_id), video_id = int(video_id), frame_idx = frame_idx, keypoint_names = db.list_sep.join(config['keypoint_names']), sep = db.list_sep, num_db_frames = num_db_frames, labeling_mode = 'annotate')
+    # load annotation from database
+    animals = db.get_frame_annotations(video_id, frame_id )
+    if animals is None:
+        animals = []
+        # if no annotation around, init upper_bound many animals with keypoints
+        for i in range(int(args.upper_bound)):
+            x1,y1,x2,y2 = [200*i,200*i,200*(i+1),200*(i+1)]
+            keypoints = [ ]
+            for j,kp_name in enumerate(config['keypoint_names']):
+                keypoints.append({
+                    'name': kp_name,
+                    'x': x1 + 20*j,
+                    'y': y1 + 23*j,
+                    'db_id': None,
+                    'is_visible': True
+                })
+            
+            animals.append({'id': str(i+1), 'box': [x1,y1,x2,y2], 'keypoints': keypoints, 'db_id': None, 'is_visible': True})
+    else:
+        # parse db animals
+        #for i, animal in enumerate(animals):
+        #    print(i, animal)
+        pass 
 
-@app.route('/get_next_annotation_frame/<project_id>/<video_id>/<randseed>')
-def get_next_annotation_frame(project_id, video_id, randseed):
+    animals_json = json.dumps(animals)
+    return render_template('annotate.html', animals = animals, animals_json = animals_json, project_id = int(project_id), video_id = int(video_id), frame_idx = frame_id, keypoint_names = db.list_sep.join(config['keypoint_names']), sep = db.list_sep, num_db_frames = num_db_frames, labeling_mode = 'annotate')
+
+@app.route('/get_video_frame/<project_id>/<video_id>/<frame_id>')
+def get_next_annotation_frame(project_id, video_id, frame_id):
     project_id = int(project_id) 
     video_id = int(video_id) 
+    frame_id = int(frame_id) 
     frame = None 
 
     global frame_idx 
     global loaded_video_id
     global video_reader
     global skip_annotation_frames
-    if loaded_video_id is None or not loaded_video_id == video_id:
+    if loaded_video_id is None or not loaded_video_id == video_id or frame_idx >= frame_id:
         frame_buffer = deque(maxlen=300)
         db.execute('select name, project_id from videos where id=%i;' % int(video_id))
         video_name, project_id = [ x for x in db.cur.fetchall()][0]
@@ -157,12 +180,15 @@ def get_next_annotation_frame(project_id, video_id, randseed):
         video_reader = cv.VideoCapture( video_filepath )
         total_frame_number = int(video_reader.get(cv.CAP_PROP_FRAME_COUNT))
         skip_annotation_frames = int(total_frame_number / args.num_labeling_base) -1 
-        print('skip_annotation_frames',skip_annotation_frames)
+        #print('skip_annotation_frames',skip_annotation_frames)
         frame_idx = 0
+        ret, frame = video_reader.read()
+
         loaded_video_id = video_id 
         print('[*] loaded video', video_filepath)
     
-    for _ in range(skip_annotation_frames):
+    #for _ in range(skip_annotation_frames):
+    while frame_idx < frame_id:
         ret, frame = video_reader.read()
         frame_idx += 1 
 
@@ -586,7 +612,7 @@ def add_video():
 def receive_labeling():
     data = request.get_json(silent=True,force=True)
     print('[*] received labeling for frame %i.'%(int(data['frame_idx']) ))
-    print(data)
+    #print(data)
     
     if data['labeling_mode'] in ['keypoint','annotate']:
         # save labeling to database

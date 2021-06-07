@@ -32,8 +32,8 @@ class DatabaseConnection(object):
             query = """
                 create table if not exists projects (id integer primary key autoincrement, name text, manager text, keypoint_names text, created_at text);
                 create table if not exists videos (id integer primary key autoincrement, name text, project_id integer, fixed_number integer);
-                create table if not exists keypoint_positions (id integer primary key autoincrement, video_id integer, frame_idx text, keypoint_name text, individual_id integer, keypoint_x real, keypoint_y real);
-                create table if not exists bboxes (id integer primary key autoincrement, video_id integer, frame_idx text, individual_id integer, x1 real, y1 real, x2 real, y2 real);
+                create table if not exists keypoint_positions (id integer primary key autoincrement, video_id integer, frame_idx text, keypoint_name text, individual_id integer, keypoint_x real, keypoint_y real, is_visible bool);
+                create table if not exists bboxes (id integer primary key autoincrement, video_id integer, frame_idx text, individual_id integer, x1 real, y1 real, x2 real, y2 real, is_visible bool);
                 create table if not exists frame_jobs (id integer primary key autoincrement, project_id integer, video_id integer, time real, frame_name text);
                 create table if not exists trackdata (id integer primary key autoincrement, project_id integer, video_id integer, frame_id integer, individual_id integer, x1 real, y1 real, x2 real, y2 real, updated_by text);
             """
@@ -141,29 +141,88 @@ class DatabaseConnection(object):
             counts[video_id] += 1 
         return counts 
 
+    def get_frame_annotations(self, video_id, frame_id):
+        # find all objects and keypoints
+        animals_dat = {}
+        query = """
+            select bboxes.id as box_id, bboxes.individual_id, bboxes.x1, bboxes.y1, bboxes.x2, bboxes.y2, bboxes.is_visible as box_is_visible, kp.id as keypoint_id, kp.keypoint_name, kp.keypoint_x, kp.keypoint_y, kp.is_visible as keypoint_is_visible 
+                from bboxes 
+                inner join keypoint_positions as kp 
+                on bboxes.video_id=kp.video_id and bboxes.frame_idx=kp.frame_idx and bboxes.individual_id=kp.individual_id 
+                where bboxes.video_id=%i and bboxes.frame_idx=%i
+                order by bboxes.id, kp.id ASC;
+        """ % (video_id, frame_id)
+        
+        self.execute(query)
+        #lres = list(set([x for x in self.cur.fetchall()]))#[0]
+        lres = list([x for x in self.cur.fetchall()])#[0]
+        #print(query, lres)
+        if len(lres) == 0:
+            return None 
+        
+        for line in lres:
+            klist = ['box_id', 'individual_id', 'x1', 'y1', 'x2', 'y2', 'box_is_visible', 'keypoint_id', 'keypoint_name', 'keypoint_x', 'keypoint_y', 'keypoint_is_visible']
+            d = {}
+            #for k, v in zip(klist, line.replace(' ','').split(',')):
+            #print(line)
+            for k, v in zip(klist, list(line)):
+                d[k] = v 
+            
+            d['keypoint_x'], d['keypoint_y'] = int(round(d['keypoint_x'])), int(round(d['keypoint_y']))
+
+            if not d['box_id'] in animals_dat:
+                animals_dat[d['box_id']] = {
+                    'is_visible': d['box_is_visible'],
+                    'box': [d['x1'],d['y1'],d['x2'],d['y2']],
+                    'id': str(d['individual_id']),
+                    'keypoints_dat': {},
+                    'db_id': d['box_id']
+                }
+            if d['keypoint_name'] not in animals_dat[d['box_id']]['keypoints_dat']:
+                animals_dat[d['box_id']]['keypoints_dat'][d['keypoint_name']] = {
+                    'db_id': d['keypoint_id'],
+                    'id': str(d['individual_id']),
+                    'x': d['keypoint_x'],
+                    'y': d['keypoint_y'],
+                    'name': d['keypoint_name'],
+                    'is_visible': d['keypoint_is_visible']
+                }
+                animals_dat[d['box_id']]['keypoints'] = list(animals_dat[d['box_id']]['keypoints_dat'].values())
+        animals_list = list(animals_dat.values())
+        return animals_list
+
     def save_keypoint_labeling(self, data):
         keypoint_names = self.get_keypoint_names(int(data['project_id']))
         num_parts = len(keypoint_names)
+        
+        ## TODO: validate input before deleting
+
+        ## don't allow multiple versions of the same frame, if one already in db, delete it first
+        self.execute(""" delete from keypoint_positions where video_id=%i and frame_idx=%s;""" % (int(data['video_id']), str(data['frame_idx'])))
+        # self.commit()
+
         for i, d in enumerate(data['keypoints']):
             x, y = d['x'], d['y']
             if not (x == -100 and y == -100):
                 id_ind = d['id_ind']
                 keypoint_name = d['keypoint_name']
-                query = """ insert into keypoint_positions (video_id, frame_idx, keypoint_name, individual_id, keypoint_x, keypoint_y) values (?,?,?,?,?,?); """
-
-                values = (int(data['video_id']), str(data['frame_idx']), keypoint_name, id_ind, x, y)
+                query = """ insert into keypoint_positions (video_id, frame_idx, keypoint_name, individual_id, keypoint_x, keypoint_y, is_visible) values (?,?,?,?,?,?,?); """
+                is_visible = d['is_visible'] 
+                values = (int(data['video_id']), str(data['frame_idx']), keypoint_name, id_ind, x, y, is_visible)
                 self.insert(query, values)
-        if len(data['keypoints']) == 0:
-            query = """ insert into keypoint_positions (video_id, frame_idx, keypoint_name, individual_id, keypoint_x, keypoint_y) values (?,?,NULL,NULL,NULL,NULL); """
-            values = (int(data['video_id']), str(data['frame_idx']))
-            self.insert(query, values)
+        #print(data)
         print('[*] saved keypoint labeling data to database for video %i, frame %s.' %(int(data['video_id']),str(data['frame_idx'])))
 
     def save_bbox_labeling(self, data):
+        self.execute(""" delete from bboxes where video_id=%i and frame_idx=%s;""" % (int(data['video_id']), str(data['frame_idx'])))
+        
+        
         for i, bbox in enumerate(data['bboxes']):
-            query = """ insert into bboxes (video_id, frame_idx, individual_id, x1, y1, x2, y2) values (?,?,?,?,?,?,?); """
-            values = (int(data['video_id']), str(data['frame_idx']), bbox['id_ind'], bbox['x1'], bbox['y1'], bbox['x2'], bbox['y2'])
+            is_visible = bbox['is_visible'] 
+            query = """ insert into bboxes (video_id, frame_idx, individual_id, x1, y1, x2, y2, is_visible) values (?,?,?,?,?,?,?,?); """
+            values = (int(data['video_id']), str(data['frame_idx']), bbox['id_ind'], bbox['x1'], bbox['y1'], bbox['x2'], bbox['y2'],is_visible)
             self.insert(query, values)
+        #print(data)
         print('[*] saved bbox labeling data to database for video %i, frame %s.' %(int(data['video_id']),str(data['frame_idx'])))
 
 

@@ -58,6 +58,10 @@
     
     add_animals();
     fill_data_table();
+    stage.on('mousemove',function() {
+        //console.log('transform',stage.findOne('#transform_1'));
+        //console.log('bbox',stage.findOne('#bbox_1'));
+    });
 
     document.getElementById("bu_send").onclick = function(){
         let url = "/labeling";
