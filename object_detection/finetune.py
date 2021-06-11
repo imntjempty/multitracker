@@ -75,11 +75,11 @@ def get_bbox_data(config, video_ids, vis_input_data=0):
     frame_bboxes = {}
     for _video_id in video_ids.split(','):
         _video_id = int(_video_id)
-        db.execute("select * from bboxes where video_id=%i;" % _video_id)
+        db.execute("select * from bboxes where video_id=%i and is_visible=true order by id;" % _video_id)
         db_boxxes = [x for x in db.cur.fetchall()]
         random.Random(4).shuffle(db_boxxes)
         for dbbox in db_boxxes:
-            _, _, frame_idx, x1, y1, x2, y2 = dbbox
+            _, _, frame_idx, individual_id, x1, y1, x2, y2, is_visible = dbbox
             _key = '%i_%s' % (_video_id, frame_idx) 
             if not _key in frame_bboxes:
                 frame_bboxes[_key] = [] 
@@ -88,7 +88,32 @@ def get_bbox_data(config, video_ids, vis_input_data=0):
         for i, _key in enumerate(frame_bboxes.keys()):
             frame_bboxes[_key] = np.array(frame_bboxes[_key]) 
     
-    # read one arbitray frame
+        ## open video, check if annotated frames are written to disk, if not, write them
+        frames_missing_on_disk = []
+        for i, _key in enumerate(frame_bboxes.keys()):
+            video_id, frame_idx = _key.split('_')
+            frame_path = os.path.join(frames_dir, video_id, 'frames', 'train', '%05d.png' % int(frame_idx))
+            if not os.path.isfile(frame_path):
+                frames_missing_on_disk.append([video_id, frame_idx, frame_path])
+        if len(frames_missing_on_disk) > 0:
+            frames_missing_on_disk = sorted(frames_missing_on_disk, key=lambda x: int(x[1]))    
+            video_name = db.get_video_name(int(video_id))
+            video_path = os.path.join(frames_dir, 'videos', video_name)
+            print('sampling %i frames'% len(frames_missing_on_disk),' from video',video_id, video_name, video_path, os.path.isfile(video_path))
+            
+            video = cv.VideoCapture(video_path)
+            frame_cnt = 0
+            frame = 1 
+            while len(frames_missing_on_disk) > 0 and frame is not None:
+                next_target_frame = int(frames_missing_on_disk[0][1])
+                _, frame = video.read()
+                if frame_cnt == next_target_frame:
+                    # write to disk
+                    cv.imwrite(frames_missing_on_disk[0][2], frame)
+                    frames_missing_on_disk = frames_missing_on_disk[1:]
+                frame_cnt += 1
+                
+    # read one arbitray frame to extract height and width of video frames
     sample_fim = ''
     while not os.path.isfile(sample_fim):
         k = int(np.random.uniform(len(list(frame_bboxes.keys()))))

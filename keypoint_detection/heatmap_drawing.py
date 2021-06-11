@@ -29,7 +29,7 @@ def generate_hm(height, width ,landmarks, keypoint_names, s=None):
         height    : The height of Heat Map (the height of target output)
         width     : The width  of Heat Map (the width of target output)
         joints    : [(x1,y1),(x2,y2)...] containing landmarks
-        maxlenght : Lenght of the Bounding Box
+        maxlenght : length of the Bounding Box
     """
     if s is None:
         s = height / 100.
@@ -189,7 +189,7 @@ def randomly_drop_visualiztions(config, project_id, video_id, dst_dir = '/tmp/ke
             raise Exception("[ERROR] no video found for project!")
 
         # first get all frames 
-        q = "select frame_idx, keypoint_name, individual_id, keypoint_x, keypoint_y from keypoint_positions where video_id=%i;" % video_id
+        q = "select frame_idx, keypoint_name, individual_id, keypoint_x, keypoint_y from keypoint_positions where video_id=%i and is_visible=true;" % video_id
         db.execute(q)
         #frame_idxs = [x[0] for x in db.cur.fetchall()]
         #frame_idxs = list(set(frame_idxs))

@@ -53,7 +53,7 @@ def get_roi_crop_dim(data_dir, project_id, video_id, target_frame_height):
     """
     [Hframe,Wframe,_] = cv.imread(glob(os.path.join(data_dir, 'projects', str(project_id), str(video_id),'frames','train','*.png'))[0]).shape
     db = dbconnection.DatabaseConnection(file_db=os.path.join(data_dir,'data.db'))
-    db.execute("select * from bboxes where video_id=%s;" % video_id)
+    db.execute("select * from bboxes where video_id=%s and is_visible=true;" % video_id)
     db_boxxes = [x for x in db.cur.fetchall()]
     ref_vid_id = None
     #assert len(db_boxxes) > 0, "[*] ERROR: no labeled bounding boxes found! please label at least one bounding box for video " + str(video_id) 
@@ -64,7 +64,7 @@ def get_roi_crop_dim(data_dir, project_id, video_id, target_frame_height):
                 ref_vid_id = int(txtinp)
             except:
                 print('   ... :( sorry, I did not understand you Dave. Could you give me the video id? (it is a number)')
-        db.execute("select * from bboxes where video_id=%i;" % ref_vid_id)
+        db.execute("select * from bboxes where video_id=%i and is_visible=true;" % ref_vid_id)
         db_boxxes = [x for x in db.cur.fetchall()]
         
     deltas = []
@@ -200,7 +200,7 @@ def load_roi_dataset(config, mode = 'train', batch_size = None, video_id = None)
         for _video_id in _video_ids.split(','):
             _video_id = int(_video_id)
             frame_bboxes = {}
-            db.execute("select * from bboxes where video_id=%i;" % _video_id)
+            db.execute("select * from bboxes where video_id=%i and is_visible=true;" % _video_id)
             db_boxxes = [x for x in db.cur.fetchall()]
             shuffle(db_boxxes)
             for dbbox in db_boxxes:
