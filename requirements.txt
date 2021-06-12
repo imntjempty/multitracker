@@ -12,3 +12,4 @@ scipy
 keras
 natsort
 pandas
+scikit-image

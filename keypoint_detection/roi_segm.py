@@ -68,8 +68,9 @@ def get_roi_crop_dim(data_dir, project_id, video_id, target_frame_height):
         db_boxxes = [x for x in db.cur.fetchall()]
         
     deltas = []
-    for i, [_, _, frame_idx,x1,y1,x2,y2] in enumerate(db_boxxes):
-        deltas.extend([x2-x1,y2-y1])
+    for i, [_, _, frame_idx, individual_id, x1,y1,x2,y2, is_visible] in enumerate(db_boxxes):
+        if is_visible:
+            deltas.extend([x2-x1,y2-y1])
     deltas = np.array(deltas)
     if 0:
         print('deltas',deltas.shape,deltas.mean(),deltas.std(),'min/max',deltas.min(),deltas.max())
@@ -137,7 +138,8 @@ def write_crop_to_disk(obj):
         center = get_center(x1,y1,x2,y2,im.shape[0], im.shape[1], crop_dim_extended)        
         try:
             rois = [part[center[0]-crop_dim_extended//2:center[0]+crop_dim_extended//2,center[1]-crop_dim_extended//2:center[1]+crop_dim_extended//2,:] for part in parts]
-            rois = [roi for roi in rois if roi.shape[0]==crop_dim_extended and roi.shape[1]==crop_dim_extended]
+            #print('rois',[r.shape for r in rois])
+            rois = [roi for roi in rois if np.abs(roi.shape[0]-crop_dim_extended)<4 and np.abs(roi.shape[1]-crop_dim_extended)<4]
             roi_comp = np.hstack(rois)
             #if min(roi_comp.shape[:2])>1:
             
@@ -204,10 +206,11 @@ def load_roi_dataset(config, mode = 'train', batch_size = None, video_id = None)
             db_boxxes = [x for x in db.cur.fetchall()]
             shuffle(db_boxxes)
             for dbbox in db_boxxes:
-                _, _, frame_idx, x1, y1, x2, y2 = dbbox 
+                _, _, frame_idx, individual_id, x1, y1, x2, y2, is_visible = dbbox 
                 if not frame_idx in frame_bboxes:
                     frame_bboxes[frame_idx] = [] 
                 frame_bboxes[frame_idx].append(np.array([float(z) for z in [y1,x1,y2,x2]]))
+                
             #print('[*] found %i frames for video %s' % ( len(list(frame_bboxes.keys())), _video_id))
             with Pool(processes=os.cpu_count()) as pool:
                 result_objs=[]
