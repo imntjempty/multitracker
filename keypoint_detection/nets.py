@@ -1,6 +1,6 @@
 import tensorflow as tf 
 import tensorflow_addons as tfa 
-from keras.engine import InputSpec
+
 
 class ReflectionPadding2D(tf.keras.layers.Layer):
     ### https://stackoverflow.com/a/50679524
