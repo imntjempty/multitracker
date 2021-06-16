@@ -80,6 +80,7 @@ def get_bbox_data(config, video_ids, vis_input_data=0):
         random.Random(4).shuffle(db_boxxes)
         for dbbox in db_boxxes:
             _, _, frame_idx, individual_id, x1, y1, x2, y2, is_visible = dbbox
+            frame_idx = '%05d' % int(frame_idx)
             _key = '%i_%s' % (_video_id, frame_idx) 
             if not _key in frame_bboxes:
                 frame_bboxes[_key] = [] 
@@ -152,7 +153,7 @@ def get_bbox_data(config, video_ids, vis_input_data=0):
     def load_im(_key):
         _video_id = tf.strings.split(_key,'_')[0]
         frame_idx = tf.strings.split(_key,'_')[1]
-        image_file = tf.strings.join([frames_dir, '/', _video_id,'/frames/train/', frame_idx,'.png'])
+        image_file = tf.strings.join([frames_dir, '/', _video_id,'/frames/train/',  frame_idx, '.png']) 
         image = tf.io.read_file(image_file)
         image = tf.image.decode_png(image,channels=3)
         image = tf.cast(image,tf.float32)
