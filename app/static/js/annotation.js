@@ -9,6 +9,8 @@ let circle_stroke_hovered = 4;
 let circle_radius = 10;
 let idswitch_stroke_default = 4;
 
+let hovered_keypoint = null;
+
 function fill_data_table(){
     //let t = document.getElementById('data_table_body');
     let rows = document.getElementsByName('row_animal');
@@ -256,8 +258,8 @@ function add_animals(){
                 strokeWidth: circle_stroke_default / stage.scaleX(),
                 opacity: 0.3
             });
-            circle.on('mouseenter',function(){ this.strokeWidth(circle_stroke_hovered / stage.scaleX()); layer.batchDraw(); stage.container().style.cursor = 'pointer';});
-            circle.on('mouseleave',function(){ this.strokeWidth(circle_stroke_default / stage.scaleX()); layer.batchDraw(); stage.container().style.cursor = 'default';});
+            circle.on('mouseenter',function(){ hovered_keypoint = this.parent; this.strokeWidth(circle_stroke_hovered / stage.scaleX()); layer.batchDraw(); stage.container().style.cursor = 'pointer';});
+            circle.on('mouseleave',function(){ hovered_keypoint = null; this.strokeWidth(circle_stroke_default / stage.scaleX()); layer.batchDraw(); stage.container().style.cursor = 'default';});
             keypoint.add(circle);
             keypoint.add(new Konva.Circle({
                 radius: 1 / stage.scaleX(),
@@ -366,6 +368,18 @@ document.addEventListener('keydown', function(event){
         zoom(stage,-1);
     }
 
+    if(event.keyCode == 86){ // V if hovering above a keypoint, hide the keypoint
+        if(hovered_keypoint !== null){
+            if(hovered_keypoint.visible()){
+                hovered_keypoint.draggable(false);
+                hovered_keypoint.hide();
+                layer.draw();
+
+                document.getElementsByName("checkbox_keypoint_" + hovered_keypoint.animal_id.toString() + "_" + hovered_keypoint.keypoint_name)[0].checked = false;
+            }
+        }
+    }
+
     // Identity Switch hotkey I
     if(event.keyCode == 73){ 
         stage.container().style.cursor = 'crosshair';
@@ -408,13 +422,6 @@ document.addEventListener('keydown', function(event){
     
 });
 
-function hide_idswitch_line(){
-    stage.container().style.cursor = 'default';
-    stage.off('mousemove'); stage.off('mousedown'); stage.off('mouseup');
-    idswitch_pressed = false;
-    idswitch_line.points([-100,-100,-100,-100]);
-    stage.batchDraw();
-}
 
 document.addEventListener('keyup', function(event){  
     if(event.keyCode == 16){ // shift key
@@ -429,6 +436,14 @@ document.addEventListener('keyup', function(event){
     }
 });
 
+
+function hide_idswitch_line(){
+    stage.container().style.cursor = 'default';
+    stage.off('mousemove'); stage.off('mousedown'); stage.off('mouseup');
+    idswitch_pressed = false;
+    idswitch_line.points([-100,-100,-100,-100]);
+    stage.batchDraw();
+}
 
 function get_annotation_data(){
     let package = {"project_id": project_id, "video_id": video_id, "frame_idx": frame_idx, "labeling_mode": labeling_mode};
