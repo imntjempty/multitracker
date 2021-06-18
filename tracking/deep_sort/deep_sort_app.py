@@ -123,7 +123,10 @@ def draw_framecount(vis, im):
     draw = ImageDraw.Draw(pil_im)
 
     # Choose a font
-    font = ImageFont.truetype("Roboto-Regular.ttf", 18)
+    try:
+        font = ImageFont.truetype("Roboto-Regular.ttf", 18)
+    except:
+        font = ImageFont.load_default()
 
     # Draw the text
     draw.text((5, 5), "Frame: %i" % vis.frame_idx, font=font)
@@ -194,8 +197,7 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
     max_age = 30 
     #max_age = 5
     config['count'] = 0 
-    metric = nn_matching.NearestNeighborDistanceMetric(
-        "cosine", max_cosine_distance, nn_budget)
+    metric = nn_matching.NearestNeighborDistanceMetric("cosine", max_cosine_distance, nn_budget)
 
     tracker = Tracker(metric)
     

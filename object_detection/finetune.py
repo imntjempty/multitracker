@@ -139,7 +139,7 @@ def get_bbox_data(config, video_ids, vis_input_data=0):
     # maybe use only a part of the train set
     ddata_train, ddata_test = [train_image_tensors[0]], [test_image_tensors[0]]
     for i in range(len(train_image_tensors)):
-        if not ('data_ratio' in config and np.random.uniform() > config['data_ratio']):
+        if config['use_all_data4train'] or (not ('data_ratio' in config and np.random.uniform() > config['data_ratio'])):
             ddata_train.append(train_image_tensors[i])
     for i in range(len(test_image_tensors)):
         ddata_test.append(test_image_tensors[i])

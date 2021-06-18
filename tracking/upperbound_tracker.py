@@ -100,6 +100,12 @@ class Tracker(object):
         track_ids, det_ids = solve_dense(costs)
         return track_ids, det_ids
         
+def get_cv_multitracker():
+    try:
+        return cv.MultiTracker_create()
+    except:
+        return cv.legacy.MultiTracker_create()
+
 class UpperBoundTracker(Tracker):
     def __init__(self, upper_bound):
         super().__init__()
@@ -110,7 +116,7 @@ class UpperBoundTracker(Tracker):
         self.maximum_nearest_inactive_track_distance = 1000#500# self.maximum_other_track_init_distance * 4
 
         self.tracks = []
-        self.trackers = cv.MultiTracker_create()
+        self.trackers = get_cv_multitracker()
         self.active = [False for _ in range(upper_bound)]
         self.active_cnt = 0
         self.steps_without_detection = [0 for _ in range(upper_bound)]
@@ -154,9 +160,12 @@ class UpperBoundTracker(Tracker):
                 self.active[track_id] = True
                 self.active_cnt += 1
         
-        self.trackers = cv.MultiTracker_create()
+        self.trackers = get_cv_multitracker()
         for box in tracked_boxes:
-            self.trackers.add(cv.TrackerCSRT_create(), frame, tuple([int(cc) for cc in box]))
+            try:
+                self.trackers.add(cv.legacy.TrackerCSRT_create(), frame, tuple([int(cc) for cc in box]))
+            except:
+                self.trackers.add(cv.TrackerCSRT_create(), frame, tuple([int(cc) for cc in box]))
         
         for i in range(len(tracked_boxes)):
             if not matched_tracks[i]:
@@ -195,7 +204,10 @@ class UpperBoundTracker(Tracker):
                         if not other_track_near:
                             # add new track
                             dboxi = tuple([int(cc) for cc in dbox])
-                            self.trackers.add(cv.TrackerCSRT_create(), frame, dboxi)
+                            try:
+                                self.trackers.add(cv.legacy.TrackerCSRT_create(), frame, dboxi)
+                            except:
+                                self.trackers.add(cv.TrackerCSRT_create(), frame, dboxi)
                             self.active[self.active_cnt] = True 
                             if debug: print('[*]   added tracker %i with detection %i' % (self.active_cnt,j))
                             self.active_cnt += 1
@@ -235,9 +247,12 @@ class UpperBoundTracker(Tracker):
                                 self.active[nearest_inactive_track_idx] = True
                                 self.active_cnt += 1 
                                 self.steps_without_detection[nearest_inactive_track_idx] = 0
-                                self.trackers = cv.MultiTracker_create()
+                                self.trackers = get_cv_multitracker()
                                 for _ob in obs:
-                                    self.trackers.add(cv.TrackerCSRT_create(), frame, tuple([int(cc) for cc in _ob]))
+                                    try:
+                                        self.trackers.add(cv.legacy.TrackerCSRT_create(), frame, tuple([int(cc) for cc in _ob]))
+                                    except:
+                                        self.trackers.add(cv.TrackerCSRT_create(), frame, tuple([int(cc) for cc in _ob]))
 
 
                                 if debug: print('[*]   updated inactive tracker %i with detection %i' % (nearest_inactive_track_idx,j))

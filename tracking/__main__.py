@@ -78,6 +78,7 @@ def main(args):
     config['track_tail'] = args.track_tail
     config['sketch_file'] = args.sketch_file
     config['file_tracking_results'] = args.output_tracking_results
+    config['use_all_data4train'] = args.use_all_data4train
     
     config['object_detection_backbone'] = args.objectdetection_method
     config = model.update_config_object_detection(config)
@@ -215,7 +216,7 @@ if __name__ == '__main__':
     parser.add_argument('--data_dir', required=False, default = os.path.expanduser('~/data/multitracker'))
     parser.add_argument('--delete_all_checkpoints', required=False, action="store_true")
     parser.add_argument('--video_resolution', default=None, help='resolution the video is downscaled to before processing to reduce runtime, eg 640x480. default no downscaling')
-    
+    parser.add_argument('--use_all_data4train', action='store_true')
     args = parser.parse_args()
     assert args.tracking_method in ['DeepSORT', 'VIoU', 'UpperBound']
     assert args.objectdetection_method in ['fasterrcnn', 'ssd']
