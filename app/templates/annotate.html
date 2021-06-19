@@ -14,15 +14,32 @@
     <script src="/static/js/util.js"></script>
 </head>
 <body>
-
+    <div class="ui sidebar inverted vertical menu">
+        <a class="item">
+          move image: press SHIFT + Mouse Drag 
+        </a>
+        <a class="item">
+          zoom in: press S
+        </a>
+        <a class="item">
+          zoom out: press D 
+        </a>
+        <a class="item">
+          move box/keypoint: drag object 
+        </a>
+        <a class="item">
+          hide keypoint: press V when mouse on keypoint
+        </a>
+    </div>
     <table>
         <tbody style="vertical-align: top">
         <tr>
         <th><div id="container" style="height: 100%;"></div></th>
         <th>
             <table>
-                <tr><td>Annotated Frames {{num_db_frames}} (your goal is 100 :)</td></tr>
-                <tr><td><input type="button" id="bu_send" value="next frame" class="positive ui button"></td></tr>
+                <tr><td>Annotated Frames {{num_db_frames}}</td></tr>
+                <tr><td><input type="button" id="bu_send" value="next frame" class="positive ui button"></td>
+                    <td><a onclick="toggle_sidebar();"><i class="large question circle icon"></i></a></td></tr>
             </table>
             <table border="1" id='data_table'>
                 <tbody style="display: block; height: 800px; overflow-y: scroll" id='data_table_body'>
@@ -87,5 +104,11 @@
         }
     }
     //gui.showModal(); */
+
+    function toggle_sidebar(){
+        $('.ui.sidebar')
+            .sidebar('toggle')
+        ;
+    }
 </script>
 </body></html>
