@@ -6,8 +6,11 @@
 
 import os
 import numpy as np 
-import tensorflow as tf 
-import tensorflow_addons as tfa
+try:
+    import tensorflow as tf 
+    import tensorflow_addons as tfa
+except:
+    print('[* model.py] not loading tensorflow')
 from glob import glob 
 from random import shuffle 
 import time 
@@ -17,11 +20,9 @@ import cv2 as cv
 from multitracker.be import dbconnection
 
 db = dbconnection.DatabaseConnection()
-from multitracker.keypoint_detection import heatmap_drawing, stacked_hourglass, unet
 from multitracker.be import video 
+    
 
-
-mse = tf.keras.losses.MeanSquaredError()
 def get_loss(predicted_heatmaps, y, config, mode = "train"):
     if mode == "test":
         return tf.reduce_mean(tfa.losses.SigmoidFocalCrossEntropy(False)(y, predicted_heatmaps))
@@ -31,6 +32,7 @@ def get_loss(predicted_heatmaps, y, config, mode = "train"):
 
     elif config['loss'] == 'l2':
         #loss = tf.reduce_mean(tf.nn.l2_loss(predicted_heatmaps - y)) / 5000.
+        mse = tf.keras.losses.MeanSquaredError()
         loss = tf.reduce_mean( mse(y, predicted_heatmaps) )
     
     elif config['loss'] == 'dice':
@@ -54,6 +56,7 @@ def get_loss(predicted_heatmaps, y, config, mode = "train"):
     return loss 
 
 def get_model(config, verbose = False):
+    from multitracker.keypoint_detection import stacked_hourglass, unet
     if config['kp_num_hourglass'] == 1:
         encoder, net = unet.get_model(config)
     else:

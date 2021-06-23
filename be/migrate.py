@@ -16,8 +16,9 @@ import numpy as np
 import cv2 as cv 
 import zipfile
 import time 
-from multitracker.be import dbconnection
 import pickle
+from multitracker.be import dbconnection
+from multitracker.object_detection import finetune 
 
 def setup_workdir():
     workdir = '/tmp/multitracker_migrate'
@@ -35,6 +36,9 @@ def export_annotation(args):
     # load source database
     db = dbconnection.DatabaseConnection(file_db = os.path.join(args.data_dir, 'data.db'))
     
+    # hacky: make sure that all the frames are written to disk
+    finetune.get_bbox_data({'project_id': project_id, 'data_dir': args.data_dir}, args.video_ids, abort_early = True)
+
     ## fetch project, video, bounding boxes and keypoints data from source database
     db.execute("select * from projects where id = %i;" % project_id)
     project_data = db.cur.fetchone()
@@ -54,13 +58,13 @@ def export_annotation(args):
         keypoints_data[video_id] = [x for x in db.cur.fetchall()]
 
         for _d in box_data[video_id]:
-            _, _, frame_idx, x1, y1, x2, y2 = _d
-            frame_file = os.path.join( args.data_dir, 'projects', str(project_id), str(video_id), 'frames', 'train', frame_idx + '.png' )
+            _, _, frame_idx, individual_id, x1, y1, x2, y2, is_visible = _d
+            frame_file = os.path.join( args.data_dir, 'projects', str(project_id), str(video_id), 'frames', 'train', '%05d.png' % int(frame_idx) )
             labeled_files.append( frame_file )
 
         for _d in keypoints_data[video_id]:
-            labid, video_id, frame_idx, keypoint_name, individual_id, keypoint_x, keypoint_y = _d
-            frame_file = os.path.join( args.data_dir, 'projects', str(project_id), str(video_id), 'frames', 'train', frame_idx + '.png' )
+            labid, video_id, frame_idx, keypoint_name, individual_id, keypoint_x, keypoint_y, is_visible = _d
+            frame_file = os.path.join( args.data_dir, 'projects', str(project_id), str(video_id), 'frames', 'train', '%05d.png' % int(frame_idx) )
             labeled_files.append( frame_file )
     labeled_files = list(set(labeled_files))
 
@@ -100,26 +104,29 @@ def import_annotation(args):
     db_out = dbconnection.DatabaseConnection(file_db = os.path.join(args.data_dir, 'data.db'))
 
     # insert new project
-    query = "insert into projects (name, manager, keypoint_names, created_at) values(?,?,?,?);"
-    new_project_id = db_out.insert(query, project_data[1:])
+    if args.project_id is None:
+        query = "insert into projects (name, manager, keypoint_names, created_at) values(?,?,?,?);"
+        new_project_id = db_out.insert(query, project_data[1:])
+    else:
+        new_project_id = int(args.project_id)
 
     # insert new videos
     new_video_ids = []
     for video_id in old_video_ids:
         query = "insert into videos (name, project_id, fixed_number) values (?,?,?)"
-        viddat = video_data[video_id][1:]
+        viddat = video_data[video_id][1:] # cut id
         viddat = tuple([viddat[0]] + [new_project_id] + [viddat[2]])
         new_video_id = db_out.insert(query, viddat)
         new_video_ids.append(new_video_id)
 
     # insert boxes
     for old_video_id, new_video_id in zip(old_video_ids, new_video_ids):
-        query = "insert into bboxes (video_id, frame_idx, x1, y1, x2, y2) values (?,?,?,?,?,?);"
+        query = "insert into bboxes (video_id, frame_idx, individual_id, x1, y1, x2, y2, is_visible) values (?,?,?,?,?,?,?,?);"
         for dat in box_data[old_video_id]:
-            dat = dat[2:]
+            dat = dat[2:] # cut id + video_id
             frame_idx = dat[0]
-            fin  = os.path.join(workdir,       'projects', str(old_project_id), str(old_video_id), 'frames', 'train', '%s.png' % frame_idx)
-            fout = os.path.join(args.data_dir, 'projects', str(new_project_id), str(new_video_id), 'frames', 'train', '%s.png' % frame_idx)
+            fin  = os.path.join(workdir,       'projects', str(old_project_id), str(old_video_id), 'frames', 'train', '%05d.png' % int(frame_idx))
+            fout = os.path.join(args.data_dir, 'projects', str(new_project_id), str(new_video_id), 'frames', 'train', '%05d.png' % int(frame_idx))
             if not os.path.isdir(os.path.split(fout)[0]): os.makedirs(os.path.split(fout)[0])
             if not os.path.isfile(fout): shutil.copy(fin, fout)
 
@@ -128,12 +135,12 @@ def import_annotation(args):
 
     # insert keypoints
     for old_video_id, new_video_id in zip(old_video_ids, new_video_ids):
-        query = "insert into keypoint_positions (video_id, frame_idx, keypoint_name, individual_id, keypoint_x, keypoint_y) values (?,?,?,?,?,?);"
+        query = "insert into keypoint_positions (video_id, frame_idx, keypoint_name, individual_id, keypoint_x, keypoint_y, is_visible) values (?,?,?,?,?,?,?);"
         for dat in keypoints_data[old_video_id]:
-            dat = dat[2:]
+            dat = dat[2:] # cut id + video_id
             frame_idx = dat[0]
-            fin  = os.path.join(workdir,       'projects', str(old_project_id), str(old_video_id), 'frames', 'train', '%s.png' % frame_idx)
-            fout = os.path.join(args.data_dir, 'projects', str(new_project_id), str(new_video_id), 'frames', 'train', '%s.png' % frame_idx)
+            fin  = os.path.join(workdir,       'projects', str(old_project_id), str(old_video_id), 'frames', 'train', '%05d.png' % int(frame_idx))
+            fout = os.path.join(args.data_dir, 'projects', str(new_project_id), str(new_video_id), 'frames', 'train', '%05d.png' % int(frame_idx))
             if not os.path.isdir(os.path.split(fout)[0]): os.makedirs(os.path.split(fout)[0])
             if not os.path.isfile(fout): shutil.copy(fin, fout)
             
@@ -147,7 +154,7 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--mode', required=True,default=None,help='whether to import or export data')
-    parser.add_argument('--data_dir',required=True,help="base data directory that contains 'data.db' and folder 'projects'")
+    parser.add_argument('--data_dir',required=False,default=os.path.expanduser('~/data/multitracker'),help="base data directory that contains 'data.db' and folder 'projects'")
     parser.add_argument('--project_id',required=False,type=int,help='what project to export or what project should import data')
     parser.add_argument('--video_ids',default='',help='video ids to export')
     parser.add_argument('--zip', required=True,default=None,help='file name of zip to export or import')

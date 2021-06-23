@@ -9,26 +9,29 @@
 
 import os
 import numpy as np 
-import tensorflow as tf 
 from glob import glob 
 import random 
 from random import shuffle 
 import time 
 from datetime import datetime
 import cv2 as cv 
-import h5py
-import tqdm
 import json 
-import matplotlib.pyplot as plt
 
 from multitracker import util 
-from multitracker.keypoint_detection import model 
 from multitracker.be import video
-from multitracker.object_detection import augmentation
+try:
+    import tensorflow as tf 
+    import tqdm
+    import matplotlib.pyplot as plt
 
-from object_detection.utils import visualization_utils as viz_utils
-from object_detection.utils import config_util
-from object_detection.builders import model_builder
+    from multitracker.keypoint_detection import model 
+    from multitracker.object_detection import augmentation
+
+    from object_detection.utils import visualization_utils as viz_utils
+    from object_detection.utils import config_util
+    from object_detection.builders import model_builder
+except:
+    print('[*] not importing object detection libs')
 
 from multitracker.be import dbconnection
 db = dbconnection.DatabaseConnection()
@@ -61,7 +64,7 @@ def setup_oo_api(models_dir = os.path.expanduser('~/github/models')):
         
         further explanation: https://github.com/tensorflow/models/blob/master/research/object_detection/g3doc/tf2.md''')
 
-def get_bbox_data(config, video_ids, vis_input_data=0):
+def get_bbox_data(config, video_ids, vis_input_data=0, abort_early = False):
     seed = 2305
     train_image_tensors = []
     train_gt_classes_one_hot_tensors = []
@@ -111,9 +114,13 @@ def get_bbox_data(config, video_ids, vis_input_data=0):
                 if frame_cnt == next_target_frame:
                     # write to disk
                     cv.imwrite(frames_missing_on_disk[0][2], frame)
+                    print('[*] writing annotated frame %s' % frames_missing_on_disk[0][2] )
                     frames_missing_on_disk = frames_missing_on_disk[1:]
+
                 frame_cnt += 1
-                
+    if abort_early:
+        return True 
+
     # read one arbitray frame to extract height and width of video frames
     sample_fim = ''
     while not os.path.isfile(sample_fim):

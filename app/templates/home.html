@@ -120,8 +120,7 @@ function init_projects_table(){
                             +"</td><td>"+data[i]['keypoint_names'].join(', ')
                             +"</td><td>"+data[i]['count_bboxes'].toString()
                             +"</td><td>"+data[i]['count_keypoints'].toString()
-                            +"</td><td><a href='/get_next_bbox_frame/"+data[i]['project_id'].toString()+"/"+data[i]['video_id'].toString()+"'>Label more boxes</a>"
-                            +"</td><td><a href='/get_next_labeling_frame/"+data[i]['project_id'].toString()+"/"+data[i]['video_id'].toString()+"'>Label more keypoints</a>"
+                            +"</td><td><a href='/get_next_annotation/"+data[i]['project_id'].toString()+"/"+data[i]['video_id'].toString()+"'>Label more frames</a>"
                             +"</td><td><a href='/start_tracking/"+data[i]['project_id'].toString()+"'>Start Tracking</a>" 
                             +"</td><td><a href='/download_tracking_video/"+data[i]['project_id'].toString()+"/"+data[i]['video_id'].toString()+"'>Download Tracking Video</a></td></tr>";
         }   

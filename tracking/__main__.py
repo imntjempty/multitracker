@@ -178,8 +178,9 @@ def main(args):
     elif config['tracking_method'] == 'VIoU':
         viou_tracker.run(config, detection_model, encoder_model, keypoint_model, args.min_confidence_boxes, args.min_confidence_keypoints  )
     ttrack_end = time.time()
-    video_file_out = inference.get_video_output_filepath(config)
-    #convert_video_h265(video_file_out.replace('.mp4','.avi'), video_file_out)
+    ugly_big_video_file_out = inference.get_video_output_filepath(config)
+    video_file_out = ugly_big_video_file_out.replace('.avi','.mp4')
+    convert_video_h265(ugly_big_video_file_out, video_file_out)
     print('[*] done tracking after %f minutes. outputting file' % float(int((ttrack_end-ttrack_start)*10.)/10.),video_file_out)
     
 def convert_video_h265(video_in, video_out):

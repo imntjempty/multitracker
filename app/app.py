@@ -19,19 +19,17 @@ from random import shuffle
 import subprocess
 import numpy as np 
 import cv2 as cv 
-import h5py 
+
 import pandas as pd 
 import logging
 from collections import deque
-import tensorflow as tf 
-tf.get_logger().setLevel(logging.ERROR)
 
 #from multitracker.be.db.dbconnection import get_connector
 from multitracker.be import video, project
 from multitracker.keypoint_detection import model
 from multitracker.keypoint_detection import heatmap_drawing
 from multitracker import util
-from multitracker.tracking import inference
+
 
 app = Flask(__name__)
 
@@ -52,11 +50,15 @@ if __name__ == "__main__":
     args = parser.parse_args()
     os.environ['MULTITRACKER_DATA_DIR'] = args.data_dir
 from multitracker.be import dbconnection
-db = dbconnection.DatabaseConnection(file_db=os.path.expanduser('~/data/multitracker/data.db'))
+db = dbconnection.DatabaseConnection(file_db=os.path.join(args.data_dir, 'data.db'))
 
 # load neural network from disk (or init new one)
 if args.model is not None and os.path.isfile(args.model):
     assert args.project_id is not None
+    import h5py 
+    import tensorflow as tf 
+    tf.get_logger().setLevel(logging.ERROR)
+
     training_model = tf.keras.models.load_model(h5py.File(args.model, 'r'))
     print('[*] loaded model %s from disk' % args.model)
     config = model.get_config(project_id=args.project_id)
@@ -299,15 +301,7 @@ def render_labeling(project_id,video_id):
                     frame_idx = '.'.join(unlabeled[0].split('/')[-1].split('.')[:-1])
 
     frame_candidates = []
-    if 0:
-        # inference to send frame candidates to client
-        im = batch[maxidx]
-        frame_candidates = [ ]
-        imp = np.mean(pred[:,maxidx,:,:,:],axis=0)
-        #print('im',im.shape,'imp',imp.shape,imp.min(),imp.max())
-        for c in range(len(config['keypoint_names'])):
-            frame_candidates.append(inference.extract_frame_candidates(imp[:,:,c],0.1))
-        print('frame_candidates',frame_candidates)
+   
         
     if len(labeled_frame_idxs) > 0:
         nearest_labeled_frame_diff = np.min(np.abs(np.array([int(idx) for idx in labeled_frame_idxs]) - int(frame_idx)))
