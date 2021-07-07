@@ -169,11 +169,13 @@ def load_roi_dataset(config, mode = 'train', batch_size = None, video_id = None)
     ## create heatmaps for whole frames
     if len(glob(os.path.join(config['kp_data_dir'],'train','*.png')))==0:
         _video_ids = ','.join(list(set(config['train_video_ids'].split(',') + config['test_video_ids'].split(','))))
+        print('[*] creating training keypoint data for video ids', _video_ids.split(','))
         for _video_id in _video_ids.split(','):
             _video_id = int(_video_id)
             heatmap_drawing.randomly_drop_visualiztions(config, config['project_id'], _video_id, dst_dir=config['kp_data_dir'],max_height=max_height)
 
     image_directory = os.path.join(config['kp_data_dir'],'%s' % mode)
+    print('[*] loading keypoint image data from', image_directory)
     [Hframe,Wframe,_] = cv.imread(glob(os.path.join(config['data_dir'],'projects',str(config['project_id']),video_ids.split(',')[0],'frames','train','*.png'))[0]).shape
     [Hcomp,Wcomp,_] = cv.imread(glob(os.path.join(image_directory,'*.png'))[0]).shape
     H = Hcomp 
@@ -217,7 +219,11 @@ def load_roi_dataset(config, mode = 'train', batch_size = None, video_id = None)
             
                 for i, frame_idx in enumerate(frame_bboxes.keys()):
                     frame_bboxes[frame_idx] = np.array(frame_bboxes[frame_idx]) 
-                    f = os.path.join(os.path.join(config['kp_data_dir'],mode,'%i_%s.png' % (_video_id,frame_idx)) )
+                    #f = os.path.join(os.path.join(config['kp_data_dir'],mode,'%i_%s.png' % (_video_id,frame_idx)) )
+                    f = os.path.join(config['kp_data_dir'],mode,'%i_%i.png' % (_video_id,int(frame_idx)) )
+                    if not os.path.isfile(f):
+                        f = os.path.join(config['kp_data_dir'],mode,'%i_%05d.png' % (_video_id,int(frame_idx) ))
+
                     obj = {'Hframe':Hframe,'Hcomp':Hcomp,'w':w,'f':f, 'video_id':_video_id, 'config':config,'crop_dim_extended':crop_dim_extended,'len_parts':len_parts,'frame_idx':frame_idx,'boxes':frame_bboxes[frame_idx]}
                     result_objs.append(pool.apply_async(write_crop_to_disk,(obj,)))
                     #write_crop_to_disk(obj)

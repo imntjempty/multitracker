@@ -212,7 +212,7 @@ if __name__ == '__main__':
     parser.add_argument('--objectdetection_method', required=False,default="fasterrcnn", help="Object Detection Algorithm to use [fasterrcnn, ssd] defaults to fasterrcnn") 
     parser.add_argument('--objectdetection_resolution', required=False, default="640x640", help="xy resolution for object detection. coco pretrained model only available for 640x640, but smaller resolution saves time")
     parser.add_argument('--keypoint_resolution', required=False, default="224x224",help="patch size to analzye keypoints of individual animals")
-    parser.add_argument('--keypoint_method', required=False,default="vgg16", help="Keypoint Detection Algorithm to use [none, hourglass2, hourglass4, hourglass8, vgg16, efficientnet, efficientnetLarge, psp]. defaults to hourglass2") 
+    parser.add_argument('--keypoint_method', required=False,default="psp", help="Keypoint Detection Algorithm to use [none, hourglass2, hourglass4, hourglass8, vgg16, efficientnet, efficientnetLarge, psp]. defaults to psp") 
     parser.add_argument('--upper_bound', required=False,default=0,type=int)
     parser.add_argument('--data_dir', required=False, default = os.path.expanduser('~/data/multitracker'))
     parser.add_argument('--delete_all_checkpoints', required=False, action="store_true")

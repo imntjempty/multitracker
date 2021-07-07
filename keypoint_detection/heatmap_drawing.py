@@ -154,6 +154,9 @@ def style_augment(directory, style_directory = os.path.expanduser("~/data/multit
         
 def write_mp(frame_data):
     filepath = os.path.join(frame_data['data_dir'], "projects/%i/%i/frames/train/%s.png" % (int(frame_data['project_id']), int(frame_data['video_id']), frame_data['frame_idx']))
+    if not os.path.isfile(filepath):
+        filepath = os.path.join(frame_data['data_dir'], "projects/%i/%i/frames/train/%05d.png" % (int(frame_data['project_id']), int(frame_data['video_id']), int(frame_data['frame_idx'])))
+
     #keypoints = [x for x in frame_data['frame_data']]
     mode = 'train' if np.random.uniform() > 0.2 else 'test'
     if os.path.isfile(filepath):
@@ -172,6 +175,8 @@ def write_mp(frame_data):
         vis_path = os.path.join(frame_data['dst_dir'],mode,'%s.png' % name )
 
         cv.imwrite(vis_path, vis)
+    else:
+        print('[* WARNING] could not find frame', filepath)
     return True 
 
 def randomly_drop_visualiztions(config, project_id, video_id, dst_dir = '/tmp/keypoint_heatmap_vis', num = -1, horistack=True,max_height=None, random_maps=False ):
@@ -210,6 +215,7 @@ def randomly_drop_visualiztions(config, project_id, video_id, dst_dir = '/tmp/ke
             frame_data[frame_idx].append([keypoint_name, individual_id, keypoint_x, keypoint_y])
 
     shuffle(frame_idxs)
+    print('[*] found keypoint annotation for %i frames' % len(list(frame_idxs)))
     #shuffle(frame_data)
 
     if num > 0:
