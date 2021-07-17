@@ -417,7 +417,8 @@ document.addEventListener('keydown', function(event){
                 layer.batchDraw();
             }
         });
-        idswitch_line.moveToTop();
+        if(idswitch_line !== null)
+            idswitch_line.moveToTop();
     }
     
 });
@@ -495,6 +496,9 @@ function get_annotation_data(){
 
 function redirect_next_task(){
     // make request to server to get new random task and redirect to that page
-    let url = "/get_next_annotation/" + project_id.toString() + "/"+ video_id.toString();
+    let url = "/get_next_annotation/";
+    if(labeling_mode=='postprocess'){ url = "/get_next_postprocess/"; }
+    
+    url += project_id.toString() + "/"+ video_id.toString();
     document.location.href = url;
 }

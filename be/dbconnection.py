@@ -252,6 +252,13 @@ def list_table(table,where_k = None, where_v = None):
     for row in dat[:20]:
         print('[*] labeled %i frames' % DatabaseConnection().get_count_labeled_frames(row[0]),row)
         
+def list_frames():
+    c = DatabaseConnection()
+    q = "select distinct frame_idx from bboxes;"
+    c.execute(q)
+    dat = [ row for row in c.cur.fetchall()]
+    for i,row in enumerate(dat):
+        print('[* %i/%i] labeled frame %s' % (i,len(dat),row[0]))
 
 if __name__ == "__main__":
     import argparse 
@@ -259,6 +266,7 @@ if __name__ == "__main__":
     parser.add_argument('-list_projects', action='store_true')
     parser.add_argument('-list_videos', action='store_true')
     parser.add_argument('-list_keypoints', action='store_true')
+    parser.add_argument('-list_frames', action='store_true')
     
     args = parser.parse_args()
 
@@ -269,4 +277,6 @@ if __name__ == "__main__":
         list_table('videos')
     if args.list_keypoints:
         list_table('keypoint_positions')
+    if args.list_frames:
+        list_frames()
         

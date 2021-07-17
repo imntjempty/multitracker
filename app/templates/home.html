@@ -32,7 +32,7 @@
         </a>
         <a href="/home" class="item">Home</a>
         <a href="#" onclick="show_add_video_modal();" class="item">Add Video</a>
-        <a href="/about" class="item">About</a>
+        <a href="https://github.com/dolokov/multitracker/blob/master/README.md" class="item">Help</a>
     </div>
 </div>
 <div >
@@ -45,12 +45,10 @@
             <th>Video</th>
             <th>Manager</th>
             <th>Limb names</th>
-            <th>Labeled Frames Animal boxes</th>
-            <th>Labeled Frames Limb points</th>
-            <th>Label tool boxes</th>
-            <th>Label tool points</th>
-            <th>Start Tracking</th>
-            <th>Download Tracking Video</th>
+            <th>Annotated Frames Animal boxes</th>
+            <th>Annotation tool</th>
+            <th>Postprocessing tool</th>
+            <th>Behavioural Analysis</th>
             </tr>
         </thead>
         <tbody></tbody>
@@ -119,10 +117,9 @@ function init_projects_table(){
                             +"</td><td>"+data[i]['manager']
                             +"</td><td>"+data[i]['keypoint_names'].join(', ')
                             +"</td><td>"+data[i]['count_bboxes'].toString()
-                            +"</td><td>"+data[i]['count_keypoints'].toString()
                             +"</td><td><a href='/get_next_annotation/"+data[i]['project_id'].toString()+"/"+data[i]['video_id'].toString()+"'>Label more frames</a>"
-                            +"</td><td><a href='/start_tracking/"+data[i]['project_id'].toString()+"'>Start Tracking</a>" 
-                            +"</td><td><a href='/download_tracking_video/"+data[i]['project_id'].toString()+"/"+data[i]['video_id'].toString()+"'>Download Tracking Video</a></td></tr>";
+                            +"</td><td><a href='/get_next_postprocess/"+data[i]['project_id'].toString()+"/"+data[i]['video_id'].toString()+"'>Postprocess more frames</a>"
+                            +"</tr>";
         }   
     });
     

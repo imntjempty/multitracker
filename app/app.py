@@ -43,9 +43,8 @@ if __name__ == "__main__":
     
     parser.add_argument('--num_labeling_base',type=int,default=100)
     parser.add_argument('--open_gallery', dest='open_gallery', action='store_true')
-    parser.add_argument('--postprocess_video', type=str,default=None)
-    parser.add_argument('--postprocess_csv', type=str,default=None)
-    parser.add_argument('--postprocess_upperbound', type=int,default=None)
+    
+    parser.add_argument('--postprocess_skip', type=int, default = 10)
     parser.add_argument('--data_dir', required=False, default = os.path.expanduser('~/data/multitracker'))
     args = parser.parse_args()
     os.environ['MULTITRACKER_DATA_DIR'] = args.data_dir
@@ -80,6 +79,7 @@ def get_frame_time(frame_idx):
 video_reader = None 
 loaded_video_id = None
 skip_annotation_frames = None
+frame_idx_postprocessed = 1
 
 if args.video_id is not None:
     ## open video file
@@ -90,19 +90,18 @@ if args.video_id is not None:
     #[Hframe,Wframe,_] = frame.shape
     total_frame_number = int(video_reader.get(cv.CAP_PROP_FRAME_COUNT))
     
-    '''## open tracking csv
-    tracking_data = {}#pd.read_csv(csv_filepath) 
-    with open(args.postprocess_csv, 'r' ) as f:
-        lines = [l[:-1].split(',') for l in f.readlines()]
-        header = lines[0]
-        print(header)
-        for line in lines[1:]:
-            video_id,frame_id,track_id,center_x,center_y,x1,y1,x2,y2,time_since_update = line
-            frame_id, track_id = int(frame_id), int(track_id)
-            x1,y1,x2,y2 = [int(round(float(c))) for c in [x1,y1,x2,y2]]
-            if not frame_id in tracking_data:
-                tracking_data[frame_id] = {}
-            tracking_data[frame_id][track_id] = x1, y1, x2, y2'''
+tracking_results_cache = {}
+
+def get_csv(csv_path):
+    if not csv_path in tracking_results_cache:
+        data = pd.read_csv(csv_path)
+        data = data.apply(lambda col:pd.to_numeric(col, errors='coerce'))
+        print('[*] read_csv', csv_path)
+        print('headers',data.head())
+        print(data[:20])
+        
+        tracking_results_cache[csv_path] = data 
+    return tracking_results_cache[csv_path]
 
 @app.route('/get_next_annotation/<project_id>/<video_id>')
 def get_next_annotation(project_id, video_id):
@@ -114,8 +113,26 @@ def get_next_annotation(project_id, video_id):
     next_frame_idx = 5 + int(num_frames * len(labeled_frame_idxs_boundingboxes) / float(args.num_labeling_base) )
     return '<script>document.location.href = "/get_annotation/%i/%i/%i";</script>' % ( project_id, video_id, next_frame_idx)
 
+@app.route('/get_next_postprocess/<project_id>/<video_id>')
+def get_next_postprocess(project_id, video_id):
+    project_id = int(project_id) 
+    video_id = int(video_id) 
+    
+    global frame_idx_postprocessed
+    next_frame_idx = frame_idx_postprocessed + args.postprocess_skip
+    return '<script>document.location.href = "/get_postprocess/%i/%i/%i";</script>' % ( project_id, video_id, next_frame_idx)
+
+
+
 @app.route('/get_annotation/<project_id>/<video_id>/<frame_id>')
 def get_annotation(project_id, video_id, frame_id):
+    return redirect_annotation_tool(project_id, video_id, frame_id, mode = "annotate")
+
+@app.route('/get_postprocess/<project_id>/<video_id>/<frame_id>')
+def get_postprocess(project_id, video_id, frame_id):
+    return redirect_annotation_tool(project_id, video_id, frame_id, mode = "postprocess")
+
+def redirect_annotation_tool(project_id, video_id, frame_id, mode = "annotate"):
     project_id = int(project_id) 
     video_id = int(video_id) 
     frame_id = int(frame_id) 
@@ -136,7 +153,46 @@ def get_annotation(project_id, video_id, frame_id):
     num_db_frames = len(labeled_frame_idxs)
     
     # load annotation from database
-    animals = db.get_frame_annotations(video_id, frame_id )
+    if mode == "annotate":
+        animals = db.get_frame_annotations(video_id, frame_id )
+    
+    elif mode == "postprocess":
+        csv_path = os.path.join(args.data_dir, 'projects', str(project_id), str(video_id), 'tracking_'+db.get_video_name(int(video_id))[:-4]+".csv")
+        tracking_data = get_csv(csv_path)
+        print('tracking_data',tracking_data.head())
+        #frame_filter = tracking_data["frame_id"] == frame_id #int(frame_id)
+        #frame_data = tracking_data.where(frame_filter, inplace = True)
+        frame_data = tracking_data.loc[tracking_data['frame_id'] == int(frame_id)]
+        print('\n\nhere we go', tracking_data.dtypes,'index', tracking_data.index,'columns', tracking_data.columns)
+        animals = []
+        #keys = list(frame_data.keys())
+        #for i in range(len(frame_data)):
+        i = 0 
+        for index, row in frame_data.iterrows():
+            print(index, ':::', row)
+            
+            keypoints = []
+            for j,kp_name in enumerate(config['keypoint_names']):
+                keypoints.append({
+                    'name': kp_name,
+                    'x': row['x1'] + 20*j,
+                    'y': row['y1'] + 23*j,
+                    'db_id': None,
+                    'is_visible': False
+                })
+
+            #box = [row['x1'],row['y1'],row['x2'],row['y2']]
+            box = [row['x1'],row['y1'],row['x1']+row['x2'],row['y1']+row['y2']]
+
+            animals.append({
+                'id': str(i+1),
+                'box': box,
+                'db_id': None,
+                'is_visible': True, 
+                'keypoints': keypoints
+            })
+            i += 1 
+
     if animals is None:
         animals = []
         # if no annotation around, init upper_bound many animals with keypoints
@@ -160,7 +216,7 @@ def get_annotation(project_id, video_id, frame_id):
         pass 
 
     animals_json = json.dumps(animals)
-    return render_template('annotate.html', animals = animals, animals_json = animals_json, project_id = int(project_id), video_id = int(video_id), frame_idx = frame_id, keypoint_names = db.list_sep.join(config['keypoint_names']), sep = db.list_sep, num_db_frames = num_db_frames, labeling_mode = 'annotate')
+    return render_template('annotate.html', animals = animals, animals_json = animals_json, project_id = int(project_id), video_id = int(video_id), frame_idx = frame_id, keypoint_names = db.list_sep.join(config['keypoint_names']), sep = db.list_sep, num_db_frames = num_db_frames, labeling_mode = mode)
 
 @app.route('/get_video_frame/<project_id>/<video_id>/<frame_id>')
 def get_next_annotation_frame(project_id, video_id, frame_id):
@@ -178,6 +234,8 @@ def get_next_annotation_frame(project_id, video_id, frame_id):
         db.execute('select name, project_id from videos where id=%i;' % int(video_id))
         video_name, project_id = [ x for x in db.cur.fetchall()][0]
         video_filepath = os.path.join(args.data_dir, 'projects', str(project_id), 'videos', video_name)
+        if not os.path.exists(video_filepath):
+            print('[* ERROR] could not find video', video_filepath)
         #csv_filepath = video_filepath.replace('.mp4','.csv')
         video_reader = cv.VideoCapture( video_filepath )
         total_frame_number = int(video_reader.get(cv.CAP_PROP_FRAME_COUNT))
@@ -650,7 +708,12 @@ def receive_labeling():
                 training_model.save(args.model)
     if data['labeling_mode'] in ['bbox','annotate']:
         db.save_bbox_labeling(data)
-        
+    
+    if data['labeling_mode'] in ['postprocess']:
+        print('[*] postprocess mode. write', data)
+        global frame_idx_postprocessed
+        frame_idx_postprocessed += args.postprocess_skip
+
     return json.dumps({'success':True}), 200, {'ContentType':'application/json'} 
 
 @app.route('/skip_labeling',methods=["POST"])
