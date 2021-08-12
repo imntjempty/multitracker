@@ -1,4 +1,4 @@
-let colors = ['red','yellow','blue','green','brown','magenta','cyan','gray','purple','lightblue','lightred'];
+let colors = ['red','yellow','blue','green','brown','magenta','cyan','gray','purple','lightblue'];
 var stage = null;
 var layer = null;
 var idswitch_line =  null;
@@ -20,13 +20,15 @@ function fill_data_table(){
         let checkbox = rows[i].cells[3].getElementsByTagName('input')[0];
         checkbox.name = "checkbox_animal_" + animals[i]['id'].toString();
         checkbox.animal_id = animals[i]['id'].toString();
+        checkbox.checked = animals[i]['is_visible'];
+
         // hide/show konva bounding box and corresponding keypoints
         checkbox.addEventListener('change', function() {
             let konva_bbox = layer.findOne('#bbox_'+this.animal_id.toString());
             let konva_transfrom = layer.findOne('#transform_'+this.animal_id.toString());
             konva_bbox.draggable(this.checked);
             
-            animals[this.animal_id-1].is_visible = this.checkbox;
+            animals[this.animal_id-1].is_visible = this.checked;
 
             if(this.checked) { 
                 konva_bbox.show(); 
@@ -38,7 +40,7 @@ function fill_data_table(){
             for(let j=0; j< keypoint_names.length; j++){
                 let konva_keypoint = layer.findOne('#kp_'+this.animal_id.toString() + '_' + keypoint_names[j]);
                 konva_keypoint.draggable(this.checked);
-                if(this.checked) { konva_keypoint.show(); } else { konva_keypoint.hide(); }                
+                if(this.checked && labeling_mode=='annotate') { konva_keypoint.show(); } else { konva_keypoint.hide(); }                
             }
             layer.draw();
             
@@ -219,6 +221,10 @@ function add_animals(){
         let tr = new Konva.Transformer({rotateEnabled: false, keepRatio: false, id: 'transform_'+animal_id.toString()});
         layer.add(tr);
         tr.nodes([bbox]);
+        if(animals[i]['is_visible'] == false){
+            bbox.hide();
+            tr.hide();
+        }
         //stage.batchDraw();
 
         
@@ -497,7 +503,7 @@ function get_annotation_data(){
 function redirect_next_task(){
     // make request to server to get new random task and redirect to that page
     let url = "/get_next_annotation/";
-    if(labeling_mode=='postprocess'){ url = "/get_next_postprocess/"; }
+    if(labeling_mode=='trackannotation'){ url = "/get_next_trackannotation/"; }
     
     url += project_id.toString() + "/"+ video_id.toString();
     document.location.href = url;

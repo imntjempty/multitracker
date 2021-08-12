@@ -26,7 +26,7 @@ def get_colors():
         colors.append(color_dicts[ccc])
     shuffle(colors)
 
-    colors = [ color_dicts[k] for k in ['red','blue','yellow','green','magenta','cyan','lightblue','pink','lightgreen','orange']]
+    colors = [ color_dicts[k] for k in ['red','yellow','blue','green','brown','magenta','cyan','gray','purple','lightblue']]
     return colors 
 
 def delete_video(video_id):

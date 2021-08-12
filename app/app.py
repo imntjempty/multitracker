@@ -44,28 +44,12 @@ if __name__ == "__main__":
     parser.add_argument('--num_labeling_base',type=int,default=100)
     parser.add_argument('--open_gallery', dest='open_gallery', action='store_true')
     
-    parser.add_argument('--postprocess_skip', type=int, default = 10)
+    parser.add_argument('--trackannotation_skip', type=int, default = 15)
     parser.add_argument('--data_dir', required=False, default = os.path.expanduser('~/data/multitracker'))
     args = parser.parse_args()
     os.environ['MULTITRACKER_DATA_DIR'] = args.data_dir
 from multitracker.be import dbconnection
 db = dbconnection.DatabaseConnection(file_db=os.path.join(args.data_dir, 'data.db'))
-
-# load neural network from disk (or init new one)
-if args.model is not None and os.path.isfile(args.model):
-    assert args.project_id is not None
-    import h5py 
-    import tensorflow as tf 
-    tf.get_logger().setLevel(logging.ERROR)
-
-    training_model = tf.keras.models.load_model(h5py.File(args.model, 'r'))
-    print('[*] loaded model %s from disk' % args.model)
-    config = model.get_config(project_id=args.project_id)
-    optimizer = tf.keras.optimizers.Adam(config['kp_lr'])
-    config = model.get_config(int(args.project_id))
-else:
-    training_model = None 
-    
 
 count_active_steps = 0 
 
@@ -79,7 +63,23 @@ def get_frame_time(frame_idx):
 video_reader = None 
 loaded_video_id = None
 skip_annotation_frames = None
-frame_idx_postprocessed = 1
+frame_idx_trackannotation = 1
+frame = None 
+#visual_mot = cv.MultiTracker_create()
+
+tracker_create = [
+    cv.TrackerCSRT_create,
+    cv.TrackerBoosting_create,
+    #cv.TrackerKDF_create,
+    cv.TrackerGOTURN_create,
+    #cv.TrackerHOG_create,
+    cv.TrackerMedianFlow_create
+][3]
+
+
+last_user_boxes = []
+for i in range(args.upper_bound):
+    last_user_boxes.append([200*i,200*i,200*(i+1),200*(i+1)])
 
 if args.video_id is not None:
     ## open video file
@@ -103,6 +103,54 @@ def get_csv(csv_path):
         tracking_results_cache[csv_path] = data 
     return tracking_results_cache[csv_path]
 
+def log_interpolated_trackannotation(data):
+    trackannotation_csv = os.path.expanduser('~/data/multitracker/projects/%i/%i/trackannotation.csv' % (int(data['project_id']), int(data['video_id'])))
+
+    # write header if csv present
+    if not os.path.exists(trackannotation_csv):
+        with open(trackannotation_csv, 'w') as f:
+            f.write('frame_idx,idv,x1,y1,x2,y2\n')
+    
+    for i in range(len(data['bboxes'])):
+        data['bboxes'][i]['frame_idx'] = int(data['frame_idx'])
+
+    # interpolate from last_user_boxes to new data
+    global last_user_boxes
+    interpolated_boxes = []
+    #if int(data['frame_idx']) <= 1:
+    
+    if int(data['frame_idx']) > 1:
+        for iskip in range(args.trackannotation_skip):
+            alpha = (1+iskip)/float(args.trackannotation_skip)
+            for i in range(args.upper_bound):
+                #print(iskip,'BOX',i,data['bboxes'][i]['is_visible'],'')
+                _d = {}
+                _d['frame_idx'] = int(data['frame_idx'])+iskip - args.trackannotation_skip + 1
+                _d['id_ind'] = data['bboxes'][i]['id_ind']
+                skip=False 
+                for j,k in enumerate(['x1','y1','x2','y2']):
+                    try:
+                        _d[k] = (1.-alpha) * last_user_boxes[i][j] + alpha * data['bboxes'][i][k]
+                    except: # happens if new object without history of last boxes
+                        _d[k] = data['bboxes'][i][k]
+                        skip=True
+                #if skip and iskip == 0 and data['bboxes'][i]['is_visible']:
+                #    interpolated_boxes.append( _d )
+                #elif data['bboxes'][i]['is_visible']:
+                if data['bboxes'][i]['is_visible'] and not skip:
+                    interpolated_boxes.append( _d )
+
+    for i in range(args.upper_bound):
+        if data['bboxes'][i]['is_visible']:
+            interpolated_boxes.append(data['bboxes'][i] )
+
+
+    # write boxes to disk
+    with open(trackannotation_csv, 'a+') as f:
+        for bbox in interpolated_boxes:
+            f.write('%s,%i,%f,%f,%f,%f\n' % ( bbox['frame_idx'],int(bbox['id_ind']),bbox['x1'],bbox['y1'],bbox['x2'],bbox['y2'] ))
+
+
 @app.route('/get_next_annotation/<project_id>/<video_id>')
 def get_next_annotation(project_id, video_id):
     project_id = int(project_id) 
@@ -113,14 +161,14 @@ def get_next_annotation(project_id, video_id):
     next_frame_idx = 5 + int(num_frames * len(labeled_frame_idxs_boundingboxes) / float(args.num_labeling_base) )
     return '<script>document.location.href = "/get_annotation/%i/%i/%i";</script>' % ( project_id, video_id, next_frame_idx)
 
-@app.route('/get_next_postprocess/<project_id>/<video_id>')
-def get_next_postprocess(project_id, video_id):
+@app.route('/get_next_trackannotation/<project_id>/<video_id>')
+def get_next_trackannotation(project_id, video_id):
     project_id = int(project_id) 
     video_id = int(video_id) 
     
-    global frame_idx_postprocessed
-    next_frame_idx = frame_idx_postprocessed + args.postprocess_skip
-    return '<script>document.location.href = "/get_postprocess/%i/%i/%i";</script>' % ( project_id, video_id, next_frame_idx)
+    global frame_idx_trackannotation
+    next_frame_idx = frame_idx_trackannotation
+    return '<script>document.location.href = "/get_trackannotation/%i/%i/%i";</script>' % ( project_id, video_id, next_frame_idx)
 
 
 
@@ -128,9 +176,11 @@ def get_next_postprocess(project_id, video_id):
 def get_annotation(project_id, video_id, frame_id):
     return redirect_annotation_tool(project_id, video_id, frame_id, mode = "annotate")
 
-@app.route('/get_postprocess/<project_id>/<video_id>/<frame_id>')
-def get_postprocess(project_id, video_id, frame_id):
-    return redirect_annotation_tool(project_id, video_id, frame_id, mode = "postprocess")
+@app.route('/get_trackannotation/<project_id>/<video_id>/<frame_id>')
+def get_trackannotation(project_id, video_id, frame_id):
+    return redirect_annotation_tool(project_id, video_id, frame_id, mode = "trackannotation")
+
+
 
 def redirect_annotation_tool(project_id, video_id, frame_id, mode = "annotate"):
     project_id = int(project_id) 
@@ -142,7 +192,9 @@ def redirect_annotation_tool(project_id, video_id, frame_id, mode = "annotate"):
     #    raise Exception("\n   please restart the app with argument --video_id and --upper_bound")
 
     global loaded_video_id
-    
+    global frame 
+    global last_user_boxes
+
     #if loaded_video_id is None or not loaded_video_id == video_id:
     #    get_next_annotation_frame(project_id, video_id, int(np.random.uniform(1e6)))
 
@@ -156,42 +208,61 @@ def redirect_annotation_tool(project_id, video_id, frame_id, mode = "annotate"):
     if mode == "annotate":
         animals = db.get_frame_annotations(video_id, frame_id )
     
-    elif mode == "postprocess":
-        csv_path = os.path.join(args.data_dir, 'projects', str(project_id), str(video_id), 'tracking_'+db.get_video_name(int(video_id))[:-4]+".csv")
-        tracking_data = get_csv(csv_path)
-        print('tracking_data',tracking_data.head())
-        #frame_filter = tracking_data["frame_id"] == frame_id #int(frame_id)
-        #frame_data = tracking_data.where(frame_filter, inplace = True)
-        frame_data = tracking_data.loc[tracking_data['frame_id'] == int(frame_id)]
-        print('\n\nhere we go', tracking_data.dtypes,'index', tracking_data.index,'columns', tracking_data.columns)
-        animals = []
-        #keys = list(frame_data.keys())
-        #for i in range(len(frame_data)):
-        i = 0 
-        for index, row in frame_data.iterrows():
-            print(index, ':::', row)
+    elif mode == "trackannotation":
+       
+        # load new frame, but don't send it (its cached)
+        if int(frame_id)<=1:
+            animals = None
+            pass 
+        else:
+            ## visual tracking
+            ## let the user only trackannotation only every 5th frame, do frame-by-frame visual tracking in between
+            last_frame = None 
+            if frame is not None:
+                last_frame = np.array(frame, copy=True )
+                scale = 700. / last_frame.shape[1]
+
+            # setup trackers
+            visual_mot = cv.MultiTracker_create()
+            for j, bbox in enumerate(last_user_boxes):
+                # has format -> 'bboxes': [{'x1': 737.3437, 'y1': 137.385, 'x2': 937.343, 'y2': 337.385, 'id_ind': '1', 'db_id': None, 'is_visible': True}, ..]
+                if len(bbox) >0:
+                    if last_frame is not None:
+                        visual_mot.add(tracker_create(), cv.resize(last_frame, None, None, fx = scale, fy = scale), tuple([int(cc*scale) for cc in bbox]))
+
+            # track for 5 frames
+            for iskip in range(args.trackannotation_skip):
+                get_next_annotation_frame(project_id, video_id, frame_id + iskip , should_send_file = False)
+                #vis = np.array(frame,copy=True); vis = cv.putText( vis, str(iskip), (20,20), cv.FONT_HERSHEY_COMPLEX, 0.75, [255,0,0], 2 )
+                #cv.imshow('huhu',vis); cv.waitKey(0)
+                (success, tracked_boxes) = visual_mot.update(cv.resize(frame, None, None, fx = scale, fy = scale)) 
+                tracked_boxes = [ [ int(cc / scale) for cc in bbox ] for bbox in tracked_boxes ]
             
-            keypoints = []
-            for j,kp_name in enumerate(config['keypoint_names']):
-                keypoints.append({
-                    'name': kp_name,
-                    'x': row['x1'] + 20*j,
-                    'y': row['y1'] + 23*j,
-                    'db_id': None,
-                    'is_visible': False
-                })
+            animals = []
+            _cnt_skip = 0
+            # if no annotation around, init upper_bound many animals with keypoints
+            for i in range(len(last_user_boxes)):
+                bbox = last_user_boxes[i]
+                is_visible = len(bbox) > 0 
+                if len(bbox) > 0: # is visible!
+                    x1,y1,x2,y2 = tracked_boxes[i-_cnt_skip]
+                else:
+                    x1,y1,x2,y2 = [200*i,200*i,200*(i+1),200*(i+1)]
+                    _cnt_skip += 1 
 
-            #box = [row['x1'],row['y1'],row['x2'],row['y2']]
-            box = [row['x1'],row['y1'],row['x1']+row['x2'],row['y1']+row['y2']]
+                keypoints = [ ]
+                for j,kp_name in enumerate(config['keypoint_names']):
+                    keypoints.append({
+                        'name': kp_name,
+                        'x': x1 + 20*j,
+                        'y': y1 + 23*j,
+                        'db_id': None,
+                        'is_visible': False 
+                    })
+            
+                animals.append({'id': str(i+1), 'box': [x1,y1,x2,y2], 'keypoints': keypoints, 'db_id': None, 'is_visible': is_visible})
+                
 
-            animals.append({
-                'id': str(i+1),
-                'box': box,
-                'db_id': None,
-                'is_visible': True, 
-                'keypoints': keypoints
-            })
-            i += 1 
 
     if animals is None:
         animals = []
@@ -205,7 +276,7 @@ def redirect_annotation_tool(project_id, video_id, frame_id, mode = "annotate"):
                     'x': x1 + 20*j,
                     'y': y1 + 23*j,
                     'db_id': None,
-                    'is_visible': True
+                    'is_visible': not mode == "trackannotation"
                 })
             
             animals.append({'id': str(i+1), 'box': [x1,y1,x2,y2], 'keypoints': keypoints, 'db_id': None, 'is_visible': True})
@@ -219,12 +290,13 @@ def redirect_annotation_tool(project_id, video_id, frame_id, mode = "annotate"):
     return render_template('annotate.html', animals = animals, animals_json = animals_json, project_id = int(project_id), video_id = int(video_id), frame_idx = frame_id, keypoint_names = db.list_sep.join(config['keypoint_names']), sep = db.list_sep, num_db_frames = num_db_frames, labeling_mode = mode)
 
 @app.route('/get_video_frame/<project_id>/<video_id>/<frame_id>')
-def get_next_annotation_frame(project_id, video_id, frame_id):
+def get_next_annotation_frame(project_id, video_id, frame_id, should_send_file = True):
     project_id = int(project_id) 
     video_id = int(video_id) 
     frame_id = int(frame_id) 
-    frame = None 
+    
 
+    global frame 
     global frame_idx 
     global loaded_video_id
     global video_reader
@@ -255,177 +327,24 @@ def get_next_annotation_frame(project_id, video_id, frame_id):
     if frame is None:
         return '''<html><body>you done annotating :) video over</body></html>'''
     
+
+    if not should_send_file:
+        return frame 
     is_success, im_buf_arr = cv.imencode(".jpg", frame)
     byte_im = im_buf_arr.tobytes()
-
-    return send_file( io.BytesIO(byte_im),
-        attachment_filename='frame.jpg',
-        mimetype='image/jpeg')  
+    try:
+        return send_file( io.BytesIO(byte_im),
+                download_name='frame.jpg',
+                mimetype='image/jpeg')  
+    except: # flask < 2.0
+        return send_file( io.BytesIO(byte_im),
+            attachment_filename='frame.jpg',
+            mimetype='image/jpeg')  
     #return (b'--frame\r\n'
     #           b'Content-Type: image/jpeg\r\n\r\n' + frame.tostring() + b'\r\n')
 
 
-@app.route('/get_next_labeling_frame/<project_id>/<video_id>')
-def render_labeling(project_id,video_id):
-    config = model.get_config(int(project_id))
-    video_id = int(video_id) 
-    config['video_id'] = video_id
-    
-    # load labeled frame idxs
-    labeled_frame_idxs = db.get_labeled_frames(video_id)
-    labeled_frame_idxs_boundingboxes = db.get_labeled_bbox_frames(video_id)
-    
-    num_db_frames = len(labeled_frame_idxs)
-    
-    # load frame files from disk
-    frames = []
-    while len(frames) == 0:
-        #video_id = db.get_random_project_video(project_id)
-        frames_dir = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, project_id), video_id),'train')
-        frames = sorted(glob(os.path.join(frames_dir, '*.png')))
-    #print('[E] no frames found in directory %s.'%frames_dir)
-    
-    # look for unfinished labeling jobs 
-    db.execute('select id, frame_name from frame_jobs where project_id=%i and video_id=%i;' % (int(project_id),int(video_id)))
-    labeling_jobs = [ {'id':x[0],'frame_name':x[1]} for x in db.cur.fetchall()]
-    if len(labeling_jobs) > 0:
-        if not labeling_jobs[0]['frame_name'][:-4] == '.png':
-            labeling_jobs[0]['frame_name'] += '.png'
-        frame_idx = '.'.join(labeling_jobs[0]['frame_name'].split('.')[:-1])
-        #print('A',labeling_jobs[0]['frame_name'],'->',frame_idx)
-        print('[*] found %i labeling jobs, giving %i' % (len(labeling_jobs),labeling_jobs[0]['id']))
 
-        # delete job
-        db.execute('delete from frame_jobs where id=%i;' % labeling_jobs[0]['id'])
-        db.commit()
-
-    else:
-        ## first check if labeled bounding box data with unlabeled keypoint data is in db
-        unlabeled_labeled_boxes_frame_idx = []
-        for frame_idx_bbox in labeled_frame_idxs_boundingboxes:
-            if frame_idx_bbox not in labeled_frame_idxs:
-                unlabeled_labeled_boxes_frame_idx.append(frame_idx_bbox)
-        if len(unlabeled_labeled_boxes_frame_idx) > 0:
-            print('[*] found %i labeled boxes frames, where no keypoints are annotated. here is one of them' % len(unlabeled_labeled_boxes_frame_idx))
-            shuffle(unlabeled_labeled_boxes_frame_idx)
-            frame_idx = unlabeled_labeled_boxes_frame_idx[0]
-        else:
-            if num_db_frames < args.num_labeling_base:
-                '' # randomly sample frame 
-                # choose random frame that is not already labeled
-                unlabeled_frame_found = False 
-                while not unlabeled_frame_found:
-                    ridx = int( len(frames) * num_db_frames / float(args.num_labeling_base) ) + int(np.random.uniform(-5,5))
-                    if ridx > 0 and ridx < len(frames):
-                        frame_idx = frames[ridx]
-                        #frame_idx = frames[int(len(frames)*np.random.random())] # random sampling
-                        frame_idx = '.'.join(frame_idx.split('/')[-1].split('.')[:-1])
-                        unlabeled_frame_found = not (frame_idx in labeled_frame_idxs)
-
-                print('[*] serving keypoint label job for frame %s %s.'%(frame_idx,get_frame_time(frame_idx)))
-            else:
-                shuffle(frames)
-                nn = 1#32
-                unlabeled = []
-                while len(unlabeled) < nn:
-                    frame_f = frames[int(len(frames)*np.random.random())]
-                    frame_idx = '.'.join(frame_f.split('/')[-1].split('.')[:-1])
-                    nearest_labeled_frame_diff = np.min(np.abs(np.array([int(idx) for idx in labeled_frame_idxs]) - int(frame_idx)))
-                    if frame_f not in unlabeled and frame_idx not in labeled_frame_idxs and nearest_labeled_frame_diff > 20:
-                        unlabeled.append(frame_f)
-
-                if training_model is not None:
-                    # active learning: load some unlabeled frames, inference multiple time, take one with biggest std variation
-                    
-                    # predict whole image, height like trained height and variable width 
-                    # to keep aspect ratio and relative size        
-                    w = 1+int(2*config['img_height']/(float(cv.imread(unlabeled[0]).shape[0]) / cv.imread(unlabeled[0]).shape[1]))
-                    batch = np.array( [cv.resize(cv.imread(f), (w,2*config['img_height'])) for f in unlabeled] ).astype(np.float32)
-                    
-                    # inference multiple times
-                    ni = 5
-                    pred = np.array([ training_model(batch,training=True)[-1].numpy() for _ in range(ni)])
-                    pred = pred[:,:,:,:,:-1] # cut background channel
-                    
-                    # calculate max std item
-                    stds = np.std(pred,axis=(0,2,3,4))
-                    maxidx = np.argmax(stds)
-                    frame_idx = '.'.join(unlabeled[maxidx].split('/')[-1].split('.')[:-1])
-                    print('[*] serving keypoint label job for frame %s with std %f %s.'%(frame_idx,stds[maxidx],get_frame_time(frame_idx)))
-                else:
-                    if len(unlabeled) ==0:
-                        return "<h1>You have labeled all frames for this video! :)</h1>"
-                    shuffle(unlabeled)
-                    frame_idx = '.'.join(unlabeled[0].split('/')[-1].split('.')[:-1])
-
-    frame_candidates = []
-   
-        
-    if len(labeled_frame_idxs) > 0:
-        nearest_labeled_frame_diff = np.min(np.abs(np.array([int(idx) for idx in labeled_frame_idxs]) - int(frame_idx)))
-    else:
-        nearest_labeled_frame_diff = -1
-    print('[*] serving keypoint label job for frame %s %s. nearest frame already labeled %i frames away'%(frame_idx,get_frame_time(frame_idx),nearest_labeled_frame_diff))       
-    
-    if args.open_gallery:
-        p = subprocess.Popen(['eog',unlabeled[maxidx]])
-    return render_template('labeling.html',project_id = int(project_id), video_id = int(video_id), frame_idx = frame_idx, keypoint_names = db.list_sep.join(config['keypoint_names']), sep = db.list_sep, num_db_frames = num_db_frames, frame_candidates = frame_candidates, labeling_mode = 'keypoint')
-
-
-@app.route('/get_next_bbox_frame/<project_id>/<video_id>')
-def get_next_bbox_frame(project_id, video_id):
-    project_id = int(project_id)
-    config = model.get_config(project_id)
-    #video_id = db.get_random_project_video(project_id)
-    video_id = int(video_id)
-    config['video_id'] = video_id
-
-    # load labeled frame idxs
-    labeled_frames_keypoints = db.get_labeled_frames(video_id)
-    labeled_frame_idxs = db.get_labeled_bbox_frames(video_id)
-    num_db_frames = len(labeled_frame_idxs)
-    
-    # load frame files from disk
-    frames_dir = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, project_id), video_id),'train')
-    frames = sorted(glob(os.path.join(frames_dir, '*.png')))
-    frames_keypoints = [os.path.join(frames_dir, '%s.png' % ff) for ff in labeled_frames_keypoints]
-    shuffle(frames_keypoints)
-    
-    unlabeled_frame_found = False 
-    if len(frames_keypoints) > 0:
-        # first try to label bounding boxes where keypoints are labeled but bboxes not
-        tries = 0
-        while not unlabeled_frame_found and tries < 50:
-            ridx = int(np.random.uniform(len(frames_keypoints)))
-            frame_idx = frames_keypoints[ridx]
-            frame_idx = '.'.join(frame_idx.split('/')[-1].split('.')[:-1])
-            unlabeled_frame_found = not (frame_idx in labeled_frame_idxs)
-            tries += 1 
-
-    # then take random unlabeled frame
-    tries, nearest_labeled_frame_diff = 0, 0
-    while not unlabeled_frame_found and tries < 50:
-        ridx = int(np.random.uniform(len(frames)))
-        frame_idx = frames[ridx]
-        frame_idx = '.'.join(frame_idx.split('/')[-1].split('.')[:-1])
-        if len(labeled_frame_idxs) == 0: 
-            unlabeled_frame_found = True 
-        else:
-            nearest_labeled_frame_diff = np.min(np.abs(np.array([int(idx) for idx in labeled_frame_idxs]) - int(frame_idx)))
-            if nearest_labeled_frame_diff > 20:
-                unlabeled_frame_found = not (frame_idx in labeled_frame_idxs)
-        tries += 1 
-
-    if len(labeled_frame_idxs) > 0:
-        nearest_labeled_frame_diff = np.min(np.abs(np.array([int(idx) for idx in labeled_frame_idxs]) - int(frame_idx)))
-    else:
-        nearest_labeled_frame_diff = -1
-    if unlabeled_frame_found:
-        print('[*] serving bounding box label job for frame %s %s. nearest frame already labeled %i frames away'%(frame_idx,get_frame_time(frame_idx),nearest_labeled_frame_diff))       
-        return render_template('labeling.html',project_id = int(project_id), video_id = int(video_id), frame_idx = frame_idx, num_db_frames = num_db_frames, keypoint_names = db.list_sep.join(config['keypoint_names']), sep = db.list_sep, labeling_mode = 'bbox')
-    else:
-        print('[*] redirecting to keypoint labeling')
-        return render_labeling(project_id, video_id)
 
 @app.route('/get_frame/<project_id>/<video_id>/<frame_idx>')
 def get_frame(project_id,video_id,frame_idx):
@@ -670,49 +589,25 @@ def receive_labeling():
         # save labeling to database
         db.save_keypoint_labeling(data)
 
-        if training_model is not None:
-            # draw sent data
-            frames_dir = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, data['project_id']), data['video_id']),'train')
-            filepath = os.path.join(video.get_frames_dir(video.get_project_dir(video.base_dir_default, data['project_id']), data['video_id']),'train','%s.png'%data['frame_idx'])
-            keypoints = [[d['keypoint_name'],d['id_ind'],d['x'],d['y']] for d in data['keypoints']]
-            y = heatmap_drawing.vis_heatmap(cv.imread(filepath), int(data['frame_idx']) , config['keypoint_names'], keypoints, horistack = False)
-            w = 1+int(2*config['img_height']/(float(y.shape[0]) / y.shape[1]))
-            y = cv.resize(y,(w,2*config['img_height']))
-            y = np.float32(y / 255.)
-            bs = 1 # config['batch_size']
-            y = np.expand_dims(y,axis=0)
-            if bs > 1:
-                y = np.tile(y,[bs,1,1,1])
-            batch = np.tile(np.expand_dims(cv.resize(cv.imread(filepath), (w,config['img_height'])),axis=0),[bs,1,1,1])
-            batch = batch.astype(np.float32)
-            
-            # train model with new data multiple steps
-            ni = 3
-            for i in range(ni):
-                with tf.GradientTape(persistent=True) as tape:
-                    predicted_heatmaps = training_model(batch, training=True)[-1]
-                    y = y[:,:,:,:predicted_heatmaps.shape[3]]
-                    predicted_heatmaps = tf.image.resize(predicted_heatmaps,(y.shape[1],y.shape[2]))
-                    loss = 0.
-                    for ph in predicted_heatmaps: 
-                        loss += model.get_loss(ph, y, config)
-                    print('loss',i,loss)
-                # update network parameters
-                gradients = tape.gradient(loss,training_model.trainable_variables)
-                optimizer.apply_gradients(zip(gradients,training_model.trainable_variables))
-
-            global count_active_steps
-            count_active_steps += 1
-            # sometimes save model to disk
-            if count_active_steps % 10 == 0:
-                training_model.save(args.model)
     if data['labeling_mode'] in ['bbox','annotate']:
         db.save_bbox_labeling(data)
     
-    if data['labeling_mode'] in ['postprocess']:
-        print('[*] postprocess mode. write', data)
-        global frame_idx_postprocessed
-        frame_idx_postprocessed += args.postprocess_skip
+    if data['labeling_mode'] in ['trackannotation']:
+        #print('[*] trackannotation mode. write', data)
+        log_interpolated_trackannotation( data )
+        
+        global last_user_boxes
+        last_user_boxes = []
+        for bbox in data['bboxes']:
+            if not 'is_visible' in bbox:
+                print('\n[* WARNING] bbox has no "is_visible"', bbox)
+            if 'is_visible' in bbox and bbox['is_visible']:
+                last_user_boxes.append([bbox[k] for k in ['x1', 'y1', 'x2', 'y2'] ])
+            else:
+                last_user_boxes.append([])
+
+        global frame_idx_trackannotation
+        frame_idx_trackannotation += args.trackannotation_skip
 
     return json.dumps({'success':True}), 200, {'ContentType':'application/json'} 
 
@@ -722,6 +617,7 @@ def skip_labeling():
     print('[*] skip labeling',data)
 
     return json.dumps({'success':True}), 200, {'ContentType':'application/json'} 
+
 
 
 

@@ -46,8 +46,8 @@
             <th>Manager</th>
             <th>Limb names</th>
             <th>Annotated Frames Animal boxes</th>
-            <th>Annotation tool</th>
-            <th>Postprocessing tool</th>
+            <th>Frame Annotation</th>
+            <th>Track Annotation</th>
             <th>Behavioural Analysis</th>
             </tr>
         </thead>
@@ -118,7 +118,7 @@ function init_projects_table(){
                             +"</td><td>"+data[i]['keypoint_names'].join(', ')
                             +"</td><td>"+data[i]['count_bboxes'].toString()
                             +"</td><td><a href='/get_next_annotation/"+data[i]['project_id'].toString()+"/"+data[i]['video_id'].toString()+"'>Label more frames</a>"
-                            +"</td><td><a href='/get_next_postprocess/"+data[i]['project_id'].toString()+"/"+data[i]['video_id'].toString()+"'>Postprocess more frames</a>"
+                            +"</td><td><a href='/get_next_trackannotation/"+data[i]['project_id'].toString()+"/"+data[i]['video_id'].toString()+"'>Label more tracks</a>"
                             +"</tr>";
         }   
     });
