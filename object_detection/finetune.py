@@ -102,18 +102,41 @@ def get_bbox_data(config, video_ids, vis_input_data=0, abort_early = False):
         if len(frames_missing_on_disk) > 0:
             frames_missing_on_disk = sorted(frames_missing_on_disk, key=lambda x: int(x[1]))    
             video_name = db.get_video_name(int(video_id))
-            video_path = os.path.join(frames_dir, 'videos', video_name)
-            print('sampling %i frames'% len(frames_missing_on_disk),' from video',video_id, video_name, video_path, os.path.isfile(video_path))
+            if '\\' in video_name:
+                video_name = os.sep.join(video_name.split('\\'))
+            if '/' in video_name:
+                video_name = os.sep.join(video_name.split('/'))
             
+            video_path = os.path.join(frames_dir, 'videos', video_name)
+            if not os.path.isfile(video_path):
+                video_path = os.path.join(frames_dir, 'videos', os.path.split(video_name)[1])
+
+            print('sampling %i frames'% len(frames_missing_on_disk),' from video',video_id, video_name, video_path)
+            assert os.path.isfile(video_path), "[*] ERROR: could not find video on disk!"
             video = cv.VideoCapture(video_path)
             frame_cnt = 0
             frame = 1 
             while len(frames_missing_on_disk) > 0 and frame is not None:
                 next_target_frame = int(frames_missing_on_disk[0][1])
+                #print(frame_cnt,'next_target_frame',next_target_frame)
+                #print('frames_missing_on_disk',frames_missing_on_disk)
                 _, frame = video.read()
                 if frame_cnt == next_target_frame:
                     # write to disk
-                    cv.imwrite(frames_missing_on_disk[0][2], frame)
+                    _path = frames_missing_on_disk[0][2]
+                    os.makedirs(os.path.split(_path)[0],exist_ok=True)
+                    cv.imwrite(_path, frame)
+                    
+                    if 0: # vis debug
+                        kk = '%s_%s'%(frames_missing_on_disk[0][0],frames_missing_on_disk[0][1])
+                        assert kk in frame_bboxes
+                        vis = np.uint8(frame)
+                        for _d in frame_bboxes[kk]:
+                            color = (0,0,255)
+                            vis = cv.rectangle(vis,(int(_d[1]),int(_d[0])),(int(_d[3]),int(_d[2])),color,3)
+                        path_vis = _path.replace('/train/','/trainvis/')
+                        os.makedirs(os.path.split(path_vis)[0], exist_ok=True)
+                        cv.imwrite(path_vis, vis)
                     print('[*] writing annotated frame %s' % frames_missing_on_disk[0][2] )
                     frames_missing_on_disk = frames_missing_on_disk[1:]
 
@@ -329,7 +352,7 @@ def finetune(config, checkpoint_directory, checkpoint_restore = None):
     print('[*] training object detection on resolution X: %i Y: %i' % (config['object_detection_resolution'][0],config['object_detection_resolution'][1]),'in directory',checkpoint_directory)
     if config['object_pretrained'] and not (config['object_detection_resolution'][0]==640 and config['object_detection_resolution'][1]==640):
         config['object_pretrained'] = False 
-    
+    print(config)
     ## load and prepare data 
     #  train video ids
     frame_bboxes, data_train, _ = get_bbox_data(config, config['train_video_ids'])

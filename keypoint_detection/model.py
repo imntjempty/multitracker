@@ -145,7 +145,7 @@ def update_config_object_detection(config):
         config['lr_objectdetection'] *= 10.
     config['object_pretrained'] = True
     config['maxsteps_objectdetection'] = 250000 #50000
-    config['minsteps_objectdetection'] = 20000 #25000
+    config['minsteps_objectdetection'] = 35000 #25000
     config['object_finetune_warmup'] = 1000
     config['object_augm_flip'] = bool(1)
     config['object_augm_rot90'] = bool(1)
@@ -155,7 +155,7 @@ def update_config_object_detection(config):
     config['object_augm_crop'] = bool(0)
     config['object_augm_stitch'] = bool(0)
 
-    config['object_detection_resolution'] = [640,640]
+    config['object_detection_resolution'] = [320,320]
     return config 
 
 # </train>
