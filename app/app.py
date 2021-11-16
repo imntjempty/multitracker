@@ -45,6 +45,7 @@ if __name__ == "__main__":
     parser.add_argument('--open_gallery', dest='open_gallery', action='store_true')
     
     parser.add_argument('--trackannotation_skip', type=int, default = 15)
+    parser.add_argument('--trackannotation_video', type=str, default = None)
     parser.add_argument('--data_dir', required=False, default = os.path.expanduser('~/data/multitracker'))
     args = parser.parse_args()
     os.environ['MULTITRACKER_DATA_DIR'] = args.data_dir
@@ -63,7 +64,9 @@ def get_frame_time(frame_idx):
 video_reader = None 
 loaded_video_id = None
 skip_annotation_frames = None
-frame_idx_trackannotation = 1
+frame_idx_trackannotation = None#1
+
+
 frame = None 
 #visual_mot = cv.MultiTracker_create()
 
@@ -103,11 +106,14 @@ def get_csv(csv_path):
         tracking_results_cache[csv_path] = data 
     return tracking_results_cache[csv_path]
 
-def log_interpolated_trackannotation(data):
-    trackannotation_csv = os.path.expanduser('~/data/multitracker/projects/%i/%i/trackannotation.csv' % (int(data['project_id']), int(data['video_id'])))
+def get_trackannotation_path(project_id, video_id):
+    return os.path.expanduser('~/data/multitracker/projects/%i/%i/trackannotation.csv' % (int(project_id), int(video_id)))
 
-    # write header if csv present
+
+def log_interpolated_trackannotation(data):
+    trackannotation_csv = get_trackannotation_path(data['project_id'],data['video_id'])
     if not os.path.exists(trackannotation_csv):
+        # write header if not csv present
         with open(trackannotation_csv, 'w') as f:
             f.write('frame_idx,idv,x1,y1,x2,y2\n')
     
@@ -167,6 +173,17 @@ def get_next_trackannotation(project_id, video_id):
     video_id = int(video_id) 
     
     global frame_idx_trackannotation
+    if frame_idx_trackannotation is None: 
+        # try to parse csv to continue
+        trackannotation_csv = get_trackannotation_path(project_id,video_id)
+        if os.path.isfile(trackannotation_csv):
+            with open(trackannotation_csv, 'r') as f:
+                lines = [ l.replace('\n','') for l in f.readlines() ]
+                try:
+                    frame_idx_trackannotation = int(lines[-1].split(',')[0]) # parse last frame idx 
+                except:
+                    frame_idx_trackannotation = 1 
+
     next_frame_idx = frame_idx_trackannotation
     return '<script>document.location.href = "/get_trackannotation/%i/%i/%i";</script>' % ( project_id, video_id, next_frame_idx)
 
@@ -203,65 +220,70 @@ def redirect_annotation_tool(project_id, video_id, frame_id, mode = "annotate"):
     labeled_frame_idxs_boundingboxes = db.get_labeled_bbox_frames(video_id)
     
     num_db_frames = len(labeled_frame_idxs)
-    
     # load annotation from database
     if mode == "annotate":
         animals = db.get_frame_annotations(video_id, frame_id )
-    
     elif mode == "trackannotation":
        
-        # load new frame, but don't send it (its cached)
-        if int(frame_id)<=1:
-            animals = None
-            pass 
-        else:
-            ## visual tracking
-            ## let the user only trackannotation only every 5th frame, do frame-by-frame visual tracking in between
-            last_frame = None 
-            if frame is not None:
-                last_frame = np.array(frame, copy=True )
-                scale = 700. / last_frame.shape[1]
+        animals = None
+        ## visual tracking
+        ## let the user only trackannotation only every 5th frame, do frame-by-frame visual tracking in between
+        last_frame = None 
+        if frame is None:
+            frame = get_next_annotation_frame(project_id, video_id, frame_id , should_send_file = False)
+            # parse last user boxes from csv file 
+            if os.path.isfile(get_trackannotation_path(project_id, video_id)):
+                last_user_boxes = []
+                with open(get_trackannotation_path(project_id, video_id),'r') as f:
+                    lines = [l.replace('\n','') for l in f.readlines()][-int(args.upper_bound):]
+                    for jj in range(len(lines)):
+                        _frame_idx, _idv, _x1, _y1, _x2, _y2 = lines[jj].split(',')
+                        last_user_boxes.append([float(_x1),float(_y1),float(_x2),float(_y2)])
 
-            # setup trackers
-            visual_mot = cv.MultiTracker_create()
-            for j, bbox in enumerate(last_user_boxes):
-                # has format -> 'bboxes': [{'x1': 737.3437, 'y1': 137.385, 'x2': 937.343, 'y2': 337.385, 'id_ind': '1', 'db_id': None, 'is_visible': True}, ..]
-                if len(bbox) >0:
-                    if last_frame is not None:
-                        visual_mot.add(tracker_create(), cv.resize(last_frame, None, None, fx = scale, fy = scale), tuple([int(cc*scale) for cc in bbox]))
+        last_frame = np.array(frame, copy=True )
+        scale = 700. / last_frame.shape[1]
 
-            # track for 5 frames
-            for iskip in range(args.trackannotation_skip):
-                get_next_annotation_frame(project_id, video_id, frame_id + iskip , should_send_file = False)
-                #vis = np.array(frame,copy=True); vis = cv.putText( vis, str(iskip), (20,20), cv.FONT_HERSHEY_COMPLEX, 0.75, [255,0,0], 2 )
-                #cv.imshow('huhu',vis); cv.waitKey(0)
-                (success, tracked_boxes) = visual_mot.update(cv.resize(frame, None, None, fx = scale, fy = scale)) 
-                tracked_boxes = [ [ int(cc / scale) for cc in bbox ] for bbox in tracked_boxes ]
-            
-            animals = []
-            _cnt_skip = 0
-            # if no annotation around, init upper_bound many animals with keypoints
-            for i in range(len(last_user_boxes)):
-                bbox = last_user_boxes[i]
-                is_visible = len(bbox) > 0 
-                if len(bbox) > 0: # is visible!
-                    x1,y1,x2,y2 = tracked_boxes[i-_cnt_skip]
-                else:
-                    x1,y1,x2,y2 = [200*i,200*i,200*(i+1),200*(i+1)]
-                    _cnt_skip += 1 
+        # setup trackers
+        visual_mot = cv.MultiTracker_create()
+        for j, bbox in enumerate(last_user_boxes):
+            # has format -> 'bboxes': [{'x1': 737.3437, 'y1': 137.385, 'x2': 937.343, 'y2': 337.385, 'id_ind': '1', 'db_id': None, 'is_visible': True}, ..]
+            if len(bbox) >0:
+                if last_frame is not None:
+                    visual_mot.add(tracker_create(), cv.resize(last_frame, None, None, fx = scale, fy = scale), tuple([int(cc*scale) for cc in bbox]))
 
-                keypoints = [ ]
-                for j,kp_name in enumerate(config['keypoint_names']):
-                    keypoints.append({
-                        'name': kp_name,
-                        'x': x1 + 20*j,
-                        'y': y1 + 23*j,
-                        'db_id': None,
-                        'is_visible': False 
-                    })
-            
-                animals.append({'id': str(i+1), 'box': [x1,y1,x2,y2], 'keypoints': keypoints, 'db_id': None, 'is_visible': is_visible})
-                
+        # track for 5 frames
+        for iskip in range(args.trackannotation_skip):
+            frame = get_next_annotation_frame(project_id, video_id, frame_id + iskip , should_send_file = False)
+            #vis = np.array(frame,copy=True); vis = cv.putText( vis, str(iskip), (20,20), cv.FONT_HERSHEY_COMPLEX, 0.75, [255,0,0], 2 )
+            #cv.imshow('huhu',vis); cv.waitKey(0)
+            (success, tracked_boxes) = visual_mot.update(cv.resize(frame, None, None, fx = scale, fy = scale)) 
+            tracked_boxes = [ [ int(cc / scale) for cc in bbox ] for bbox in tracked_boxes ]
+        
+        animals = []
+        _cnt_skip = 0
+        # if no annotation around, init upper_bound many animals with keypoints
+        for i in range(len(last_user_boxes)):
+            bbox = last_user_boxes[i]
+            is_visible = len(bbox) > 0 
+            if len(bbox) > 0: # is visible!
+                x1,y1,x2,y2 = tracked_boxes[i-_cnt_skip]
+            else:
+                x1,y1,x2,y2 = [200*i,200*i,200*(i+1),200*(i+1)]
+                _cnt_skip += 1 
+
+            keypoints = [ ]
+            for j,kp_name in enumerate(config['keypoint_names']):
+                keypoints.append({
+                    'name': kp_name,
+                    'x': x1 + 20*j,
+                    'y': y1 + 23*j,
+                    'db_id': None,
+                    'is_visible': False 
+                })
+        
+            animals.append({'id': str(i+1), 'box': [x1,y1,x2,y2], 'keypoints': keypoints, 'db_id': None, 'is_visible': is_visible})
+    
+
 
 
     if animals is None:
@@ -306,24 +328,23 @@ def get_next_annotation_frame(project_id, video_id, frame_id, should_send_file =
         db.execute('select name, project_id from videos where id=%i;' % int(video_id))
         video_name, project_id = [ x for x in db.cur.fetchall()][0]
         video_filepath = os.path.join(args.data_dir, 'projects', str(project_id), 'videos', video_name)
+        if args.trackannotation_video is not None:
+            video_filepath = args.trackannotation_video
         if not os.path.exists(video_filepath):
             print('[* ERROR] could not find video', video_filepath)
         #csv_filepath = video_filepath.replace('.mp4','.csv')
         video_reader = cv.VideoCapture( video_filepath )
         total_frame_number = int(video_reader.get(cv.CAP_PROP_FRAME_COUNT))
         skip_annotation_frames = int(total_frame_number / args.num_labeling_base) -1 
-        #print('skip_annotation_frames',skip_annotation_frames)
         frame_idx = 0
         ret, frame = video_reader.read()
-
+        
         loaded_video_id = video_id 
         print('[*] loaded video', video_filepath)
     
-    #for _ in range(skip_annotation_frames):
     while frame_idx < frame_id:
         ret, frame = video_reader.read()
         frame_idx += 1 
-
     if frame is None:
         return '''<html><body>you done annotating :) video over</body></html>'''
     
