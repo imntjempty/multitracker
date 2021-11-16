@@ -29,14 +29,15 @@ def trackannotation_csv2video(csv_filepath, video_in, video_out):
     vs_in = cv.VideoCapture(video_in)
 
     # open output video
-    if os.path.isfile(video_out): os.remove(video_out)
-    import skvideo.io
-    video_writer = skvideo.io.FFmpegWriter(video_out, outputdict={
-        '-vcodec': 'libx264',  #use the h.264 codec
-        '-crf': '0',           #set the constant rate factor to 0, which is lossless
-        '-preset':'veryslow'   #the slower the better compression, in princple, try 
-                                #other options see https://trac.ffmpeg.org/wiki/Encode/H.264
-    }) 
+    if video_out is not None:
+        if os.path.isfile(video_out): os.remove(video_out)
+        import skvideo.io
+        video_writer = skvideo.io.FFmpegWriter(video_out, outputdict={
+            '-vcodec': 'libx264',  #use the h.264 codec
+            '-crf': '0',           #set the constant rate factor to 0, which is lossless
+            '-preset':'veryslow'   #the slower the better compression, in princple, try 
+                                    #other options see https://trac.ffmpeg.org/wiki/Encode/H.264
+        }) 
 
     colors = util.get_colors()
     running = True 
@@ -55,8 +56,9 @@ def trackannotation_csv2video(csv_filepath, video_in, video_out):
                     vis = cv.putText( vis, str(idv), (int(_d['x1'])+5,int(_d['y1'])+25), cv.FONT_HERSHEY_COMPLEX, 0.75, color, 2 )
                 del data[frame_cnt]
 
-            vis = cv.putText( vis, str(frame_cnt), (20,40), cv.FONT_HERSHEY_COMPLEX, 1.15, [255,0,0], 2 )
-            video_writer.writeFrame(cv.cvtColor(vis, cv.COLOR_BGR2RGB))
+            if video_out is not None:
+                vis = cv.putText( vis, str(frame_cnt), (20,40), cv.FONT_HERSHEY_COMPLEX, 1.15, [255,0,0], 2 )
+                video_writer.writeFrame(cv.cvtColor(vis, cv.COLOR_BGR2RGB))
             
             cv.imshow('viz', vis)
             cv.waitKey(4*30)
