@@ -54,7 +54,6 @@ class HOTA(_BaseMetric):
             # Count the potential matches between ids in each timestep
             # These are normalised, weighted by the match similarity.
             similarity = data['similarity_scores'][t]
-            print('   similarity',type(similarity),similarity)
             sim_iou_denom = similarity.sum(0)[np.newaxis, :] + similarity.sum(1)[:, np.newaxis] - similarity
             sim_iou = np.zeros_like(similarity)
             sim_iou_mask = sim_iou_denom > 0 + np.finfo('float').eps

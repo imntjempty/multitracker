@@ -9,6 +9,26 @@ from ._base_dataset import _BaseDataset
 from .. import utils
 from .. import _timing
 
+def filter_duplicate_gt(raw_data):
+    # delete duplicates of ground truth detections (frame, idv and xy01 must be exactly the same)
+    for frame_idx in raw_data['gt_ids'].keys():
+        deletids = []
+        alread_in = []
+        str_dets =  [str(s) for s in raw_data['gt_dets'][frame_idx]]
+        #print(frame_idx,'QQ',str_dets)
+        for i in range(len(raw_data['gt_dets'][frame_idx])):
+            #print('i',i,'/',len(raw_data['gt_dets'][frame_idx]))
+            if str_dets[i] in alread_in:
+                deletids.append(i)
+            else:
+                alread_in.append(str_dets[i])
+        for i in deletids[::-1]:
+            del raw_data['gt_dets'][frame_idx][i]
+            del raw_data['gt_classes'][frame_idx][i]
+            del raw_data['gt_ids'][frame_idx][i]
+            
+        
+    return raw_data
 
 class Multitracker(_BaseDataset):
     """Dataset class for Multitracker tracking"""
@@ -66,7 +86,8 @@ class Multitracker(_BaseDataset):
         
         csv_gt = '/home/alex/data/multitracker/projects/1/1/trackannotation.csv'
         csv_tracked = '/home/alex/data/multitracker/projects/1/tracking_Tracking_under_occlusion_UpperBound_ssd_2stack_none_2020-11-25_08-47-15_22772819_rec-00.00.00.000-00.10.20.916-seg1.csv'
-
+        csv_path = [csv_tracked, csv_gt][int(is_gt)]
+        cnt_gt, cnt_tracked = 0,0
         raw_data = {'tracker_ids':{},'tracker_classes':{},'tracker_dets':{},'gt_ids':{},'gt_classes':{},'gt_dets':{}}
         ## read and parse ground truth CSV
         with open(csv_gt, 'r') as f:
@@ -83,7 +104,8 @@ class Multitracker(_BaseDataset):
                     raw_data['gt_classes'][frame_idx].append(1) # only one class
                     raw_data['gt_dets'][frame_idx].append([x1,y1,x2,y2])
                 cnt_gt += 1 
-        
+        raw_data = filter_duplicate_gt(raw_data)
+    
         ## read and parse tracked CSV
         with open(csv_tracked, 'r') as f:
             lines_tracked = [l.replace('\n','').split(',') for l in f.readlines()]
@@ -97,6 +119,7 @@ class Multitracker(_BaseDataset):
                     #for k in ['gt_ids','gt_classes','gt_dets','tracker_ids','tracker_classes','tracker_dets']:
                     #    if frame_idx not in raw_data[k]:
                     #        raw_data[k][frame_idx] = []
+                    
                     if frame_idx in raw_data['gt_ids']:
                         raw_data['tracker_ids'][frame_idx].append(idv)
                         raw_data['tracker_classes'][frame_idx].append(1) # only one class
@@ -177,10 +200,10 @@ class Multitracker(_BaseDataset):
                     #print('gt_ids',gt_ids,'gt_dets',gt_dets,'tracker_ids',tracker_ids,'tracker_dets',tracker_dets)
                     similarity_scores = raw_data['similarity_scores'][t]
                     #print('similarity_scores',similarity_scores)
-                    if gt_ids.shape[0] > 0 and tracker_ids.shape[0] > 0:
+                    '''if gt_ids.shape[0] > 0 and tracker_ids.shape[0] > 0:
                         match_rows, match_cols = linear_sum_assignment(-similarity_scores)
                         for r, c in zip(match_rows, match_cols):
-                            print('match',r,c)
+                            print('match',r,c)'''
 
             '''data['gt_ids'][t] = gt_ids
             data['gt_dets'][t] = gt_dets
@@ -192,7 +215,7 @@ class Multitracker(_BaseDataset):
                 data['tracker_dets'].append(tracker_dets)
                 data['similarity_scores'].append(similarity_scores)
 
-                print('t',t,'trackids',len(data['tracker_ids']),len(data['gt_ids']),'qqq')#,data['gt_ids'][3])
+                #print('t',t,'trackids',len(data['tracker_ids']),len(data['gt_ids']),'qqq')#,data['gt_ids'][3])
                 #if t in data['gt_ids']:
                 unique_gt_ids += list(np.unique(data['gt_ids'][-1]))
                 #if t in data['tracker_ids']:

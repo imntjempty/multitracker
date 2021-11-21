@@ -265,6 +265,10 @@ class _BaseDataset(ABC):
 
         # layout: (x0, y0, x1, y1)
         print('bboxes1',bboxes1.shape,bboxes2.shape)
+        if not bboxes1.shape[0] == bboxes2.shape[0]:
+            print(bboxes1)
+            print()
+
         min_ = np.minimum(bboxes1[:, np.newaxis, :], bboxes2[np.newaxis, :, :])
         max_ = np.maximum(bboxes1[:, np.newaxis, :], bboxes2[np.newaxis, :, :])
         intersection = np.maximum(min_[..., 2] - max_[..., 0], 0) * np.maximum(min_[..., 3] - max_[..., 1], 0)
