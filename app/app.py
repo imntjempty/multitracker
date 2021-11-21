@@ -184,6 +184,8 @@ def get_next_trackannotation(project_id, video_id):
                 except:
                     frame_idx_trackannotation = 1 
 
+    if frame_idx_trackannotation is None:
+        frame_idx_trackannotation = 1 
     next_frame_idx = frame_idx_trackannotation
     return '<script>document.location.href = "/get_trackannotation/%i/%i/%i";</script>' % ( project_id, video_id, next_frame_idx)
 
