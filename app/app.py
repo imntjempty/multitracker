@@ -131,7 +131,7 @@ def log_interpolated_trackannotation(data):
             for i in range(args.upper_bound):
                 #print(iskip,'BOX',i,data['bboxes'][i]['is_visible'],'')
                 _d = {}
-                _d['frame_idx'] = int(data['frame_idx'])+iskip - args.trackannotation_skip + 1
+                _d['frame_idx'] = int(data['frame_idx'])+iskip - args.trackannotation_skip + 1 
                 _d['id_ind'] = data['bboxes'][i]['id_ind']
                 skip=False 
                 for j,k in enumerate(['x1','y1','x2','y2']):
@@ -146,9 +146,10 @@ def log_interpolated_trackannotation(data):
                 if data['bboxes'][i]['is_visible'] and not skip:
                     interpolated_boxes.append( _d )
 
-    for i in range(args.upper_bound):
-        if data['bboxes'][i]['is_visible']:
-            interpolated_boxes.append(data['bboxes'][i] )
+    if int(data['frame_idx']) < 2:
+        for i in range(args.upper_bound):
+            if data['bboxes'][i]['is_visible']:
+                interpolated_boxes.append(data['bboxes'][i] )
 
 
     # write boxes to disk
