@@ -20,6 +20,7 @@ class Exp(MyExp):
 
         self.num_classes = 1
 
-        self.max_epoch = 3000
+        self.max_epoch = 6000
         self.data_num_workers = 6
-        self.eval_interval = 1
+        self.eval_interval = 40
+        #self.basic_lr_per_img *= 10.0
