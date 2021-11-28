@@ -16,6 +16,7 @@ import random
 from random import shuffle 
 from glob import glob 
 from tqdm import tqdm
+from copy import deepcopy
 
 def cvt2COCO(config):
     abort_early = False
@@ -44,29 +45,24 @@ def cvt2COCO(config):
             db_boxxes = [x for x in db.cur.fetchall()]
             print('[*] read %i boxes from video %s' % (len(db_boxxes),video_id))
 
-            random.Random(4).shuffle(db_boxxes)
+            #random.Random(4).shuffle(db_boxxes)
             for dbbox in db_boxxes:
                 _, _, frame_idx, individual_id, x1, y1, x2, y2, is_visible = dbbox
-                frame_idx = '%08d' % int(frame_idx)
-                nsample = [1,10][int('train' in mode)]
-                for ii in range(nsample):
-                    _frame_idx = '%08d' % int(int(frame_idx)+ii*1e6)
-                    _key = '%i_%s' % (video_id, _frame_idx) 
-                    if not _key in frame_bboxes:
-                        frame_bboxes[_key] = []
-                        
-                    frame_bboxes[_key].append(np.array([float(z) for z in [y1,x1,y2,x2]]))
-            for i, _key in enumerate(frame_bboxes.keys()):
-                frame_bboxes[_key] = np.array(frame_bboxes[_key]) 
-                video_id, frame_idx = _key.split('_')
-
+                x1,y1,x2,y2 = [int(z) for z in [x1,y1,x2,y2]]
+                w, h = x2-x1, y2-y1 
+                frame_idx = '%09d' % int(frame_idx)
+                
+                _key = '%i_%s' % (video_id, frame_idx) 
+                if not _key in frame_bboxes:
+                    frame_bboxes[_key] = []
             
-
+                frame_bboxes[_key].append(np.array([float(z) for z in [x1,y1,w,h]]))
+            
             ## open video, check if annotated frames are written to disk, if not, write them
             frames_missing_on_disk = []
             for i, _key in enumerate(frame_bboxes.keys()):
                 video_id, frame_idx = _key.split('_')
-                frame_path = os.path.join(config['outdir'],mode, '%s_%08d.png' % (str(video_id),int(frame_idx)))
+                frame_path = os.path.join(config['outdir'],mode, '%s_%09d.png' % (str(video_id),int(frame_idx)))
                 
                 outdats[mode]['images'].append({
                     'id': int(frame_idx),
@@ -94,11 +90,17 @@ def cvt2COCO(config):
             assert os.path.isfile(video_path), "[*] ERROR: could not find video on disk!"
             video = cv.VideoCapture(video_path)
 
-            width  = int(video.get(cv.CAP_PROP_FRAME_WIDTH))   # float `width`
-            height = int(video.get(cv.CAP_PROP_FRAME_HEIGHT))  # float `height`
+            video_width  = int(video.get(cv.CAP_PROP_FRAME_WIDTH))   # float `width`
+            video_height = int(video.get(cv.CAP_PROP_FRAME_HEIGHT))  # float `height`
+
+            # scale boxes
+            for i, _key in enumerate(frame_bboxes.keys()):
+                sx,sy = config['imsize'][0]/video_width,config['imsize'][1]/video_height
+                frame_bboxes[_key] = np.array(frame_bboxes[_key]) * np.array([sx,sy,sx,sy])
+
             for i in range(len(outdats[mode]['images'])):
-                outdats[mode]['images'][i]['width'] = width
-                outdats[mode]['images'][i]['height'] = height
+                outdats[mode]['images'][i]['width'] = config['imsize'][0]
+                outdats[mode]['images'][i]['height'] = config['imsize'][1]
 
             if len(frames_missing_on_disk) > 0:
                 frames_missing_on_disk = sorted(frames_missing_on_disk, key=lambda x: int(x[1]))    
@@ -139,8 +141,9 @@ def cvt2COCO(config):
                 video_id, frame_idx = _key.split('_')
                 frame_bboxes[_key] = np.array(frame_bboxes[_key]) 
                 for j in range(frame_bboxes[_key].shape[0]):
-                    x1,y1,x2,y2 = frame_bboxes[_key][j]
-                    w,h = x2-x1,y2-y1
+                    #x1,y1,x2,y2 = frame_bboxes[_key][j]
+                    #w,h = x2-x1,y2-y1
+                    x1,y1,w,h = frame_bboxes[_key][j]
                     outdats[mode]['annotations'].append({
                         'id': annot_id,
                         'image_id': int(frame_idx),
