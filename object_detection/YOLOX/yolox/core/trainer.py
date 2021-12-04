@@ -6,6 +6,7 @@ import datetime
 import os
 import time
 from loguru import logger
+import numpy as np 
 
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -99,6 +100,8 @@ class Trainer:
 
         with torch.cuda.amp.autocast(enabled=self.amp_training):
             outputs = self.model(inps, targets)
+
+        self.train_inps = inps 
 
         loss = outputs["total_loss"]
 
@@ -300,13 +303,16 @@ class Trainer:
             if is_parallel(evalmodel):
                 evalmodel = evalmodel.module
 
-        ap50_95, ap50, summary = self.exp.eval(
+        (ap50_95, ap50, summary) = self.exp.eval(
             evalmodel, self.evaluator, self.is_distributed
         )
+        
         self.model.train()
         if self.rank == 0:
+
             self.tblogger.add_scalar("val/COCOAP50", ap50, self.epoch + 1)
             self.tblogger.add_scalar("val/COCOAP50_95", ap50_95, self.epoch + 1)
+            self.tblogger.add_images("val/train_images", self.train_inps/256., self.epoch + 1)
             logger.info("\n" + summary)
         synchronize()
 
