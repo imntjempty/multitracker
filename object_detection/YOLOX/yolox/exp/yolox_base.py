@@ -17,7 +17,7 @@ class Exp(BaseExp):
         super().__init__()
 
         # ---------------- model config ---------------- #
-        self.num_classes = 80
+        self.num_classes = 1 # dolokov
         self.depth = 1.00
         self.width = 1.00
         self.act = 'silu'
@@ -192,6 +192,7 @@ class Exp(BaseExp):
             )
             targets[..., 1::2] = targets[..., 1::2] * scale_x
             targets[..., 2::2] = targets[..., 2::2] * scale_y
+        #inputs = inputs / 256.
         return inputs, targets
 
     def get_optimizer(self, batch_size):
