@@ -7,11 +7,12 @@ import torch.distributed as dist
 from yolox.data import get_yolox_datadir
 from yolox.exp import Exp as MyExp
 
+datadir = os.path.expanduser('~/github/multitracker/object_detection/YOLOX/datasets/multitracker')
 
 class Exp(MyExp):
     def __init__(self):
         super(Exp, self).__init__()
-        self.num_classes = 20
+        self.num_classes = 1 # dolokov
         self.depth = 0.33
         self.width = 0.50
         self.warmup_epochs = 1
@@ -19,8 +20,13 @@ class Exp(MyExp):
         # ---------- transform config ------------ #
         self.mosaic_prob = 1.0
         self.mixup_prob = 1.0
-        self.hsv_prob = 1.0
+        self.hsv_prob = 0.2 #1.0
         self.flip_prob = 0.5
+        self.enable_mixup = False
+
+        self.max_epoch = 5000
+        self.data_num_workers = 7
+        self.eval_interval = 40
 
         self.exp_name = os.path.split(os.path.realpath(__file__))[1].split(".")[0]
 
@@ -42,8 +48,8 @@ class Exp(MyExp):
 
         with wait_for_the_master(local_rank):
             dataset = VOCDetection(
-                data_dir=os.path.join(get_yolox_datadir(), "VOCdevkit"),
-                image_sets=[('2007', 'trainval'), ('2012', 'trainval')],
+                data_dir=datadir, # dolokov
+                image_sets=[('train2017')], # dolokov
                 img_size=self.input_size,
                 preproc=TrainTransform(
                     max_labels=50,
@@ -100,8 +106,8 @@ class Exp(MyExp):
         from yolox.data import VOCDetection, ValTransform
 
         valdataset = VOCDetection(
-            data_dir=os.path.join(get_yolox_datadir(), "VOCdevkit"),
-            image_sets=[('2007', 'test')],
+            data_dir=datadir,
+            image_sets=[('test2017')], # dolokov
             img_size=self.test_size,
             preproc=ValTransform(legacy=legacy),
         )
