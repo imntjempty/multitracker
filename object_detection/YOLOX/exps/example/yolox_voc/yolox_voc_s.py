@@ -26,7 +26,7 @@ class Exp(MyExp):
 
         self.max_epoch = 5000
         self.data_num_workers = 7
-        self.eval_interval = 40
+        self.eval_interval = 20#40
 
         self.exp_name = os.path.split(os.path.realpath(__file__))[1].split(".")[0]
 
@@ -57,24 +57,24 @@ class Exp(MyExp):
                     hsv_prob=self.hsv_prob),
                 cache=cache_img,
             )
-
-        dataset = MosaicDetection(
-            dataset,
-            mosaic=not no_aug,
-            img_size=self.input_size,
-            preproc=TrainTransform(
-                max_labels=120,
-                flip_prob=self.flip_prob,
-                hsv_prob=self.hsv_prob),
-            degrees=self.degrees,
-            translate=self.translate,
-            mosaic_scale=self.mosaic_scale,
-            mixup_scale=self.mixup_scale,
-            shear=self.shear,
-            enable_mixup=self.enable_mixup,
-            mosaic_prob=self.mosaic_prob,
-            mixup_prob=self.mixup_prob,
-        )
+        if self.enable_mixup:
+            dataset = MosaicDetection(
+                dataset,
+                mosaic=not no_aug,
+                img_size=self.input_size,
+                preproc=TrainTransform(
+                    max_labels=120,
+                    flip_prob=self.flip_prob,
+                    hsv_prob=self.hsv_prob),
+                degrees=self.degrees,
+                translate=self.translate,
+                mosaic_scale=self.mosaic_scale,
+                mixup_scale=self.mixup_scale,
+                shear=self.shear,
+                enable_mixup=self.enable_mixup,
+                mosaic_prob=self.mosaic_prob,
+                mixup_prob=self.mixup_prob,
+            )
 
         self.dataset = dataset
 
