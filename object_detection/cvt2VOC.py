@@ -41,7 +41,7 @@ def write_voc_xmls(config, mode, frame_bboxes, outdats):
         height = int(outdats[mode]['images'][0]['height']) 
 
         str_xml_objects = ""
-        for [y,x,h,w] in frame_bboxes[_key]:
+        for [x,y,w,h] in frame_bboxes[_key]:
             str_xml_objects += '''
                 <object>
                     <name>animal</name>
@@ -138,9 +138,8 @@ def cvt2VOC(config):
             #random.Random(4).shuffle(db_boxxes)
             for dbbox in db_boxxes:
                 _, _, frame_idx, individual_id, x1, y1, x2, y2, is_visible = dbbox
-                #x1,y1,x2,y2 = [int(z) for z in [x1,y1,x2,y2]]
-                y1,x1,y2,x2 = [int(z) for z in [x1,y1,x2,y2]]
-
+                x1,y1,x2,y2 = [int(z) for z in [x1,y1,x2,y2]]
+                
                 w, h = x2-x1, y2-y1 
                 # correct boxes to have positive width and height 
                 if w < 0:
@@ -199,9 +198,7 @@ def cvt2VOC(config):
             for i, _key in enumerate(frame_bboxes.keys()):
                 sx,sy = config['imsize'][0]/video_width,config['imsize'][1]/video_height
                 frame_bboxes[_key] = np.array(frame_bboxes[_key]) * np.array([sx,sy,sx,sy])
-                # norm [0,1]
-                #frame_bboxes[_key] /= np.array([video_width,video_height,video_width,video_height])
-
+                
             for i in range(len(outdats[mode]['images'])):
                 outdats[mode]['images'][i]['width'] = config['imsize'][0]
                 outdats[mode]['images'][i]['height'] = config['imsize'][1]
@@ -219,11 +216,8 @@ def cvt2VOC(config):
                 with tqdm(total=len(frames_missing_on_disk)) as pbar:
                     while len(frames_missing_on_disk) > 0 and frame is not None:
                         next_target_frame = int(frames_missing_on_disk[0][1])
-                        #print(frame_cnt,'next_target_frame',next_target_frame)
-                        #print('frames_missing_on_disk',frames_missing_on_disk)
                         video.set(1, next_target_frame)
                         _, frame = video.read()
-                        #if frame_cnt == next_target_frame:
                         # write to disk
                         _path = frames_missing_on_disk[0][2]
                         os.makedirs(os.path.split(_path)[0], exist_ok=True)
@@ -236,39 +230,20 @@ def cvt2VOC(config):
                             vis = np.uint8(frame)
                             for _d in frame_bboxes[kk]:
                                 color = (0,0,255)
-                                vis = cv.rectangle(vis,(int(_d[1]),int(_d[0])),(int(_d[3]),int(_d[2])),color,3)
-                            path_vis = _path.replace('/%s/'%mode,'/%svis/'%mode)
+                                px,py,pw,ph = [int(c) for c in _d]
+                                vis = cv.rectangle(vis, (px,py),(px+pw,py+ph),color,3)
+                                #vis = cv.rectangle(vis, (py,px),(py+ph,px+pw),color,3)
+                                
+                            path_vis = _path.replace('/JPEGImages/','/JPEGImagesvis/')
                             os.makedirs(os.path.split(path_vis)[0], exist_ok=True)
                             cv.imwrite(path_vis, vis)
+                            print('[*] wrote', path_vis)
                         
                         #print('[*] writing annotated frame %s' % frames_missing_on_disk[0][2] )
                         frames_missing_on_disk = frames_missing_on_disk[1:]
                         pbar.update(1)
                         frame_cnt += 1
                 
-
-            '''## write annotations to json
-            for i, _key in enumerate(frame_bboxes.keys()):
-                video_id, frame_idx = _key.split('_')
-                frame_bboxes[_key] = np.array(frame_bboxes[_key]) 
-                for j in range(frame_bboxes[_key].shape[0]):
-                    #x1,y1,x2,y2 = frame_bboxes[_key][j]
-                    #w,h = x2-x1,y2-y1
-                    x1,y1,w,h = frame_bboxes[_key][j]
-                    outdats[mode]['annotations'].append({
-                        'id': annot_id,
-                        'image_id': image_mapping[(int(video_id),int(frame_idx))],
-                        'bbox': [x1,y1,w,h], # COCO Bounding box: (x-top left, y-top left, width, height)
-                        'category_id': 1, # only one class used
-                        'iscrowd': 0,
-                        'area': w*h,
-                        'ignore': 0,
-                        'segmentation': [[x1, y1, x1, y1+h, x1+w, y1+h, x1+w, y1]]
-                    })
-                    annot_id += 1 
-            os.makedirs(os.path.join(config['outdir'],'annotations'),exist_ok=True)
-            with open(os.path.join(config['outdir'],'annotations','%s.json'%mode),'w') as f:
-                json.dump( outdats[mode], f, indent=4)'''
 
         if abort_early:
             return True 
