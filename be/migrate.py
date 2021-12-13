@@ -129,7 +129,11 @@ def import_annotation(args):
             fout = os.path.join(args.data_dir, 'projects', str(new_project_id), str(new_video_id), 'frames', 'train', '%05d.png' % int(frame_idx))
             if not os.path.isdir(os.path.split(fout)[0]): os.makedirs(os.path.split(fout)[0])
             if not os.path.isfile(fout): shutil.copy(fin, fout)
-
+            if len(dat) == 5: 
+                # LEGACY: attributes 'individual_id' and 'is_visible' was added recent so add it as true
+                frame_idx, x1, y1, x2, y2 = dat 
+                individual_id, is_visible = 1, True
+                dat = (frame_idx, individual_id, x1, y1, x2, y2, is_visible)
             dat = tuple([new_video_id]+list(dat))
             db_out.insert(query, dat)
 
@@ -143,7 +147,11 @@ def import_annotation(args):
             fout = os.path.join(args.data_dir, 'projects', str(new_project_id), str(new_video_id), 'frames', 'train', '%05d.png' % int(frame_idx))
             if not os.path.isdir(os.path.split(fout)[0]): os.makedirs(os.path.split(fout)[0])
             if not os.path.isfile(fout): shutil.copy(fin, fout)
-            
+            if len(dat) == 5:
+                # LEGACY: added recently is_visible
+                frame_idx, keypoint_name, individual_id, keypoint_x, keypoint_y = dat 
+                is_visible = True 
+                dat = (frame_idx, keypoint_name, individual_id, keypoint_x, keypoint_y, is_visible)
             dat = tuple([new_video_id]+list(dat))
             db_out.insert(query, dat)
 
