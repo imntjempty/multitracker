@@ -183,47 +183,75 @@ def cvt2VOC(config):
             '''video_path = os.path.join(os.path.split(config['database'])[0], 'videos', video_name)
             if not os.path.isfile(video_path):
                 video_path = os.path.join(config['outdir'], 'videos', os.path.split(video_name)[1])'''
+            video_path = None 
             video_paths = glob(os.path.join(os.path.split(config['database'])[0],'projects','*','videos',video_name)) + glob(os.path.join(os.path.split(config['database'])[0],'projects','*','*','videos',video_name))
-            video_path = video_paths[0]
+            if len(video_paths) > 0:
+                video_path = video_paths[0]
 
 
-            print('sampling %i frames'% len(frames_missing_on_disk),' from video',video_id, video_name, video_path)
-            assert os.path.isfile(video_path), "[*] ERROR: could not find video on disk!"
-            video = cv.VideoCapture(video_path)
+                print('sampling %i frames'% len(frames_missing_on_disk),' from video',video_id, video_name, video_path)
+                assert os.path.isfile(video_path), "[*] ERROR: could not find video on disk!"
+                video = cv.VideoCapture(video_path)
 
-            video_width  = int(video.get(cv.CAP_PROP_FRAME_WIDTH))   # float `width`
-            video_height = int(video.get(cv.CAP_PROP_FRAME_HEIGHT))  # float `height`
+                video_width  = int(video.get(cv.CAP_PROP_FRAME_WIDTH))   # float `width`
+                video_height = int(video.get(cv.CAP_PROP_FRAME_HEIGHT))  # float `height`
 
-            # scale boxes
-            for i, _key in enumerate(frame_bboxes.keys()):
-                sx,sy = config['imsize'][0]/video_width,config['imsize'][1]/video_height
-                frame_bboxes[_key] = np.array(frame_bboxes[_key]) * np.array([sx,sy,sx,sy])
-                
+                # scale boxes to imsize
+                for i, _key in enumerate(frame_bboxes.keys()):
+                    sx,sy = config['imsize'][0]/video_width,config['imsize'][1]/video_height
+                    frame_bboxes[_key] = np.array(frame_bboxes[_key]) * np.array([sx,sy,sx,sy])
+                    
             for i in range(len(outdats[mode]['images'])):
                 outdats[mode]['images'][i]['width'] = config['imsize'][0]
                 outdats[mode]['images'][i]['height'] = config['imsize'][1]
                 outdats[mode]['images'][i]['date_captured'] = '2021'
 
-            ## write VOC xml
-            write_voc_xmls(config, mode, frame_bboxes, outdats)
-            write_voc_traintest_split(config, mode, frame_bboxes)
+            
 
             if len(frames_missing_on_disk) > 0:
                 frames_missing_on_disk = sorted(frames_missing_on_disk, key=lambda x: int(x[1]))    
                 
+                if video_path is None:
+                    # find train/test images
+                    _frames = {}
+                    for fpath in glob(os.path.join(os.path.split(config['database'])[0],'projects',str(config['project_id']),str(video_id),'frames','train','*.png')):
+                        path_frame_idx = int(os.path.split(fpath)[1][:-4])
+                        _frames[path_frame_idx] = fpath
+
                 frame_cnt = 0
                 frame = 1 
                 with tqdm(total=len(frames_missing_on_disk)) as pbar:
                     while len(frames_missing_on_disk) > 0 and frame is not None:
                         next_target_frame = int(frames_missing_on_disk[0][1])
-                        video.set(1, next_target_frame)
-                        _, frame = video.read()
-                        # write to disk
-                        _path = frames_missing_on_disk[0][2]
-                        os.makedirs(os.path.split(_path)[0], exist_ok=True)
-                        frame = cv.resize(frame, config['imsize'])
-                        cv.imwrite(_path, frame)
-                        
+                        if video_path is not None:
+                            video.set(1, next_target_frame)
+                            _, frame = video.read()
+                        else:
+                            _video_id, frame_idx, frame_path = frames_missing_on_disk[0]
+                            int_frame_idx = int(frame_idx)
+                            if int_frame_idx not in _frames:
+                                frame = 1 
+                                print('[*] did not found frame_idx', frame_idx,'in disk frames',list(_frames.keys()))
+                            else:
+                                frame = cv.imread(_frames[int_frame_idx])
+                                # scale boxes to imsize
+                                sx,sy = config['imsize'][0]/frame.shape[1],config['imsize'][1]/frame.shape[0]
+                                _key = '%i_%09d' % (int(video_id), int(frames_missing_on_disk[0][1]))
+                                frame_bboxes[_key] = np.array(frame_bboxes[_key]) * np.array([sx,sy,sx,sy])
+                                    
+                                #print(frame.shape,'video_id',video_id, 'frame_idx',frame_idx, 'frame_path',frame_path,os.path.isfile(frame_path))
+
+                        if not type(frame) == int:
+                            # write to disk
+                            _path = frames_missing_on_disk[0][2]
+                            os.makedirs(os.path.split(_path)[0], exist_ok=True)
+                            frame = cv.resize(frame, config['imsize'])
+                            cv.imwrite(_path, frame)
+                        else:
+                            _key = '%i_%09d' % (int(video_id), int(frames_missing_on_disk[0][1]))
+                            del frame_bboxes[_key]
+                            print('[*] deleted frame bbox', _key)
+
                         if 0: # vis debug
                             kk = '%s_%s'%(frames_missing_on_disk[0][0],frames_missing_on_disk[0][1])
                             assert kk in frame_bboxes
@@ -243,7 +271,10 @@ def cvt2VOC(config):
                         frames_missing_on_disk = frames_missing_on_disk[1:]
                         pbar.update(1)
                         frame_cnt += 1
-                
+                    
+            ## write VOC xml
+            write_voc_xmls(config, mode, frame_bboxes, outdats)
+            write_voc_traintest_split(config, mode, frame_bboxes)
 
         if abort_early:
             return True 
@@ -253,6 +284,7 @@ def cvt2VOC(config):
 if __name__ == '__main__':
     import argparse 
     parser = argparse.ArgumentParser()
+    parser.add_argument('--project_id', default=1, type=int)
     parser.add_argument('--train_video_ids', required=True)
     parser.add_argument('--test_video_ids', required=True)
     parser.add_argument('--outdir',default='~/github/multitracker/object_detection/YOLOX/datasets/multitracker')
