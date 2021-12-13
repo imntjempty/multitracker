@@ -321,16 +321,17 @@ class Trainer:
                     vis_u8[ibatch,:,:,:] = cv.rectangle(vis_u8[ibatch,:,:,:].copy(),p0,p1,(0,0,255),2)
                     
         ## draw predicted bounding boxes
-        print('self.model',self.model)
-        print('train_fpn_outs',len(self.train_fpn_outs),[q.shape for q in self.train_fpn_outs])
+        #print('self.model',self.model)
+        #print('train_fpn_outs',len(self.train_fpn_outs),[q.shape for q in self.train_fpn_outs])
         #self.model.training=False
         self.model.head.training = False
         self.train_fpn_outs = [q.to(torch.float32) for q in self.train_fpn_outs]
         predicted_boxes = self.model.head(self.train_fpn_outs)
         #self.model.training = True
         self.model.head.training = True
-        print('predicted_boxes',predicted_boxes)
-        print('train',predicted_boxes.shape)
+        #print('predicted_boxes',predicted_boxes)
+        #print('train',predicted_boxes.shape)
+        #for ibatch in range(_targets.shape[0]):
         
         #print('vis_u8',vis_u8.shape)
         #print('_targets',_targets.shape,_targets[:5])
