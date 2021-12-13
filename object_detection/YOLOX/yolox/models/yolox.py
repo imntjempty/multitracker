@@ -41,7 +41,8 @@ class YOLOX(nn.Module):
                 "conf_loss": conf_loss,
                 "cls_loss": cls_loss,
                 "num_fg": num_fg,
-            }
+                 
+            }, fpn_outs
         else:
             outputs = self.head(fpn_outs)
 

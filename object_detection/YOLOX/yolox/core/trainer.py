@@ -100,7 +100,7 @@ class Trainer:
         data_end_time = time.time()
 
         with torch.cuda.amp.autocast(enabled=self.amp_training):
-            outputs = self.model(inps, targets)
+            outputs, self.train_fpn_outs = self.model(inps, targets)
 
         self.train_outputs = outputs
         self.train_targets = targets
@@ -303,23 +303,34 @@ class Trainer:
         #print('train_outputs',self.train_outputs)
         #print('train_targets',self.train_targets) # Size([32, 50, 5]) 
         #print('train_targets',self.train_targets.shape,self.train_targets.min(),self.train_targets.max())
+        
+        vis_u8 = np.transpose(np.array(self.train_inps.cpu()).astype(np.uint8),(0,2,3,1)) # gpu->cpu->uint8 + N,C,H,W=>N,H,W,C
+        ## draw ground truth bounding boxes
         _targets = np.array(self.train_targets.cpu())
-        vis_u8 = np.transpose(np.array(self.train_inps.cpu()).astype(np.uint8),(0,2,3,1))
         for ibatch in range(_targets.shape[0]):
             for [class_id, x,y,w,h] in _targets[ibatch]:
                 px = int(round(x))
                 py = int(round(y))
                 pw = int(round(w))
                 ph = int(round(h))
-                #p0 = (px,py)
-                #p1 = (px+pw,py+ph)
+                # span bbox from object center
                 p0 = (px-pw//2,py-ph//2)
                 p1 = (px+pw//2,py+ph//2)
-                #print(p0,p1,':',px,py,pw,ph,vis_u8[ibatch,:,:,:].shape,vis_u8[ibatch,:,:,:].dtype)
                 if max([pw,ph]) > 1e-5: # actual detection
-                    vis_u8[ibatch,:,:,:]  = cv.circle(vis_u8[ibatch,:,:,:].copy(),(px,py),7,(0,128,255),2)
-                    vis_u8[ibatch,:,:,:]  = cv.rectangle(vis_u8[ibatch,:,:,:].copy(),p0,p1,(0,0,255),2)
+                    #vis_u8[ibatch,:,:,:] = cv.circle(vis_u8[ibatch,:,:,:].copy(),(px,py),7,(0,128,255),2)
+                    vis_u8[ibatch,:,:,:] = cv.rectangle(vis_u8[ibatch,:,:,:].copy(),p0,p1,(0,0,255),2)
                     
+        ## draw predicted bounding boxes
+        print('self.model',self.model)
+        print('train_fpn_outs',len(self.train_fpn_outs),[q.shape for q in self.train_fpn_outs])
+        #self.model.training=False
+        self.model.head.training = False
+        self.train_fpn_outs = [q.to(torch.float32) for q in self.train_fpn_outs]
+        predicted_boxes = self.model.head(self.train_fpn_outs)
+        #self.model.training = True
+        self.model.head.training = True
+        print('predicted_boxes',predicted_boxes)
+        print('train',predicted_boxes.shape)
         
         #print('vis_u8',vis_u8.shape)
         #print('_targets',_targets.shape,_targets[:5])
