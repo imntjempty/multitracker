@@ -79,6 +79,9 @@ def main(args):
     config['sketch_file'] = args.sketch_file
     config['file_tracking_results'] = args.output_tracking_results
     config['use_all_data4train'] = args.use_all_data4train
+    config['yolox_exp'] = args.yolox_exp
+    config['yolox_name'] = args.yolox_name
+    config['min_confidence_boxes'] = args.min_confidence_boxes
     
     config['object_detection_backbone'] = args.objectdetection_method
     config = model.update_config_object_detection(config)
@@ -108,19 +111,20 @@ def main(args):
 
     # <train models>
     # 1) animal bounding box finetuning -> trains and inferences 
-    config['objectdetection_max_steps'] = 30000
-    # train object detector
-    now = str(datetime.now()).replace(' ','_').replace(':','-').split('.')[0]
-    checkpoint_directory_object_detection = os.path.expanduser('~/checkpoints/multitracker/bbox/vids%s-%s' % (config['train_video_ids'], now))
-    object_detect_restore = None 
     if 'objectdetection_model' in config and config['objectdetection_model'] is not None:
-        object_detect_restore = config['objectdetection_model']
-    
-    detection_model = None
-    if object_detect_restore is None:
-        detection_model = finetune.finetune(config, checkpoint_directory_object_detection, checkpoint_restore = object_detect_restore)
-        print('[*] trained object detection model',checkpoint_directory_object_detection)
+        detection_model = inference.load_object_detector(config)
+
+    else:
+        config['objectdetection_max_steps'] = 30000
+        # train object detector
+        now = str(datetime.now()).replace(' ','_').replace(':','-').split('.')[0]
+        checkpoint_directory_object_detection = os.path.expanduser('~/checkpoints/multitracker/bbox/vids%s-%s' % (config['train_video_ids'], now))
+        object_detect_restore = None 
+        detection_model = None
+        #detection_model = finetune.finetune(config, checkpoint_directory_object_detection, checkpoint_restore = object_detect_restore)
+        #print('[*] trained object detection model',checkpoint_directory_object_detection)
         config['object_detection_model'] = checkpoint_directory_object_detection
+        train_yolox()
 
     ## crop bbox detections and train keypoint estimation on extracted regions
     #point_classification.calculate_keypoints(config, detection_file_bboxes)
@@ -144,12 +148,12 @@ def main(args):
 
     # <load models>
     # load trained object detection model
-    if detection_model is None:
+    '''if detection_model is None:
         # load config json to know which backbone was used 
         with open(os.path.join(config['objectdetection_model'],'config.json')) as json_file:
             objconfig = json.load(json_file)
         objconfig['objectdetection_model'] = config['objectdetection_model']
-        detection_model = finetune.load_trained_model(objconfig)
+        detection_model = finetune.load_trained_model(objconfig)'''
     
     # load trained autoencoder model for Deep Sort Tracking 
     encoder_model = None 
@@ -200,7 +204,7 @@ if __name__ == '__main__':
     parser.add_argument('--train_video_ids', default='')
     parser.add_argument('--test_video_ids', default='')
     parser.add_argument('--minutes', required=False,default=0.0,type=float,help="cut the video to the first n minutes, eg 2.5 cuts after the first 150seconds.")
-    parser.add_argument('--min_confidence_boxes', required=False,default=0.65,type=float)
+    parser.add_argument('--min_confidence_boxes', required=False,default=0.35,type=float)
     parser.add_argument('--min_confidence_keypoints', required=False,default=0.5,type=float)
     parser.add_argument('--inference_objectdetection_batchsize', required=False,default=0,type=int)
     parser.add_argument('--inference_keypoint_batchsize', required=False,default=0,type=int)
@@ -208,13 +212,15 @@ if __name__ == '__main__':
     parser.add_argument('--track_tail', required=False,default=100,type=int,help="How many steps back in the past should the path of each animal be drawn? -1 -> draw complete path")
     parser.add_argument('--sketch_file', required=False,default=None, help="Black and White Sketch of the frame without animals")
     parser.add_argument('--video', required=False,default=None)
+    parser.add_argument('--yolox_exp', default='~/github/multitracker/object_detection/YOLOX/exps/example/yolox_voc/yolox_voc_s.py')
+    parser.add_argument('--yolox_name', default='yolox_s')
     parser.add_argument('--tracking_method', required=False,default='UpperBound',type=str,help="Tracking Algorithm to use: [DeepSORT, VIoU, UpperBound] defaults to VIoU")
     parser.add_argument('--objectdetection_method', required=False,default="fasterrcnn", help="Object Detection Algorithm to use [fasterrcnn, ssd] defaults to fasterrcnn") 
-    parser.add_argument('--objectdetection_resolution', required=False, default="320x320", help="xy resolution for object detection. coco pretrained model only available for 320x320, but smaller resolution saves time")
+    parser.add_argument('--objectdetection_resolution', required=False, default="640x640", help="xy resolution for object detection. coco pretrained model only available for 320x320, but smaller resolution saves time")
     parser.add_argument('--keypoint_resolution', required=False, default="224x224",help="patch size to analzye keypoints of individual animals")
     parser.add_argument('--keypoint_method', required=False,default="psp", help="Keypoint Detection Algorithm to use [none, hourglass2, hourglass4, hourglass8, vgg16, efficientnet, efficientnetLarge, psp]. defaults to psp") 
     parser.add_argument('--upper_bound', required=False,default=0,type=int)
-    parser.add_argument('--data_dir', required=False, default = os.path.expanduser('~/data/multitracker'))
+    parser.add_argument('--data_dir', required=False, default = '~/data/multitracker')
     parser.add_argument('--delete_all_checkpoints', required=False, action="store_true")
     parser.add_argument('--video_resolution', default=None, help='resolution the video is downscaled to before processing to reduce runtime, eg 640x480. default no downscaling')
     parser.add_argument('--use_all_data4train', action='store_true')
@@ -222,4 +228,6 @@ if __name__ == '__main__':
     assert args.tracking_method in ['DeepSORT', 'VIoU', 'UpperBound']
     assert args.objectdetection_method in ['fasterrcnn', 'ssd']
     assert args.keypoint_method in ['none', 'hourglass2', 'hourglass4', 'hourglass8', 'vgg16', 'efficientnet', 'efficientnetLarge', 'psp']
+    args.yolox_exp = os.path.expanduser(args.yolox_exp)
+    args.data_dir = os.path.expanduser(args.data_dir)
     main(args)

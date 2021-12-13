@@ -10,17 +10,21 @@ import cv2 as cv
 import h5py
 import multiprocessing as mp 
 from collections import deque
+import torch
 
 from multitracker import util 
+from multitracker.be import video
+from multitracker.be import dbconnection
+from multitracker import autoencoder
 from multitracker.keypoint_detection import heatmap_drawing, model 
 from multitracker.keypoint_detection.blurpool import BlurPool2D
 from multitracker.keypoint_detection.nets import ReflectionPadding2D
-from multitracker import autoencoder
-from multitracker.tracking.deep_sort.deep_sort.detection import Detection
 from multitracker.keypoint_detection import roi_segm, unet
-from multitracker.be import video
+from multitracker.tracking.deep_sort.deep_sort.detection import Detection
 
-from multitracker.be import dbconnection
+from multitracker.object_detection.YOLOX.tools import demo 
+from multitracker.object_detection.YOLOX.yolox.exp import get_exp
+from multitracker.object_detection.YOLOX.yolox.data.data_augment import ValTransform
 
 def get_project_frame_test_dir(project_id, video_id):
     return os.path.join( dbconnection.base_data_dir, 'projects/%i/%i/frames/test' % (project_id,video_id))
@@ -229,7 +233,7 @@ def detect_bounding_boxes(config, detection_model, input_tensor):
     return detections
 
 #@tf.function
-def detect_batch_bounding_boxes(config, detection_model, frames, thresh_detection, encoder_model = None):
+def detect_batch_bounding_boxes_tf2(config, detection_model, frames, thresh_detection, encoder_model = None):
     scaled = []
     for i in range(frames.shape[0]):
         scaled.append(cv.resize( frames[i,:,:,:] ,(config['object_detection_resolution'][0],config['object_detection_resolution'][1])))
@@ -272,8 +276,86 @@ def detect_batch_bounding_boxes(config, detection_model, frames, thresh_detectio
                 
                 result.append(detection)  
         results.append(result)
+    
     return results
 
+def detect_batch_bounding_boxes(config, detection_model, frames, thresh_detection, encoder_model = None):
+        
+    frames = np.stack(frames,axis=0)
+    ori_shape = frames.shape
+    print('frames',frames.shape)
+    
+    num_classes = 1 
+    nmsthre = 0.5
+    batch_detections = []
+    for i in range(frames.shape[0]):
+        img = frames[i,:,:,:]
+        img, _ = ValTransform(legacy=False)(img, None, config['object_detection_resolution'])
+        img = torch.from_numpy(img).unsqueeze(0)
+        img = img.float()
+        if 1:#self.device == "gpu":
+            img = img.cuda()
+            if 1:#self.fp16:
+                img = img.half()  # to FP16
+
+        with torch.no_grad():
+            t0 = time.time()
+            outputs = detection_model(img)
+            #if self.decoder is not None:
+            #    outputs = self.decoder(outputs, dtype=outputs.type())
+            outputs = demo.postprocess(
+                outputs, num_classes, thresh_detection,
+                nmsthre, class_agnostic=True
+            )
+            #logger.info("Infer time: {:.4f}s".format(time.time() - t0))
+        ok = True
+        try:
+            outputs = outputs[0].cpu().numpy()
+        except:
+            batch_detections.append([])
+            ok = False 
+        
+        if ok:
+            if len(outputs) == 0:
+                batch_detections.append([])
+            else:
+                bboxes = outputs[:, 0:4]
+
+                # preprocessing: resize
+                ratio = min(config['object_detection_resolution'][0] / ori_shape[1], config['object_detection_resolution'][1] / ori_shape[2])
+                bboxes /= ratio
+                
+                cls = outputs[:, 6]
+                scores = outputs[:, 4] * outputs[:, 5]
+
+            
+                features = np.zeros((len(bboxes),4))
+                '''if encoder_model is not None:
+                    ae_config = autoencoder.get_autoencoder_config()
+                    ae_scaled = []
+                    for i in range(frames.shape[0]):
+                        ae_scaled.append(cv.resize( frames[i,:,:,:] ,(ae_config['ae_resolution'][0],ae_config['ae_resolution'][1])))
+                    ae_scaled = np.stack(ae_scaled,axis=0)
+                    ae_scaled = (ae_scaled / 127.5) - 1 # [0,255] => [-1,1]
+                    features = encoder_model( ae_scaled )[0]
+                    features = tf.keras.layers.GlobalAveragePooling2D()(features).numpy()
+                    #features = (features - features.mean())/features.std()
+                    features = features / np.linalg.norm(features)'''
+
+                result = []
+                for j, (bbox, class_name, score) in enumerate(zip(bboxes, cls, scores)):
+                    left,top,x2,y2 = bbox
+                    width, height = x2 - left, y2-top
+                    #centerx, centery, width, height = bbox
+                    #left = centerx - width/2.
+                    #top = centery - height/2.
+                    #print(i, left,top,width,height, score, 'features', features.shape)
+                    detection = Detection([left,top,width,height], score, features[j,:])
+                    
+                    result.append(detection) 
+                batch_detections.append(result) 
+
+    return batch_detections 
 
 def detect_frame_boundingboxes(config, detection_model, encoder_model, frame, frame_idx, thresh_detection = 0.3):
     inp_tensor = frame #cv.imread(frame_file)
@@ -331,3 +413,54 @@ def load_autoencoder_feature_extractor(config):
     else:
         print('[*] WARNING: could not load pretrained model!')
     return encoder_model
+
+def load_object_detector(args):
+    
+
+    exp = get_exp(args['yolox_exp'], args['yolox_name'])
+
+    #if args.conf is not None:
+    #    exp.test_conf = args.conf
+    #if args.nms is not None:
+    exp.nmsthre = args['min_confidence_boxes']
+    #if args.tsize is not None:
+    #    exp.test_size = (args.tsize, args.tsize)
+
+    model = exp.get_model()
+    #logger.info("Model Summary: {}".format(get_model_info(model, exp.test_size)))
+
+    ckpt = torch.load(args['objectdetection_model'], map_location="cpu")
+    # load the model state dict
+    model.load_state_dict(ckpt["model"])
+    
+    fp16 = True
+    if 1:#args.device == "gpu":
+        model.cuda()
+        if fp16:
+            model.half()  # to FP16
+    model.eval()
+    
+    '''if not args.trt:
+        if args.ckpt is None:
+            ckpt_file = os.path.join(file_name, "best_ckpt.pth")
+        else:
+            ckpt_file = args.ckpt
+        logger.info("loading checkpoint")
+        ckpt = torch.load(ckpt_file, map_location="cpu")
+        # load the model state dict
+        model.load_state_dict(ckpt["model"])
+        logger.info("loaded checkpoint done.")'''
+
+    return model 
+    pred = demo.Predictor(
+        model,
+        exp,
+        cls_names=['animal'],
+        trt_file=None,
+        decoder=None,
+        device="gpu",
+        fp16=False,
+        legacy=False,
+    )
+
+    return pred 
