@@ -61,9 +61,9 @@ def tlhw2chw(tlhw):
 
 class OpenCVTrack(object):
     
-    def __init__(self,track_id,tlhw,active=True,steps_without_detection=0,score=0.5,history_length=50):
-        self.tlhw,self.active,self.steps_without_detection = tlhw,active,steps_without_detection
-        self.track_id, self.time_since_update = track_id, steps_without_detection
+    def __init__(self,track_id,tlhw,active=True,score=0.5,history_length=50):
+        self.tlhw,self.active = tlhw,active
+        self.track_id = track_id
         self.score = score
         
         self.steps_age = 0 
@@ -80,7 +80,8 @@ class OpenCVTrack(object):
     
     def mark_missed(self, global_step):
         # update position to continue linear movement
-        self.tlhw += self.tlhw - self.history[-1]['bbox']
+        if len(self.history) > 0:
+            self.tlhw += self.tlhw - self.history[-1]['bbox']
         self.steps_age += 1 
         self.steps_unmatched += 1 
         self.history.append({'global_step': global_step, 'bbox': self.tlhw, 'matched': False})
@@ -136,7 +137,7 @@ class UpperBoundTracker(Tracker):
             "maximum_nearest_reassign_track_distance": 0.9, # maximum distance (relative to image size) between a track and a detection for reassignment
             "track_history_length": 1000, # ideally longer than maximum occlusion time
             "matching_iou_thresh": 0.1, # min IoU to match old track with new detection
-            "stabledetection_bufferlength": 5, # how many time steps do we check for a stable detection before creating new track
+            "stabledetection_bufferlength": 25, # how many time steps do we check for a stable detection before creating new track
             "stabledetection_iou_thresh": 0.2, # min IoU between detections to be considered stable enough for track creation
             "stabledetection_confidence_thresh": 0.5 # min detection confidence to be considered for a stable detection
         }
@@ -163,7 +164,8 @@ class UpperBoundTracker(Tracker):
                 matched_detections[det_idx] = True 
                 matched_tracks[track_idx] = True 
                 self.tracks[track_idx].update(detected_boxes[det_idx], self.global_step)
-        
+                #if debug: print('[*] matched det',detected_boxes[det_idx],'to track',track_idx)
+
         for i in range(len(self.tracks)):
             if i not in matched_tracks:
                 self.tracks[i].mark_missed(self.global_step)
@@ -171,7 +173,8 @@ class UpperBoundTracker(Tracker):
             
                 if self.tracks[i].steps_unmatched > self.config['thresh_set_inactive']:
                     self.tracks[i].active = False
-                    
+                
+                #if debug: print('[*] unmatched track',i,self.tracks[i].steps_unmatched,self.tracks[i].active)
 
         # check if unmatched detection is a new track or gets assigned to inactive track (depending on upper bound number)
         for j in range(len(detected_boxes)):
@@ -226,7 +229,7 @@ class UpperBoundTracker(Tracker):
                             closest_possible_tracks = [
                                 {'idx': kk, 'track': t, 'dist': np.linalg.norm( np.array([t.tlhw[1]+t.tlhw[3]/2.,t.tlhw[0]+t.tlhw[2]/2.])-det_center ) } 
                                 for kk,t in enumerate(self.tracks) if t.active == False ]
-                            closest_possible_tracks = [d for d in closest_possible_tracks if d['dist'] < self.config['maximum_nearest_reassign_track_distance'] * min(self.frame_shape[:2])]
+                            closest_possible_tracks = [d for d in closest_possible_tracks if d['dist'] < self.config['maximum_nearest_reassign_track_distance'] * min(self.frame_shape[:2])]# or self.global_step < 100]
                             closest_possible_tracks = sorted(closest_possible_tracks, key = lambda d: d['dist'])
                             
                             if len(closest_possible_tracks) > 0:
@@ -238,7 +241,7 @@ class UpperBoundTracker(Tracker):
                                 # delete wrong history of track (since the track was matched the last time)
                                 num_delete_history = 0
                                 while not closest_possible_tracks[0]['track'].history[-1]['matched']: 
-                                    closest_possible_tracks[0]['track'].history = closest_possible_tracks[0]['track'].history[:-1]
+                                    closest_possible_tracks[0]['track'].history.pop()
                                     num_delete_history += 1 
 
                                 # add linear interpolation between last bbox track was matched with beginning of stable detection history
@@ -249,11 +252,11 @@ class UpperBoundTracker(Tracker):
                                 for inter_step in range(step_start_inter, step_end_inter):
                                     ratio = (inter_step-step_start_inter) / (step_end_inter-step_start_inter)
                                     inter_tlhw = start_box + ratio * (end_box - start_box)
-                                    closest_possible_tracks[0].history.append({'global_step': inter_step, 'bbox': inter_tlhw, 'matched': False})
+                                    closest_possible_tracks[0]['track'].history.append({'global_step': inter_step, 'bbox': inter_tlhw, 'matched': False})
     
                                 # add stable detection history
-                                for istable in range(self.config['stabledetection_bufferlength']):
-                                    closest_possible_tracks[0].history.append({'global_step': step_end_inter+istable, 'bbox': stable_path[istable], 'matched': True})
+                                for istable in range(min(len(stable_path),self.config['stabledetection_bufferlength'])):
+                                    closest_possible_tracks[0]['track'].history.append({'global_step': step_end_inter+istable, 'bbox': stable_path[istable], 'matched': True})
 
                                 ## update closest possibly assigned track with current position
                                 matched_detections[j] = True
@@ -396,7 +399,15 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
             for track in tracker.tracks:
                 bbox = track.to_tlwh()
                 center0, center1, _, _ = tlhw2chw(bbox)
-                result = [video_id, frame_idx, track.track_id, center0, center1, bbox[0], bbox[1], bbox[2], bbox[3], track.time_since_update]
+                _unmatched_steps = -1
+                if hasattr(track,'time_since_update'):
+                    _unmatched_steps = track.time_since_update
+                elif hasattr(track,'steps_unmatched'):
+                    _unmatched_steps = track.steps_unmatched
+                else:
+                    raise Exception("ERROR: can't find track's attributes time_since_update or unmatched_steps")
+
+                result = [video_id, frame_idx, track.track_id, center0, center1, bbox[0], bbox[1], bbox[2], bbox[3], _unmatched_steps]
                 file_csv.write(','.join([str(r) for r in result])+'\n')
                 results.append(result)
             
