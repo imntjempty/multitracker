@@ -101,13 +101,26 @@ class Visualization(object):
             #    continue
             self.viewer.color = create_unique_color_uchar(track.track_id)
             ## draw current rectangle
-            try:
+            if hasattr(track,'active'):
                 _active = int(track.active)
+            else:
+                try:
+                    _active = int(track.is_confirmed())
+                except:
+                    _active = "?"
+
+            if hasattr(track,'score'):
                 _score = str(track.score)[:4]
-            except:
-                _active = int(track.is_confirmed())
-                _score = ""
-            label = 'id:%sM:%iA:%iS:%s' % (str(track.track_id), track.time_since_update, _active, _score)
+            else:
+                _score = "?"
+                
+            _unmatched_steps = -1
+            if hasattr(track,'time_since_update'):
+                _unmatched_steps = track.time_since_update
+            elif hasattr(track,'steps_unmatched'):
+                _unmatched_steps = track.steps_unmatched
+            
+            label = 'id:%sM:%iA:%iS:%s' % (str(track.track_id), _unmatched_steps, _active, _score)
             self.viewer.rectangle(
                 *np.array(track.to_tlwh()).astype(np.int), label=label)
             # self.viewer.gaussian(track.mean[:2], track.covariance[:2, :2],
