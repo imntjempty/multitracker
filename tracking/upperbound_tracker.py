@@ -60,19 +60,39 @@ def tlhw2chw(tlhw):
     return [ tlhw[0]+tlhw[2]/2. , tlhw[1]+tlhw[3]/2., tlhw[2], tlhw[3] ]
 
 class OpenCVTrack(object):
-    def __init__(self,track_id,tlhw,active,steps_without_detection,last_means,score):
+    
+    def __init__(self,track_id,tlhw,active=True,steps_without_detection=0,score=0.5,history_length=50):
         self.tlhw,self.active,self.steps_without_detection = tlhw,active,steps_without_detection
         self.track_id, self.time_since_update = track_id, steps_without_detection
         self.score = score
-        self.last_means = last_means
-        self.last_means = [ tlhw2chw(p) for p in self.last_means ]
         
+        self.steps_age = 0 
+        self.steps_unmatched = 0
+        self.active = True 
+        self.history = deque(maxlen=history_length)
+
+    def update(self, tlhw, global_step):
+        self.tlhw = tlhw 
+        self.steps_age += 1 
+        self.steps_unmatched = 0 
+        self.active = True 
+        self.history.append({'global_step': global_step, 'bbox': tlhw, 'matched': True})
+    
+    def mark_missed(self, global_step):
+        # update position to continue linear movement
+        self.tlhw += self.tlhw - self.history[-1]['bbox']
+        self.steps_age += 1 
+        self.steps_unmatched += 1 
+        self.history.append({'global_step': global_step, 'bbox': self.tlhw, 'matched': False})
+
     def is_confirmed(self):
         return self.active 
     def to_tlbr(self): 
         return tlhw2tlbr(self.tlhw)
     def to_tlwh(self):
         return self.tlhw
+
+
 
 class Tracker(object):
     def __init__(self):
@@ -89,188 +109,161 @@ class Tracker(object):
             track_ids (numpy.array): 1D array with indexes of the tracks
             det_ids (numpy.array): 1D array of the associated indexes of the detections
         """
+        tc0 = time.time()
         costs = np.empty(shape=(len(tracked_boxes), len(detected_boxes)), dtype=np.float32)
         for row, track in enumerate(tracked_boxes):
+            tbox = tlhw2tlbr(track.tlhw)
             for col, dbox in enumerate(detected_boxes):
-                iou = calc_iou(tlhw2tlbr(track),tlhw2tlbr(dbox))
+                iou = calc_iou(tbox,tlhw2tlbr(dbox))
                 costs[row, col] = 1. - iou
-
         np.nan_to_num(costs)
         costs[costs > 1 - sigma_iou] = np.nan
+        tc1 = time.time()
+        th0 = time.time()
         track_ids, det_ids = solve_dense(costs)
+        th1 = time.time()
+        #print('matching cost',1000.*(tc1-tc0),'optim',1000.*(th1-th0))
         return track_ids, det_ids
-        
-def get_cv_multitracker():
-    try:
-        return cv.MultiTracker_create()
-    except:
-        return cv.legacy.MultiTracker_create()
 
 class UpperBoundTracker(Tracker):
-    def __init__(self, upper_bound):
+    def __init__(self, upper_bound, config = None):
         super().__init__()
         self.upper_bound = upper_bound
-        self.thresh_set_inactive = 12
-        self.thresh_set_dead = 100
-        self.maximum_other_track_init_distance = 150
-        self.maximum_nearest_inactive_track_distance = 1000#500# self.maximum_other_track_init_distance * 4
-
+        default_config = {
+            "thresh_set_inactive": 12, # after how many time steps of no matching do we consider a track lost/inactive
+            "thresh_set_dead": 100, # after how many time steps of no matching do we delete a track
+            "maximum_other_track_init_distance": 0.1, # maximum distance (relative to image size) between a track and a detection for new track creation
+            "maximum_nearest_reassign_track_distance": 0.9, # maximum distance (relative to image size) between a track and a detection for reassignment
+            "track_history_length": 1000, # ideally longer than maximum occlusion time
+            "matching_iou_thresh": 0.1, # min IoU to match old track with new detection
+            "stabledetection_bufferlength": 5, # how many time steps do we check for a stable detection before creating new track
+            "stabledetection_iou_thresh": 0.2, # min IoU between detections to be considered stable enough for track creation
+            "stabledetection_confidence_thresh": 0.5 # min detection confidence to be considered for a stable detection
+        }
+        self.config = [config, default_config][int(config is None)] 
+        self.detection_buffer = deque(maxlen=self.config['stabledetection_bufferlength'])
         self.tracks = []
-        self.trackers = get_cv_multitracker()
-        self.active = [False for _ in range(upper_bound)]
-        self.active_cnt = 0
-        self.steps_without_detection = [0 for _ in range(upper_bound)]
-        self.last_means = [[] for _ in range(upper_bound)]
-        self.detection_buffer_length = 3
-        self.detection_buffer = deque(maxlen=self.detection_buffer_length)
-        print('[*] inited UpperBoundTracker with fixed number %s' % upper_bound)
-
+        self.track_count = 0 
+        self.global_step = -1
+    
     def step(self,ob):
-        debug = bool(0) 
+        self.global_step += 1
+        debug = bool(1) 
         frame = ob['img']
+        self.frame_shape = frame.shape
         [detected_boxes,scores, features] = ob['detections']
         self.detection_buffer.append(ob['detections'])
 
-        # a) update all trackers of last frame
-        (success, tracked_boxes) = self.trackers.update(frame)
-        
-        # b) then find for each tracker unmatched detection with highest iou (at least 0.5)
-        matched_detections = [False for _ in detected_boxes]
-        matched_tracks = [False for _ in range(self.upper_bound)]
-        matched_track_scores = [False for _ in range(self.upper_bound)]
-        
-        ## linear assignment
-        track_ids, det_ids = self.associate(tracked_boxes, detected_boxes)
-        for i, (track_id, det_id) in enumerate(zip(track_ids, det_ids)):
-            matched_detections[det_id] = True 
-            matched_tracks[track_id] = True 
+        matched_detections, matched_tracks = {},{}
 
-            # new general position is average of tracker prediction and matched detection
-            alpha = 0.5
-            box = alpha * tracked_boxes[track_id] + (1.-alpha) * detected_boxes[det_id]
-            self.last_means[track_id].append(box)
-            
-            # replace tracker in multilist by init again with new general bounding box
-            if debug: print('[*]   updated active tracker %i with detection %i by matching' % (track_id, det_id),'det:',detected_boxes[det_id],'track:',tracked_boxes[track_id],'new:',box)
-            tracked_boxes[track_id] = box
-            matched_track_scores[track_id] = scores[det_id]
-            
-            self.steps_without_detection[track_id] = 0
-            if not self.active[track_id]:
-                self.active[track_id] = True
-                self.active_cnt += 1
+        ## matching from old tracks with new detections
+        if min(len(self.tracks),len(detected_boxes)) > 0:
+            track_ids, det_ids = self.associate(self.tracks, detected_boxes, self.config['matching_iou_thresh'])
+            for i, (track_idx, det_idx) in enumerate(zip(track_ids, det_ids)):
+                matched_detections[det_idx] = True 
+                matched_tracks[track_idx] = True 
+                self.tracks[track_idx].update(detected_boxes[det_idx], self.global_step)
         
-        self.trackers = get_cv_multitracker()
-        for box in tracked_boxes:
-            try:
-                self.trackers.add(cv.legacy.TrackerCSRT_create(), frame, tuple([int(cc) for cc in box]))
-            except:
-                self.trackers.add(cv.TrackerCSRT_create(), frame, tuple([int(cc) for cc in box]))
-        
-        for i in range(len(tracked_boxes)):
-            if not matched_tracks[i]:
-                self.last_means[i].append(tracked_boxes[i])
-                self.steps_without_detection[i] += 1 
-                if self.steps_without_detection[i] > self.thresh_set_inactive and self.active[i]:
-                    self.active[i] = False
-                    self.active_cnt -= 1
+        for i in range(len(self.tracks)):
+            if i not in matched_tracks:
+                self.tracks[i].mark_missed(self.global_step)
+                matched_tracks[i] = False 
+            
+                if self.tracks[i].steps_unmatched > self.config['thresh_set_inactive']:
+                    self.tracks[i].active = False
+                    
 
-        # e) reassign: check if unmatched detection is a new track or gets assigned to inactive track (depending on barrier fixed number)
-        #for j in range(min(len(detected_boxes),self.upper_bound)):
+        # check if unmatched detection is a new track or gets assigned to inactive track (depending on upper bound number)
         for j in range(len(detected_boxes)):
             dbox = detected_boxes[j] # boxes are sorted desc as scores!
-            if not matched_detections[j] and ob['frame_idx']>3: 
-                ## try to filter out flickering false positive detections by only using detections that can be greedily iou matched 3 steps through time
+            if j not in matched_detections: matched_detections[j] = False 
+
+            if not matched_detections[j] and self.global_step > self.config['stabledetection_bufferlength']: 
+                ## stable detection check
+                ##   try to filter out flickering false positive detections by only using detections that can be greedily iou 
+                ##   matched some steps through time
                 stable_detection = True 
                 xd1, yd1, wd1, hd1 = dbox
-                for step_back in range(1,1+min(ob['frame_idx'],self.detection_buffer_length)):
+                stable_path = []
+                for step_back in range(1,self.config['stabledetection_bufferlength']):
                     [last_detected_boxes, last_scores, last_features] = self.detection_buffer[-step_back]
                     _stable_detection = False
                     for jo in range(len(last_detected_boxes)):
                         xd2, yd2, wd2, hd2 = last_detected_boxes[jo]
-                        if last_scores[jo] > 0.5:
+                        if not _stable_detection and last_scores[jo] > self.config['stabledetection_confidence_thresh']:
                             iou = calc_iou([yd1,xd1,yd1+hd1,xd1+wd1], [yd2,xd2,yd2+hd2,xd2+wd2])
-                            if iou>0.5:
+                            if iou > self.config['stabledetection_iou_thresh']:
                                 _stable_detection = True 
+                                stable_path.insert(0,[xd2, yd2, wd2, hd2])
+                                xd1, yd1, wd1, hd1 = xd2, yd2, wd2, hd2
+
                     stable_detection = stable_detection and _stable_detection
                 if stable_detection:
-
-                    if len(self.trackers.getObjects()) < self.upper_bound:
+                    ## if upper bound of tracks not yet reached, we are allowed to add this stable detection as a new track
+                    if len(self.tracks) < self.upper_bound:
                         # check if appropiate minimum distance to other track before initiating
                         other_track_near = False 
-                        for tbox in self.trackers.getObjects():
-                            other_track_near = other_track_near or np.linalg.norm(dbox-tbox) < self.maximum_other_track_init_distance*frame.shape[0]/1080.
+                        for tbox in self.tracks:
+                            other_track_near = other_track_near or np.linalg.norm(dbox[:2]-tbox.tlhw[:2]) < self.config['maximum_other_track_init_distance']*min(self.frame_shape[:2])
                                 
                         if not other_track_near:
                             # add new track
-                            dboxi = tuple([int(cc) for cc in dbox])
-                            try:
-                                self.trackers.add(cv.legacy.TrackerCSRT_create(), frame, dboxi)
-                            except:
-                                self.trackers.add(cv.TrackerCSRT_create(), frame, dboxi)
-                            self.active[self.active_cnt] = True 
-                            if debug: print('[*]   added tracker %i with detection %i' % (self.active_cnt,j))
-                            self.active_cnt += 1
+                            self.tracks.append(OpenCVTrack(self.track_count, dbox, history_length = self.config['track_history_length']))
+                            self.track_count += 1 
+                                
+                            #self.active[self.active_cnt] = True 
+                            if debug: print('[*]   added tracker %i with detection %i' % (self.tracks[-1].track_id,j))
+                            #self.active_cnt += 1
                     else:
-                        # only consider reactivating old track with this detection if detected box not high iou with any track
+                        ## Upper Bound Violation: despite all tracks already existent, there is another stable detection
+                        # only consider reassigning old track with this detection if detected box not high iou with any track (might be cluttered detections)
                         other_track_overlaps = False 
-                        for k, tbox in enumerate(self.trackers.getObjects()):
-                            other_track_overlaps = other_track_overlaps or calc_iou(tlhw2tlbr(dbox),tlhw2tlbr(tbox)) > 0.15 
+                        for k, _track in enumerate(self.tracks):
+                            other_track_overlaps = other_track_overlaps or calc_iou(tlhw2tlbr(dbox),tlhw2tlbr(_track.tlhw)) > self.config['stabledetection_iou_thresh']
                         if not other_track_overlaps:
-                            # calc center distance to all inactive tracks, merge with nearest track
-                            nearest_inactive_track_distance, nearest_inactive_track_idx = 1e7,-1
-                            for i, tbox in enumerate(self.trackers.getObjects()):
-                                if not self.active[i]:
-                                    (detx, dety, detw, deth) = dbox 
-                                    (trackx,tracky,trackw,trackh) = tbox
-                                    dist = np.sqrt(((detx+detw/2.)-(trackx+trackw/2.))**2 + ((dety+deth/2.) -(tracky+trackh/2.))**2 )
-                                    if nearest_inactive_track_distance > dist:
-                                        nearest_inactive_track_distance, nearest_inactive_track_idx = dist, i
+                            # calc center distance to all inactive tracks, merge with nearest track if close enough
+                            det_center = np.array([dbox[0]+dbox[2]/2.,dbox[1]+dbox[3]/2.])
+                            closest_possible_tracks = [
+                                {'idx': kk, 'track': t, 'dist': np.linalg.norm( np.array([t.tlhw[1]+t.tlhw[3]/2.,t.tlhw[0]+t.tlhw[2]/2.])-det_center ) } 
+                                for kk,t in enumerate(self.tracks) if t.active == False ]
+                            closest_possible_tracks = [d for d in closest_possible_tracks if d['dist'] < self.config['maximum_nearest_reassign_track_distance'] * min(self.frame_shape[:2])]
+                            closest_possible_tracks = sorted(closest_possible_tracks, key = lambda d: d['dist'])
                             
-                            # merge by initing tracker with this detected box
-                            # replace tracker in multilist by init again with new general bounding box
-                            obs = self.trackers.getObjects()
-                            #if nearest_inactive_track_idx >= 0:
-                            if nearest_inactive_track_distance < self.maximum_nearest_inactive_track_distance * frame.shape[0]/1000.:
-                                ## the old estimation was obvisiouly wrong, so correct last means and add interpolated track
-                                try:
-                                    self.last_means[nearest_inactive_track_idx] = self.last_means[nearest_inactive_track_idx][:-self.steps_without_detection[nearest_inactive_track_idx]]
-                                    for ims in range(self.steps_without_detection[nearest_inactive_track_idx]):
-                                        ratio = ims / float(self.steps_without_detection[nearest_inactive_track_idx])
-                                        interpolated_box = (1. - ratio) * self.last_means[nearest_inactive_track_idx][-1] + ratio * detected_boxes[j]
-                                        self.last_means[nearest_inactive_track_idx].append(interpolated_box)
-                                except Exception as e:
-                                    print('[* ERROR %s] when correcting wrong path'% ob['frame_idx'],e)
+                            if len(closest_possible_tracks) > 0:
+                                ## reassign stable detection to closest possible track:
+                                ##   - delete wrong history of track (since the track was matched the last time)
+                                ##   - add linear interpolation between last bbox track was matched with beginning of stable detection history
+                                ##   - add stable detection history
+
+                                # delete wrong history of track (since the track was matched the last time)
+                                num_delete_history = 0
+                                while not closest_possible_tracks[0]['track'].history[-1]['matched']: 
+                                    closest_possible_tracks[0]['track'].history = closest_possible_tracks[0]['track'].history[:-1]
+                                    num_delete_history += 1 
+
+                                # add linear interpolation between last bbox track was matched with beginning of stable detection history
+                                step_start_inter = self.global_step - num_delete_history
+                                step_end_inter = self.global_step - self.config['stabledetection_bufferlength']
+                                start_box = np.array(closest_possible_tracks[0]['track'].history[-1]['bbox'])
+                                end_box = np.array(stable_path[0])
+                                for inter_step in range(step_start_inter, step_end_inter):
+                                    ratio = (inter_step-step_start_inter) / (step_end_inter-step_start_inter)
+                                    inter_tlhw = start_box + ratio * (end_box - start_box)
+                                    closest_possible_tracks[0].history.append({'global_step': inter_step, 'bbox': inter_tlhw, 'matched': False})
+    
+                                # add stable detection history
+                                for istable in range(self.config['stabledetection_bufferlength']):
+                                    closest_possible_tracks[0].history.append({'global_step': step_end_inter+istable, 'bbox': stable_path[istable], 'matched': True})
+
+                                ## update closest possibly assigned track with current position
                                 matched_detections[j] = True
-                                matched_tracks[nearest_inactive_track_idx] = True
-                                obs[nearest_inactive_track_idx] = detected_boxes[j]
-                                self.active[nearest_inactive_track_idx] = True
-                                self.active_cnt += 1 
-                                self.steps_without_detection[nearest_inactive_track_idx] = 0
-                                self.trackers = get_cv_multitracker()
-                                for _ob in obs:
-                                    try:
-                                        self.trackers.add(cv.legacy.TrackerCSRT_create(), frame, tuple([int(cc) for cc in _ob]))
-                                    except:
-                                        self.trackers.add(cv.TrackerCSRT_create(), frame, tuple([int(cc) for cc in _ob]))
+                                matched_tracks[closest_possible_tracks[0]['idx']] = True
+                                self.tracks[closest_possible_tracks[0]['idx']].update(detected_boxes[j], self.global_step)
+                                self.tracks[closest_possible_tracks[0]['idx']].steps_age += self.config['stabledetection_bufferlength'] - num_delete_history
 
+                                if debug: print('[*]   reassigned inactive tracker %i with detection %i' % (closest_possible_tracks[0]['idx'],j))
 
-                                if debug: print('[*]   updated inactive tracker %i with detection %i' % (nearest_inactive_track_idx,j))
-
-        # update internal variables to be compatible with rest
-        self.tracks = []
-        for i, tbox in enumerate(self.trackers.getObjects()):
-            self.tracks.append(OpenCVTrack(i,tbox,self.active[i],self.steps_without_detection[i],self.last_means[i],matched_track_scores[i]))
-
-        if debug:
-            for i, tbox in enumerate(self.trackers.getObjects()):
-                if len(self.last_means[i])>0:
-                    print('Tracker',i,self.last_means[i][-1],'active',self.active[i],'steps misses',self.steps_without_detection[i])
-            for j, dbox in enumerate(detected_boxes):
-                print('Detect',j,str(scores[j])[1:4],dbox)
-            print()
-
-
+        
 def run(config, detection_model, encoder_model, keypoint_model, min_confidence_boxes, min_confidence_keypoints, tracker = None):
     assert 'upper_bound' in config and config['upper_bound'] is not None and int(config['upper_bound'])>0, "ERROR: Upper Bound Tracking requires the argument --upper_bound to bet set (eg --upper_bound 4)"
     #config['upper_bound'] = None # ---> force VIOU tracker
@@ -280,9 +273,12 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
 
     video_reader = cv.VideoCapture( config['video'] )
     # ignore first 5 frames
-    for _ in range(5):
-        ret, frame = video_reader.read()
-    [Hframe,Wframe,_] = frame.shape
+    #for _ in range(5):
+    #    ret, frame = video_reader.read()
+    
+    Wframe  = int(video_reader.get(cv.CAP_PROP_FRAME_WIDTH))
+    Hframe = int(video_reader.get(cv.CAP_PROP_FRAME_HEIGHT))
+    
     crop_dim = roi_segm.get_roi_crop_dim(config['data_dir'], config['project_id'], config['test_video_ids'].split(',')[0],Hframe)
     total_frame_number = int(video_reader.get(cv.CAP_PROP_FRAME_COUNT))
     print('[*] total_frame_number',total_frame_number,'Hframe,Wframe',Hframe,Wframe,'crop_dim',crop_dim)
@@ -328,6 +324,7 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
     # fill up initial frame buffer for batch inference
     for ib in range(config['inference_objectdetection_batchsize']-1):
         ret, frame = video_reader.read()
+        #frame = cv.resize(frame,None,fx=0.5,fy=0.5)
         frame_buffer.append(frame[:,:,::-1]) # trained on TF RGB, cv2 yields BGR
 
     #while running: #video_reader.isOpened():
@@ -338,8 +335,10 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
             tbenchstart = time.time()
 
         # fill up frame buffer as you take something from it to reduce lag 
+        timread0 = time.time()
         if video_reader.isOpened():
             ret, frame = video_reader.read()
+            #frame = cv.resize(frame,None,fx=0.5,fy=0.5)
             if frame is not None:
                 frame_buffer.append(frame[:,:,::-1]) # trained on TF RGB, cv2 yields BGR
             else:
@@ -350,10 +349,11 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
             running = False 
             file_csv.close()
             return True 
-        
+        timread1 = time.time()
         showing = True # frame_idx % 1000 == 0
 
         if running:
+            tobdet0 = time.time()
             if len(detection_buffer) == 0:
                 frames_tensor = np.array(list(frame_buffer)).astype(np.float32)
                 # fill up frame buffer and then detect boxes for complete frame buffer
@@ -361,7 +361,7 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
                 batch_detections = inference.detect_batch_bounding_boxes(config, detection_model, frames_tensor, min_confidence_boxes)
                 [detection_buffer.append(batch_detections[ib]) for ib in range(config['inference_objectdetection_batchsize'])]
                 t_odet_inf_end = time.time()
-                if frame_idx < 200 and frame_idx % 10 == 0:
+                if frame_idx < 100 and frame_idx % 10 == 0:
                     print('  object detection ms',(t_odet_inf_end-t_odet_inf_start)*1000.,"batch", len(batch_detections),len(detection_buffer), (t_odet_inf_end-t_odet_inf_start)*1000./len(batch_detections) ) #   roughly 70ms
 
                 if keypoint_model is not None:
@@ -371,23 +371,26 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
                     t_kp_inf_end = time.time()
                     if frame_idx < 200 and frame_idx % 10 == 0:
                         print('  keypoint ms',(t_kp_inf_end-t_kp_inf_start)*1000.,"batch", len(keypoint_buffer),(t_kp_inf_end-t_kp_inf_start)*1000./ (1e-6+len(keypoint_buffer)) ) #   roughly 70ms
-                
+            tobdet1 = time.time()
+
             # if detection buffer not empty use preloaded frames and preloaded detections
             frame = frame_buffer.popleft()
             detections = detection_buffer.popleft()
-                
             boxes = np.array([d.tlwh for d in detections])
             scores = np.array([d.confidence for d in detections])
             features = np.array([d.feature for d in detections])
+            tobtrack0 = time.time()
             # Update tracker
             tracker.step({'img':frame,'detections':[boxes, scores, features], 'frame_idx': frame_idx})
-
+            tobtrack1 = time.time()
+            tkptrack0 = time.time()
             if keypoint_model is not None:
                 keypoints = keypoint_buffer.popleft()
                 # update tracked keypoints with new detections
                 tracked_keypoints = keypoint_tracker.update(keypoints)
             else:
                 keypoints = tracked_keypoints = []
+            tkptrack1 = time.time()
 
             # Store results.        
             for track in tracker.tracks:
@@ -398,10 +401,12 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
                 results.append(result)
             
             #print('[%i/%i] - %i detections. %i keypoints' % (config['count'], total_frame_number, len(detections), len(keypoints)))
+            tvis0 = time.time()
             if showing:
                 out = deep_sort_app.visualize(visualizer, frame, tracker, detections, keypoint_tracker, keypoints, tracked_keypoints, crop_dim, results, sketch_file=config['sketch_file'])
                 video_writer.writeFrame(cv.cvtColor(out, cv.COLOR_BGR2RGB))
-            
+            tvis1 = time.time()
+
             if int(frame_idx) == 1010:
                 tbenchend = time.time()
                 print('[*] 1000 steps took',tbenchend-tbenchstart,'seconds')
@@ -413,3 +418,11 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
                 cv.imshow("tracking visualization", out)#cv.resize(out,None,None,fx=0.75,fy=0.75))
                 cv.waitKey(1)
         
+            if 0:
+                dur_imread = timread1 - timread0
+                dur_obdet = tobdet1 - tobdet0
+                dur_obtrack = tobtrack1 - tobtrack0
+                dur_kptrack = tkptrack1 - tkptrack0
+                dur_vis = tvis1 - tvis0
+                dur_imread, dur_obdet, dur_obtrack, dur_kptrack, dur_vis = [1000. * dur for dur in [dur_imread, dur_obdet, dur_obtrack, dur_kptrack, dur_vis]]
+                print('imread',dur_imread,'obdetect',dur_obdet, 'obtrack',dur_obtrack, 'kptrack',dur_kptrack, 'vis',dur_vis)

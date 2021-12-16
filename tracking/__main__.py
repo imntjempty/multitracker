@@ -3,7 +3,11 @@
     main program to track animals and their corresponding limbs on a video file
 
     
-    python3.7 -m multitracker.tracking --project_id 7 --train_video_ids 9,14 --test_video_ids 13,14 --objectdetection_model /home/alex/checkpoints/experiments/MiceTop/E/1-2020-12-20_18-23-08 --keypoint_model /home/alex/checkpoints/experiments/MiceTop/B/random-2020-12-20_19-04-50 --min_confidence_boxes 0.85 --tracking_method UpperBound --upper_bound 4 --video /home/alex/data/multitracker/projects/7/videos/from_above_Oct2020_2_12fps.mp4 --sketch_file /home/alex/data/multitracker/projects/7/13/sketch.png 
+    python3.7 -m multitracker.tracking --project_id 1 --train_video_ids 1 --test_video_ids 1 --upper_bound 4 --video /home/alex/data/multitracker/projects/1/videos/2020-11-25_08-47-15_22772819_rec-00.00.00.000-00.10.20.916-seg1.avi --keypoint_method none --objectdetection_model /home/alex/github/multitracker/object_detection/YOLOX/YOLOX_outputs/yolox_voc_m/last_epoch_ckpt.pth 
+             --sketch_file /home/alex/data/multitracker/projects/7/13/sketch.png 
+
+
+    
 """
 
 import os
@@ -204,7 +208,7 @@ if __name__ == '__main__':
     parser.add_argument('--train_video_ids', default='')
     parser.add_argument('--test_video_ids', default='')
     parser.add_argument('--minutes', required=False,default=0.0,type=float,help="cut the video to the first n minutes, eg 2.5 cuts after the first 150seconds.")
-    parser.add_argument('--min_confidence_boxes', required=False,default=0.35,type=float)
+    parser.add_argument('--min_confidence_boxes', required=False,default=0.5,type=float)
     parser.add_argument('--min_confidence_keypoints', required=False,default=0.5,type=float)
     parser.add_argument('--inference_objectdetection_batchsize', required=False,default=0,type=int)
     parser.add_argument('--inference_keypoint_batchsize', required=False,default=0,type=int)
@@ -212,8 +216,8 @@ if __name__ == '__main__':
     parser.add_argument('--track_tail', required=False,default=100,type=int,help="How many steps back in the past should the path of each animal be drawn? -1 -> draw complete path")
     parser.add_argument('--sketch_file', required=False,default=None, help="Black and White Sketch of the frame without animals")
     parser.add_argument('--video', required=False,default=None)
-    parser.add_argument('--yolox_exp', default='~/github/multitracker/object_detection/YOLOX/exps/example/yolox_voc/yolox_voc_s.py')
-    parser.add_argument('--yolox_name', default='yolox_s')
+    parser.add_argument('--yolox_exp', default='~/github/multitracker/object_detection/YOLOX/exps/example/yolox_voc/yolox_voc_m.py')
+    parser.add_argument('--yolox_name', default='yolox_m')
     parser.add_argument('--tracking_method', required=False,default='UpperBound',type=str,help="Tracking Algorithm to use: [DeepSORT, VIoU, UpperBound] defaults to VIoU")
     parser.add_argument('--objectdetection_method', required=False,default="fasterrcnn", help="Object Detection Algorithm to use [fasterrcnn, ssd] defaults to fasterrcnn") 
     parser.add_argument('--objectdetection_resolution', required=False, default="640x640", help="xy resolution for object detection. coco pretrained model only available for 320x320, but smaller resolution saves time")
