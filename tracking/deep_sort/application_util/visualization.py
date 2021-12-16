@@ -1,6 +1,8 @@
 # vim: expandtab:ts=4:sw=4
 import numpy as np
 import colorsys
+
+from numpy.lib.histograms import _histogram_bin_edges_dispatcher
 from .image_viewer import ImageViewer
 import cv2 as cv 
 
@@ -112,13 +114,27 @@ class Visualization(object):
             #                      label="%d" % track.track_id)
 
             ## draw lines of history 
-            if len(track.last_means)>2:
-                _stop = -1 
-                if 'track_tail' in self.config and self.config['track_tail'] > 0:
-                    _stop = max(1,len(track.last_means) - self.config['track_tail'])
-                for i in range(len(track.last_means)-1, _stop, -1):
-                    px, py = track.last_means[i-1][:2]
-                    x,   y = track.last_means[i  ][:2]
-                    #if np.sqrt( (px-x)**2 + (py-y)**2 ) < 50:
-                    px,py,x,y = [int(round(c)) for c in [px,py,x,y]] 
-                    self.viewer.image = cv.line(self.viewer.image,(px,py),(x,y),self.viewer.color,thickness=2)
+            if hasattr(track, 'last_means'):
+                if len(track.last_means)>2:
+                    _stop = -1 
+                    if 'track_tail' in self.config and self.config['track_tail'] > 0:
+                        _stop = max(1,len(track.last_means) - self.config['track_tail'])
+                    for i in range(len(track.last_means)-1, _stop, -1):
+                        px, py = track.last_means[i-1][:2]
+                        x,   y = track.last_means[i  ][:2]
+                        #if np.sqrt( (px-x)**2 + (py-y)**2 ) < 50:
+                        px,py,x,y = [int(round(c)) for c in [px,py,x,y]] 
+                        self.viewer.image = cv.line(self.viewer.image,(px,py),(x,y),self.viewer.color,thickness=2)
+            elif hasattr(track, 'history'):
+                if len(track.history)>2:
+                    _stop = -1 
+                    if 'track_tail' in self.config and self.config['track_tail'] > 0:
+                        _stop = max(1,len(track.history) - self.config['track_tail'])
+                    for i in range(len(track.history)-1, _stop, -1):
+                        p = track.history[i-1]['bbox']
+                        q = track.history[i  ]['bbox']
+                        px,py = p[0]+p[2]//2, p[1]+p[3]//2
+                        x, y = q[0]+q[2]//2, q[1]+q[3]//2
+                        #if np.sqrt( (px-x)**2 + (py-y)**2 ) < 50:
+                        px,py,x,y = [int(round(c)) for c in [px,py,x,y]] 
+                        self.viewer.image = cv.line(self.viewer.image,(px,py),(x,y),self.viewer.color,thickness=2)

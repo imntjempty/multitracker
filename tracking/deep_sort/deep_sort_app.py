@@ -171,10 +171,19 @@ def visualize(vis, frame, tracker, detections, keypoint_tracker, keypoints, trac
     for i, track in enumerate(tracker.tracks):    
         # draw visualization of this tracker complete history
         vis_history_track = np.zeros(frame.shape,'uint8')
-        for j in range(1,len(track.last_means)):
-            p = tuple([int(round(cc)) for cc in track.last_means[j-1][:2]])
-            q = tuple([int(round(cc)) for cc in track.last_means[j  ][:2]])
-            vis_history_track = cv.line(vis_history_track, p, q, tuple(visualization.create_unique_color_uchar(track.track_id)),3) 
+        if hasattr(track, 'last_means'):
+            for j in range(1,len(track.last_means)):
+                p = tuple([int(round(cc)) for cc in track.last_means[j-1][:2]]) # centerx, centery, width, height
+                q = tuple([int(round(cc)) for cc in track.last_means[j  ][:2]])
+                vis_history_track = cv.line(vis_history_track, p, q, tuple(visualization.create_unique_color_uchar(track.track_id)),3) 
+        elif hasattr(track, 'history'):
+            for j in range(1,len(track.history)):
+                pb = tuple([int(round(cc)) for cc in track.history[j-1]['bbox']]) # left,top,width,height
+                qb = tuple([int(round(cc)) for cc in track.history[j  ]['bbox']])
+                p = (pb[0]+pb[2]//2,pb[1]+pb[3]//2)
+                q = (qb[0]+qb[2]//2,qb[1]+qb[3]//2)
+                vis_history_track = cv.line(vis_history_track, p, q, tuple(visualization.create_unique_color_uchar(track.track_id)),3) 
+
         vis_crops.append(cv.resize(vis_history_track,(256,256)))
     
     _shape = [im.shape[0]//2,im.shape[1]//2]
@@ -189,6 +198,12 @@ def visualize(vis, frame, tracker, detections, keypoint_tracker, keypoints, trac
     vis.draw_trackers(tracker.tracks)
     
     out = append_crop_mosaic(vis.viewer.image,vis_crops)
+
+    if 1:
+        # scale down visualization
+        max_height = 600
+        ratio = max_height / out.shape[0]
+        out = cv.resize(out, None, fx=ratio,fy=ratio)
     return out 
 
 def run(config, detection_model, encoder_model, keypoint_model, min_confidence_boxes, min_confidence_keypoints,  
