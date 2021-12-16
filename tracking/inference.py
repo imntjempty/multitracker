@@ -281,9 +281,8 @@ def detect_batch_bounding_boxes_tf2(config, detection_model, frames, thresh_dete
 
 def detect_batch_bounding_boxes(config, detection_model, frames, thresh_detection, encoder_model = None):
         
-    frames = np.stack(frames,axis=0)
+    frames = np.stack(frames,axis=0) # eg (4, 1216, 1936, 3)
     ori_shape = frames.shape
-    print('frames',frames.shape)
     
     num_classes = 1 
     nmsthre = 0.5

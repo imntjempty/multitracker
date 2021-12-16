@@ -155,7 +155,7 @@ def update_config_object_detection(config):
     config['object_augm_crop'] = bool(0)
     config['object_augm_stitch'] = bool(0)
 
-    config['object_detection_resolution'] = [320,320]
+    config['object_detection_resolution'] = [640,640]
     return config 
 
 # </train>
