@@ -11,6 +11,7 @@ from collections import deque
 import cv2 as cv 
 import time 
 import numpy as np
+from numpy.core.defchararray import _strip_dispatcher
 from tqdm import tqdm
 import tensorflow as tf 
 assert tf.__version__.startswith('2.'), 'YOU MUST INSTALL TENSORFLOW 2.X'
@@ -67,7 +68,7 @@ def create_detections(detection_mat, frame_idx, min_height=0):
 
 global count_failed
 global count_ok
-count_ok, count_failed =0,0
+count_ok, count_failed = 0, 0
 
 def append_crop_mosaic(frame, vis_crops):
     # stack output image together
@@ -116,7 +117,7 @@ def draw_heatmap(frame, results, sketch_file):
 
     return vis_history_heatmap 
 
-def draw_framecount(vis, im):
+def draw_label(im, pos=(5,5), label="", font_size = 18, font_name = "Roboto-Regular.ttf"):
     from PIL import ImageFont, ImageDraw, Image
     pil_im = Image.fromarray(im)
 
@@ -124,12 +125,12 @@ def draw_framecount(vis, im):
 
     # Choose a font
     try:
-        font = ImageFont.truetype("Roboto-Regular.ttf", 18)
+        font = ImageFont.truetype(font_name, font_size)
     except:
         font = ImageFont.load_default()
 
     # Draw the text
-    draw.text((5, 5), "Frame: %i" % vis.frame_idx, font=font)
+    draw.text(pos, label, font=font)
 
     im = np.array(pil_im)
     return im 
@@ -145,9 +146,12 @@ def draw_framecount(vis, im):
                 vis.viewer.font_scale, (255, 255, 255), vis.viewer.thickness)
     return frame 
 
+
+
 def visualize(vis, frame, tracker, detections, keypoint_tracker, keypoints, tracked_keypoints, crop_dim, results, sketch_file = None):
     # draw keypoint detections 'whitish'
     im = np.array(frame, copy=True)
+    font_size = int(24. * min(im.shape[:2])/1000.)
     
     radius_keypoint = 5
     # draw history of keypoint track 
@@ -166,7 +170,21 @@ def visualize(vis, frame, tracker, detections, keypoint_tracker, keypoints, trac
         # crop image around track center
         x1,y1,x2,y2 = track.to_tlbr()
         center = roi_segm.get_center(x1,y1,x2,y2, frame.shape[0],frame.shape[1], crop_dim)
-        vis_crops.append( im[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:] )    
+        vis_crop = np.array(im[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:],copy=True)
+
+        # make track id sensitive transparent background header
+        header_height_px = int(1.2 * font_size)
+        overlayed_header = vis_crop[:header_height_px,:,:]
+        _alpha = 0.7
+        track_color = tuple(visualization.create_unique_color_uchar(track.track_id))
+        overlayed_header = np.uint8(overlayed_header*_alpha + track_color * np.ones_like(overlayed_header) * (1. - _alpha))
+        vis_crop[:overlayed_header.shape[0],:,:] = overlayed_header
+
+        # draw status attributes in corner (totaltraveled_px, speed_px)
+        str_speed = str(int(track.speed_px))+"."+str(track.speed_px-int(track.speed_px))[2:5]
+        vis_crop = draw_label(vis_crop, pos = (5,5), label = "distance traveled (px): %i\ncurrent speed (px/sec): %s" % (track.totaltraveled_px, str_speed), font_size=font_size)
+
+        vis_crops.append( vis_crop )
 
     for i, track in enumerate(tracker.tracks):    
         # draw visualization of this tracker complete history
@@ -191,7 +209,7 @@ def visualize(vis, frame, tracker, detections, keypoint_tracker, keypoints, trac
         _shape = vis_crops[0].shape[:2]
     
     ## draw frame counter for evaluation
-    frame = draw_framecount(vis, frame)
+    #frame = draw_label(frame, label= "Frame: %i" % vis.frame_idx)
     ## draw trackers and detections
     vis.set_image(frame.copy())
     vis.draw_detections(detections)
@@ -199,7 +217,7 @@ def visualize(vis, frame, tracker, detections, keypoint_tracker, keypoints, trac
     
     out = append_crop_mosaic(vis.viewer.image,vis_crops)
 
-    if 1:
+    if 0:
         # scale down visualization
         max_height = 600
         ratio = max_height / out.shape[0]

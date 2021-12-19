@@ -3,6 +3,7 @@ import numpy as np
 import colorsys
 
 from numpy.lib.histograms import _histogram_bin_edges_dispatcher
+
 from .image_viewer import ImageViewer
 import cv2 as cv 
 
@@ -51,7 +52,10 @@ def create_unique_color_uchar(tag, hue_step=0.41):
         RGB color code in range [0, 255]
 
     """
-    r, g, b = create_unique_color_float(tag, hue_step)
+    if tag < 5:
+        r,g,b = [[0,.8,.8],[0,0.8,0],[0.8,0,0],[.7,0.7,0]][tag]
+    else:
+        r, g, b = create_unique_color_float(int(tag), hue_step)
     return int(255*r), int(255*g), int(255*b)
 
 
@@ -84,7 +88,7 @@ class Visualization(object):
     def draw_groundtruth(self, track_ids, boxes):
         self.viewer.thickness = 2
         for track_id, box in zip(track_ids, boxes):
-            self.viewer.color = create_unique_color_uchar(track_id)
+            self.viewer.color = tuple(create_unique_color_uchar(track_id))
             self.viewer.rectangle(*box.astype(np.int), label=str(track_id))
 
     def draw_detections(self, detections):
@@ -99,7 +103,7 @@ class Visualization(object):
         for track in tracks:
             #if not track.is_confirmed() or track.time_since_update > 0:
             #    continue
-            self.viewer.color = create_unique_color_uchar(track.track_id)
+            self.viewer.color = tuple(create_unique_color_uchar(track.track_id))
             ## draw current rectangle
             if hasattr(track,'active'):
                 _active = int(track.active)
