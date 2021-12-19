@@ -30,22 +30,11 @@ import os
 from copy import deepcopy 
 from collections import deque
 from tqdm import tqdm
-
 from lapsolver import solve_dense
 
-
-
-from multitracker.tracking.deep_sort import deep_sort_app
 from multitracker.tracking.deep_sort.deep_sort.detection import Detection
-
-from multitracker import autoencoder
-from multitracker.keypoint_detection import roi_segm, unet
-from multitracker.tracking.inference import get_heatmaps_keypoints
-
-from multitracker.be import video
 from multitracker import util 
 from multitracker.experiments.roi_curve import calc_iou
-from multitracker.tracking import inference
 
 colors = util.get_colors()
 
