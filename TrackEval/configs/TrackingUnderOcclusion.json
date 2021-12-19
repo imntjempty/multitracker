@@ -1,0 +1,19 @@
+{
+    "eval_jobs": [
+        {
+            "sequence_name": "2020-11-25_08-47-15-seg1",
+            "csv_trackannotation": "/home/alex/data/multitracker/projects/1/1/trackannotation.csv",
+            "trackers": [
+                {
+                    "name": "UBT",
+                    "csv_out": "/home/alex/data/multitracker/projects/1/tracking_Tracking_under_occlusion_UpperBound_fasterrcnn_2stack_none_2020-11-25_08-47-15_22772819_rec-00.00.00.000-00.10.20.916-seg1.csv",
+                    "mp4_out": "/home/alex/data/multitracker/projects/1/tracking_Tracking_under_occlusion_UpperBound_fasterrcnn_2stack_none_2020-11-25_08-47-15_22772819_rec-00.00.00.000-00.10.20.916-seg1.mp4"
+                },
+                {
+                    "name": "DeepSORT",
+                    "csv_out": "/home/alex/data/multitracker/projects/1/tracking_Tracking_under_occlusion_UpperBound_fasterrcnn_2stack_none_2020-11-25_08-47-15_22772819_rec-00.00.00.000-00.10.20.916-seg1.csv"
+                }
+            ]
+        }
+    ]
+}
