@@ -68,7 +68,9 @@ class OpenCVTrack(object):
         
         self.steps_age = 0 
         self.steps_unmatched = 0
+        self.speed_px = 0 # speed in pixel/sec
         self.active = True 
+        self.totaltraveled_px = 0 
         self.history = deque(maxlen=history_length)
 
     def update(self, tlhw, global_step):
@@ -76,15 +78,21 @@ class OpenCVTrack(object):
         self.steps_age += 1 
         self.steps_unmatched = 0 
         self.active = True 
-        self.history.append({'global_step': global_step, 'bbox': tlhw, 'matched': True})
+        if len(self.history) > 0:
+            deltabox = self.tlhw - self.history[-1]['bbox']
+            self.speed_px = np.mean(np.abs(deltabox[:2]+deltabox[2:4]/2.))
+            self.totaltraveled_px += self.speed_px
+        self.history.append({'global_step': global_step, 'bbox': tlhw, 'matched': True, 'speed_px': self.speed_px})
     
     def mark_missed(self, global_step):
-        # update position to continue linear movement
+        # update position to continue linear movement (continue with same speed)
         if len(self.history) > 0:
-            self.tlhw += self.tlhw - self.history[-1]['bbox']
+            deltabox = self.tlhw - self.history[-1]['bbox']
+            self.tlhw += deltabox
+            self.totaltraveled_px += self.speed_px
         self.steps_age += 1 
         self.steps_unmatched += 1 
-        self.history.append({'global_step': global_step, 'bbox': self.tlhw, 'matched': False})
+        self.history.append({'global_step': global_step, 'bbox': self.tlhw, 'matched': False, 'speed_px': self.speed_px})
 
     def is_confirmed(self):
         return self.active 
@@ -252,11 +260,13 @@ class UpperBoundTracker(Tracker):
                                 for inter_step in range(step_start_inter, step_end_inter):
                                     ratio = (inter_step-step_start_inter) / (step_end_inter-step_start_inter)
                                     inter_tlhw = start_box + ratio * (end_box - start_box)
-                                    closest_possible_tracks[0]['track'].history.append({'global_step': inter_step, 'bbox': inter_tlhw, 'matched': False})
+                                    closest_possible_tracks[0]['track'].history.append({'global_step': inter_step, 'bbox': inter_tlhw, 
+                                        'matched': False, 'speed_px': closest_possible_tracks[0]['track'].speed_px})
     
                                 # add stable detection history
                                 for istable in range(min(len(stable_path),self.config['stabledetection_bufferlength'])):
-                                    closest_possible_tracks[0]['track'].history.append({'global_step': step_end_inter+istable, 'bbox': stable_path[istable], 'matched': True})
+                                    closest_possible_tracks[0]['track'].history.append({'global_step': step_end_inter+istable, 'bbox': stable_path[istable], 
+                                        'matched': True, 'speed_px': closest_possible_tracks[0]['track'].speed_px})
 
                                 ## update closest possibly assigned track with current position
                                 matched_detections[j] = True
@@ -426,7 +436,7 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
                 print('[*] one time step takes on average',step_dur_ms,'ms',fps,'fps')
 
             if showing:
-                cv.imshow("tracking visualization", out)#cv.resize(out,None,None,fx=0.75,fy=0.75))
+                cv.imshow("tracking visualization", cv.resize(out,None,None,fx=0.75,fy=0.75))
                 cv.waitKey(1)
         
             if 0:
