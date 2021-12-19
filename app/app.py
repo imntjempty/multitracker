@@ -243,9 +243,11 @@ def redirect_annotation_tool(project_id, video_id, frame_id, mode = "annotate"):
                         _frame_idx, _idv, _x1, _y1, _x2, _y2 = lines[jj].split(',')
                         last_user_boxes.append([float(_x1),float(_y1),float(_x2),float(_y2)])
 
-        last_frame = np.array(frame, copy=True )
-        scale = 700. / last_frame.shape[1]
-
+        try:
+            last_frame = np.array(frame, copy=True )
+            scale = 700. / last_frame.shape[1]
+        except:
+            raise Exception('[*]   error with annotation tracks for track eval. have you given command line argument --trackannotation_video to the video you want to create track annotation for')
         # setup trackers
         visual_mot = cv.MultiTracker_create()
         for j, bbox in enumerate(last_user_boxes):
