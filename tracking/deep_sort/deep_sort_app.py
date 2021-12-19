@@ -19,16 +19,10 @@ print('[*] TF version',tf.__version__)
 tf.compat.v1.enable_eager_execution()
 from tensorflow.keras.models import Model
 
-from multitracker.tracking.deep_sort.application_util import preprocessing
 from multitracker.tracking.deep_sort.application_util import visualization
-
 from multitracker.tracking.deep_sort.deep_sort.detection import Detection
-#from multitracker.tracking.deep_sort.deep_sort.tracker import Tracker
 from multitracker.keypoint_detection import roi_segm
-from multitracker.tracking import inference
-from multitracker.tracking.keypoint_tracking import tracker as keypoint_tracking
 from multitracker.util import tlhw2chw
-from multitracker.be import video
 from multitracker import util 
 
 colors = util.get_colors()

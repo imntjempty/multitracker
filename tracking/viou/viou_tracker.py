@@ -15,20 +15,10 @@ from lapsolver import solve_dense
 from tqdm import tqdm
 from time import time
 from glob import glob 
-from multitracker.be import video
-from multitracker.tracking import inference
-from multitracker.tracking.deep_sort import deep_sort_app
-from multitracker.tracking.deep_sort.application_util import visualization
-from multitracker.tracking.keypoint_tracking import tracker as keypoint_tracking
-from multitracker.keypoint_detection import roi_segm
-
 
 from multitracker.tracking.upperbound_tracker import Tracker, Track
 from multitracker.util import tlhw2chw, iou
 from multitracker.tracking.viou.vis_tracker import VisTracker
-
-
-    
 
 class VIoUTracker(Tracker):
     def __init__(self, config):
