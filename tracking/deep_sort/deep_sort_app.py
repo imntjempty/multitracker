@@ -21,13 +21,13 @@ from tensorflow.keras.models import Model
 
 from multitracker.tracking.deep_sort.application_util import preprocessing
 from multitracker.tracking.deep_sort.application_util import visualization
-from multitracker.tracking.deep_sort.deep_sort import nn_matching
+
 from multitracker.tracking.deep_sort.deep_sort.detection import Detection
-from multitracker.tracking.deep_sort.deep_sort.tracker import Tracker
+#from multitracker.tracking.deep_sort.deep_sort.tracker import Tracker
 from multitracker.keypoint_detection import roi_segm
 from multitracker.tracking import inference
 from multitracker.tracking.keypoint_tracking import tracker as keypoint_tracking
-from multitracker.tracking.upperbound_tracker import tlhw2chw
+from multitracker.util import tlhw2chw
 from multitracker.be import video
 from multitracker import util 
 
@@ -181,8 +181,9 @@ def visualize(vis, frame, tracker, detections, keypoint_tracker, keypoints, trac
         vis_crop[:overlayed_header.shape[0],:,:] = overlayed_header
 
         # draw status attributes in corner (totaltraveled_px, speed_px)
-        str_speed = str(int(track.speed_px))+"."+str(track.speed_px-int(track.speed_px))[2:5]
-        vis_crop = draw_label(vis_crop, pos = (5,5), label = "distance traveled (px): %i\ncurrent speed (px/sec): %s" % (track.totaltraveled_px, str_speed), font_size=font_size)
+        if hasattr(track, 'speed_px') and track.speed_px is not None and hasattr(track, 'totaltraveled_px') and track.totaltraveled_px is not None:
+            str_speed = str(int(track.speed_px))+"."+str(track.speed_px-int(track.speed_px))[2:5]
+            vis_crop = draw_label(vis_crop, pos = (5,5), label = "distance traveled (px): %i\ncurrent speed (px/sec): %s" % (track.totaltraveled_px, str_speed), font_size=font_size)
 
         vis_crops.append( vis_crop )
 
@@ -224,13 +225,14 @@ def visualize(vis, frame, tracker, detections, keypoint_tracker, keypoints, trac
         out = cv.resize(out, None, fx=ratio,fy=ratio)
     return out 
 
-def run(config, detection_model, encoder_model, keypoint_model, min_confidence_boxes, min_confidence_keypoints,  
-        nms_max_overlap, max_cosine_distance,nn_budget):
+def run(config, detection_model, encoder_model, keypoint_model, min_confidence_boxes, min_confidence_keypoints):
     
     max_age = 30 
     #max_age = 5
     config['count'] = 0 
-    metric = nn_matching.NearestNeighborDistanceMetric("cosine", max_cosine_distance, nn_budget)
+    # 3) run bbox tracking deep sort with fixed tracks
+    nms_max_overlap = 1.0 # Non-maxima suppression threshold: Maximum detection overlap
+    
 
     tracker = Tracker(metric)
     

@@ -5,9 +5,9 @@ from . import kalman_filter
 from . import linear_assignment
 from . import iou_matching
 from .track import Track
+from multitracker.tracking.deep_sort.deep_sort import nn_matching
 
-
-class Tracker:
+class DeepSORTTracker:
     """
     This is the multi-target tracker.
 
@@ -37,11 +37,24 @@ class Tracker:
 
     """
 
-    def __init__(self, metric, max_iou_distance=0.7, max_age=30, n_init=3): # default 0.7 ; 30; 3 
-        self.metric = metric
-        self.max_iou_distance = max_iou_distance
-        self.max_age = max_age
-        self.n_init = n_init
+    def __init__(self, config): # default 0.7 ; 30; 3 
+        default_parameters = {
+            'max_iou_distance': 0.7, 
+            'max_age': 30, 
+            'n_init': 3,
+            'max_cosine_distance': 0.2, # Gating threshold for cosine distance metric (object appearance).
+            'nn_budget': None # Maximum size of the appearance descriptors gallery. If None, no budget is enforced.
+        }
+        self.config = config 
+        for k in default_parameters.keys():
+            if not k in self.config:
+                self.config[k] = default_parameters[k]
+
+        self.metric = nn_matching.NearestNeighborDistanceMetric("cosine", self.config['max_cosine_distance'], self.config['nn_budget'])
+        
+        self.max_iou_distance = self.config['max_iou_distance']
+        self.max_age = self.config['max_age']
+        self.n_init = self.config['n_init']
 
         self.kf = kalman_filter.KalmanFilter()
         self.tracks = []
@@ -55,7 +68,7 @@ class Tracker:
         for track in self.tracks:
             track.predict(self.kf)
 
-    def update(self, detections):
+    def step(self, ob):
         """Perform measurement update and track management.
 
         Parameters
@@ -64,6 +77,7 @@ class Tracker:
             A list of detections at the current time step.
 
         """
+        [detections, detected_boxes,scores, features] = ob['detections']
         # Run matching cascade.
         matches, unmatched_tracks, unmatched_detections = \
             self._match(detections)

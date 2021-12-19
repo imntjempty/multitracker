@@ -10,6 +10,7 @@
     
 """
 
+from tqdm import tqdm 
 import os
 import numpy as np 
 import tensorflow as tf 
@@ -24,22 +25,25 @@ import cv2 as cv
 import h5py
 import json 
 import shutil
+from collections import deque 
+
 from natsort import natsorted
 from multitracker import util 
 from multitracker.be import video
 from multitracker.keypoint_detection import heatmap_drawing, model , roi_segm
 from multitracker.object_detection import finetune
 from multitracker.tracking import inference 
-from multitracker.keypoint_detection.roi_segm import get_center
+
 from multitracker import autoencoder
 
-from multitracker.tracking.tracklets import get_tracklets
-from multitracker.tracking.clustering import get_clustlets
-
-from multitracker.tracking.deep_sort import deep_sort_app
 from multitracker.tracking.viou import viou_tracker
 from multitracker.tracking import upperbound_tracker
+from multitracker.tracking.deep_sort.deep_sort import tracker as deepsort_tracker
 
+from multitracker.tracking.deep_sort import deep_sort_app
+from multitracker.tracking.keypoint_tracking import tracker as keypoint_tracking
+from multitracker.tracking.deep_sort.application_util import preprocessing
+from multitracker.tracking.deep_sort.application_util import visualization
 
 def main(args):
     os.environ['MULTITRACKER_DATA_DIR'] = args.data_dir
@@ -171,20 +175,13 @@ def main(args):
         keypoint_model = inference.load_keypoint_model(config['keypoint_model'])
     # </load models>
 
-    # 3) run bbox tracking deep sort with fixed tracks
-    nms_max_overlap = 1.0 # Non-maxima suppression threshold: Maximum detection overlap
-    max_cosine_distance = 0.2 # Gating threshold for cosine distance metric (object appearance).
-    nn_budget = None # Maximum size of the appearance descriptors gallery. If None, no budget is enforced.
+    
     print(4*'\n',config)
     
     ttrack_start = time.time()
-    if config['tracking_method'] == 'DeepSORT':
-        deep_sort_app.run(config, detection_model, encoder_model, keypoint_model,  
-            args.min_confidence_boxes, args.min_confidence_keypoints, nms_max_overlap, max_cosine_distance, nn_budget)
-    elif config['tracking_method'] == 'UpperBound':
-        upperbound_tracker.run(config, detection_model, encoder_model, keypoint_model, args.min_confidence_boxes, args.min_confidence_keypoints  )
-    elif config['tracking_method'] == 'VIoU':
-        viou_tracker.run(config, detection_model, encoder_model, keypoint_model, args.min_confidence_boxes, args.min_confidence_keypoints  )
+    
+    run(config, detection_model, encoder_model, keypoint_model, args.min_confidence_boxes, args.min_confidence_keypoints  )
+    
     ttrack_end = time.time()
     ugly_big_video_file_out = inference.get_video_output_filepath(config)
     video_file_out = ugly_big_video_file_out.replace('.avi','.mp4')
@@ -197,6 +194,178 @@ def convert_video_h265(video_in, video_out):
         os.remove(video_out)
     subprocess.call(['ffmpeg','-i',video_in, '-c:v','libx265','-preset','ultrafast',video_out])
     os.remove(video_in)
+
+
+  
+def run(config, detection_model, encoder_model, keypoint_model, min_confidence_boxes, min_confidence_keypoints, tracker = None):
+    if 'UpperBound' == config['tracking_method']:
+        assert 'upper_bound' in config and config['upper_bound'] is not None and int(config['upper_bound'])>0, "ERROR: Upper Bound Tracking requires the argument --upper_bound to bet set (eg --upper_bound 4)"
+    #config['upper_bound'] = None # ---> force VIOU tracker
+    video_reader = cv.VideoCapture( config['video'] )
+    
+    Wframe  = int(video_reader.get(cv.CAP_PROP_FRAME_WIDTH))
+    Hframe = int(video_reader.get(cv.CAP_PROP_FRAME_HEIGHT))
+    
+    crop_dim = roi_segm.get_roi_crop_dim(config['data_dir'], config['project_id'], config['test_video_ids'].split(',')[0],Hframe)
+    total_frame_number = int(video_reader.get(cv.CAP_PROP_FRAME_COUNT))
+    print('[*] total_frame_number',total_frame_number,'Hframe,Wframe',Hframe,Wframe,'crop_dim',crop_dim)
+    
+    video_file_out = inference.get_video_output_filepath(config)
+    if config['file_tracking_results'] is None:
+        config['file_tracking_results'] = video_file_out.replace('.%s'%video_file_out.split('.')[-1],'.csv')
+    file_csv = open( config['file_tracking_results'], 'w') 
+    file_csv.write('video_id,frame_id,track_id,center_x,center_y,x1,y1,x2,y2,time_since_update\n')
+    # find out if video is part of the db and has video_id
+    try:
+        db.execute("select id from videos where name == '%s'" % config['video'].split('/')[-1])
+        video_id = int([x for x in db.cur.fetchall()][0])
+    except:
+        video_id = -1
+    print('      video_id',video_id)
+
+    if os.path.isfile(video_file_out): os.remove(video_file_out)
+    import skvideo.io
+    video_writer = skvideo.io.FFmpegWriter(video_file_out, outputdict={
+        '-vcodec': 'libx264',  #use the h.264 codec
+        '-crf': '0',           #set the constant rate factor to 0, which is lossless
+        '-preset':'veryslow'   #the slower the better compression, in princple, try 
+                                #other options see https://trac.ffmpeg.org/wiki/Encode/H.264
+    }) 
+
+    visualizer = visualization.Visualization([Wframe, Hframe], update_ms=5, config=config)
+    print('[*] writing video file %s' % video_file_out)
+    
+    ## initialize tracker for boxes and keypoints
+    if config['tracking_method'] == 'UpperBound':
+        tracker = upperbound_tracker.UpperBoundTracker(config)
+    elif config['tracking_method'] == 'DeepSORT':
+        tracker = deepsort_tracker.DeepSORTTracker(config)
+    elif config['tracking_method'] == 'VIoU':
+        tracker = viou_tracker.VIoUTracker(config)
+    keypoint_tracker = keypoint_tracking.KeypointTracker()
+
+    frame_idx = -1
+    frame_buffer = deque()
+    detection_buffer = deque()
+    keypoint_buffer = deque()
+    results = []
+    running = True 
+    scale = None 
+    
+    tbenchstart = time.time()
+    # fill up initial frame buffer for batch inference
+    for ib in range(config['inference_objectdetection_batchsize']-1):
+        ret, frame = video_reader.read()
+        #frame = cv.resize(frame,None,fx=0.5,fy=0.5)
+        frame_buffer.append(frame[:,:,::-1]) # trained on TF RGB, cv2 yields BGR
+
+    #while running: #video_reader.isOpened():
+    for frame_idx in tqdm(range(total_frame_number)):
+        #frame_idx += 1 
+        config['count'] = frame_idx
+        if frame_idx == 10:
+            tbenchstart = time.time()
+
+        # fill up frame buffer as you take something from it to reduce lag 
+        timread0 = time.time()
+        if video_reader.isOpened():
+            ret, frame = video_reader.read()
+            #frame = cv.resize(frame,None,fx=0.5,fy=0.5)
+            if frame is not None:
+                frame_buffer.append(frame[:,:,::-1]) # trained on TF RGB, cv2 yields BGR
+            else:
+                running = False
+                file_csv.close()
+                return True  
+        else:
+            running = False 
+            file_csv.close()
+            return True 
+        timread1 = time.time()
+        showing = True # frame_idx % 1000 == 0
+
+        if running:
+            tobdet0 = time.time()
+            if len(detection_buffer) == 0:
+                frames_tensor = np.array(list(frame_buffer)).astype(np.float32)
+                # fill up frame buffer and then detect boxes for complete frame buffer
+                t_odet_inf_start = time.time()
+                batch_detections = inference.detect_batch_bounding_boxes(config, detection_model, frames_tensor, min_confidence_boxes)
+                [detection_buffer.append(batch_detections[ib]) for ib in range(config['inference_objectdetection_batchsize'])]
+                t_odet_inf_end = time.time()
+                if frame_idx < 100 and frame_idx % 10 == 0:
+                    print('  object detection ms',(t_odet_inf_end-t_odet_inf_start)*1000.,"batch", len(batch_detections),len(detection_buffer), (t_odet_inf_end-t_odet_inf_start)*1000./len(batch_detections) ) #   roughly 70ms
+
+                if keypoint_model is not None:
+                    t_kp_inf_start = time.time()
+                    keypoint_buffer = inference.inference_batch_keypoints(config, keypoint_model, crop_dim, frames_tensor, detection_buffer, min_confidence_keypoints)
+                    #[keypoint_buffer.append(batch_keypoints[ib]) for ib in range(config['inference_objectdetection_batchsize'])]
+                    t_kp_inf_end = time.time()
+                    if frame_idx < 200 and frame_idx % 10 == 0:
+                        print('  keypoint ms',(t_kp_inf_end-t_kp_inf_start)*1000.,"batch", len(keypoint_buffer),(t_kp_inf_end-t_kp_inf_start)*1000./ (1e-6+len(keypoint_buffer)) ) #   roughly 70ms
+            tobdet1 = time.time()
+
+            # if detection buffer not empty use preloaded frames and preloaded detections
+            frame = frame_buffer.popleft()
+            detections = detection_buffer.popleft()
+            boxes = np.array([d.tlwh for d in detections])
+            scores = np.array([d.confidence for d in detections])
+            features = np.array([d.feature for d in detections])
+            tobtrack0 = time.time()
+            # Update tracker
+            tracker.step({'img':frame,'detections':[detections, boxes, scores, features], 'frame_idx': frame_idx})
+            tobtrack1 = time.time()
+            tkptrack0 = time.time()
+            if keypoint_model is not None:
+                keypoints = keypoint_buffer.popleft()
+                # update tracked keypoints with new detections
+                tracked_keypoints = keypoint_tracker.update(keypoints)
+            else:
+                keypoints = tracked_keypoints = []
+            tkptrack1 = time.time()
+
+            # Store results.        
+            for track in tracker.tracks:
+                bbox = track.to_tlwh()
+                center0, center1, _, _ = util.tlhw2chw(bbox)
+                _unmatched_steps = -1
+                if hasattr(track,'time_since_update'):
+                    _unmatched_steps = track.time_since_update
+                elif hasattr(track,'steps_unmatched'):
+                    _unmatched_steps = track.steps_unmatched
+                else:
+                    raise Exception("ERROR: can't find track's attributes time_since_update or unmatched_steps")
+
+                result = [video_id, frame_idx, track.track_id, center0, center1, bbox[0], bbox[1], bbox[2], bbox[3], _unmatched_steps]
+                file_csv.write(','.join([str(r) for r in result])+'\n')
+                results.append(result)
+            
+            #print('[%i/%i] - %i detections. %i keypoints' % (config['count'], total_frame_number, len(detections), len(keypoints)))
+            tvis0 = time.time()
+            if showing:
+                out = deep_sort_app.visualize(visualizer, frame, tracker, detections, keypoint_tracker, keypoints, tracked_keypoints, crop_dim, results, sketch_file=config['sketch_file'])
+                video_writer.writeFrame(cv.cvtColor(out, cv.COLOR_BGR2RGB))
+            tvis1 = time.time()
+
+            if int(frame_idx) == 1010:
+                tbenchend = time.time()
+                print('[*] 1000 steps took',tbenchend-tbenchstart,'seconds')
+                step_dur_ms = 1000.*(tbenchend-tbenchstart)/1000.
+                fps = 1. / ( (tbenchend-tbenchstart)/1000. )
+                print('[*] one time step takes on average',step_dur_ms,'ms',fps,'fps')
+
+            if showing:
+                cv.imshow("tracking visualization", cv.resize(out,None,None,fx=0.75,fy=0.75))
+                cv.waitKey(1)
+        
+            if 0:
+                dur_imread = timread1 - timread0
+                dur_obdet = tobdet1 - tobdet0
+                dur_obtrack = tobtrack1 - tobtrack0
+                dur_kptrack = tkptrack1 - tkptrack0
+                dur_vis = tvis1 - tvis0
+                dur_imread, dur_obdet, dur_obtrack, dur_kptrack, dur_vis = [1000. * dur for dur in [dur_imread, dur_obdet, dur_obtrack, dur_kptrack, dur_vis]]
+                print('imread',dur_imread,'obdetect',dur_obdet, 'obtrack',dur_obtrack, 'kptrack',dur_kptrack, 'vis',dur_vis)
 
 if __name__ == '__main__':
     import argparse

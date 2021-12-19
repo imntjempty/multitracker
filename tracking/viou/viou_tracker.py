@@ -22,45 +22,16 @@ from multitracker.tracking.deep_sort.application_util import visualization
 from multitracker.tracking.keypoint_tracking import tracker as keypoint_tracking
 from multitracker.keypoint_detection import roi_segm
 
-def iou(bbox1, bbox2):
-    """
-    Calculates the intersection-over-union of two bounding boxes.
-    Args:
-        bbox1 (numpy.array, list of floats): bounding box in format x1,y1,x2,y2.
-        bbox2 (numpy.array, list of floats): bounding box in format x1,y1,x2,y2.
-    Returns:
-        int: intersection-over-onion of bbox1, bbox2
-    """
 
-    bbox1 = [float(x) for x in bbox1]
-    bbox2 = [float(x) for x in bbox2]
-
-    (x0_1, y0_1, x1_1, y1_1) = bbox1
-    (x0_2, y0_2, x1_2, y1_2) = bbox2
-
-    # get the overlap rectangle
-    overlap_x0 = max(x0_1, x0_2)
-    overlap_y0 = max(y0_1, y0_2)
-    overlap_x1 = min(x1_1, x1_2)
-    overlap_y1 = min(y1_1, y1_2)
-
-    # check if there is an overlap
-    if overlap_x1 - overlap_x0 <= 0 or overlap_y1 - overlap_y0 <= 0:
-        return 0
-
-    # if yes, calculate the ratio of the overlap to each ROI size and the unified size
-    size_1 = (x1_1 - x0_1) * (y1_1 - y0_1)
-    size_2 = (x1_2 - x0_2) * (y1_2 - y0_2)
-    size_intersection = (overlap_x1 - overlap_x0) * (overlap_y1 - overlap_y0)
-    size_union = size_1 + size_2 - size_intersection
-
-    return size_intersection / size_union
-    
-from multitracker.tracking.upperbound_tracker import Tracker, OpenCVTrack, tlhw2chw
+from multitracker.tracking.upperbound_tracker import Tracker, Track
+from multitracker.util import tlhw2chw, iou
 from multitracker.tracking.viou.vis_tracker import VisTracker
 
+
+    
+
 class VIoUTracker(Tracker):
-    def __init__(self, sigma_l, sigma_h, sigma_iou, t_min, ttl, tracker_type, keep_upper_height_ratio):
+    def __init__(self, config):
         """ V-IOU Tracker.
         See "Extending IOU Based Multi-Object Tracking by Visual Information by E. Bochinski, T. Senst, T. Sikora" for
         more information.
@@ -78,8 +49,21 @@ class VIoUTracker(Tracker):
         Returns:
             list: list of tracks.
         """
-        self.sigma_l, self.sigma_h, self.sigma_iou, self.t_min, self.ttl, self.tracker_type, self.keep_upper_height_ratio = sigma_l, sigma_h, sigma_iou, t_min, ttl, tracker_type, keep_upper_height_ratio
-        if tracker_type == 'NONE':
+        default_params = {
+            'sigma_l': 0,
+            'sigma_h': 0.5, 
+            'sigma_iou': 0.5, 
+            't_min': 2, 
+            'ttl': 1, 
+            'tracker_type': 'CSRT', 
+            'keep_upper_height_ratio': 1 
+        }
+        for k in default_params.keys():
+            if k not in config:
+                config[k] = default_params[k]
+        self.config = config 
+        self.sigma_l, self.sigma_h, self.sigma_iou, self.t_min, self.ttl, self.tracker_type, self.keep_upper_height_ratio = config['sigma_l'], config['sigma_h'], config['sigma_iou'], config['t_min'], config['ttl'], config['tracker_type'], config['keep_upper_height_ratio']
+        if self.tracker_type == 'NONE':
             assert self.ttl == 1, "ttl should not be larger than 1 if no visual tracker is selected"
 
         self.tracks_active = []
@@ -92,7 +76,7 @@ class VIoUTracker(Tracker):
     def step(self, ob):
         debug = bool(0) 
         frame = ob['img']
-        [detected_boxes,scores, features] = ob['detections']
+        [detections, detected_boxes,scores, features] = ob['detections']
         frame_num = ob['frame_idx']
 
         self.frame_buffer.append(frame)
@@ -110,7 +94,7 @@ class VIoUTracker(Tracker):
                     'class': 1 # we only track one class of animals
                 })
 
-        track_ids, det_ids = self.associate([t['bboxes'][-1] for t in self.tracks_active], [d['bbox'] for d in dets], self.sigma_iou)
+        track_ids, det_ids = self.associate([Track(-1,t['bboxes'][-1]) for t in self.tracks_active], [d['bbox'] for d in dets], self.sigma_iou)
         updated_tracks = []
         for track_id, det_id in zip(track_ids, det_ids):
             self.tracks_active[track_id]['bboxes'].append(dets[det_id]['bbox'])
@@ -224,7 +208,8 @@ class VIoUTracker(Tracker):
         for active, tt in zip([1,0,0],[self.tracks_active, self.tracks_extendable]):#, self.tracks_finished]):
             for i, tbox in enumerate(tt):
                 steps_without_detection = self.ttl - tbox['ttl'] 
-                self.tracks.append(OpenCVTrack(tbox['track_id'],tbox['bboxes'][-1],active,steps_without_detection,tbox['bboxes'],tbox['last_score']))#self.last_means[i],matched_track_scores[i]))
+                self.tracks.append(Track(tbox['track_id'],tbox['bboxes'][-1],active=True,score=tbox['last_score'],history_length=self.config['ttl']))
+                #score=0.5,history_length#,active,steps_without_detection,tbox['bboxes'],tbox['last_score']))#self.last_means[i],matched_track_scores[i]))
             
 
     '''# finish all remaining active and extendable tracks
@@ -241,121 +226,3 @@ class VIoUTracker(Tracker):
         del track['visual_tracker']
     '''
     
-
-
-def run(config, detection_model, encoder_model, keypoint_model,  min_confidence_boxes, min_confidence_keypoints, tracker = None):
-    #config['upper_bound'] = None # ---> force VIOU tracker
-    
-    nms_max_overlap = 1.
-    nms_max_overlap = .25
-
-    if 'video' in config and config['video'] is not None:
-        video_reader = cv.VideoCapture( config['video'] )
-    else:
-        video_reader = None 
-    total_frame_number = int(video_reader.get(cv.CAP_PROP_FRAME_COUNT))
-    print('[*] total_frame_number',total_frame_number)
-
-    video_file_out = inference.get_video_output_filepath(config)
-    if config['file_tracking_results'] is None:
-        config['file_tracking_results'] = video_file_out.replace('.%s'%video_file_out.split('.')[-1],'.csv')
-
-    if os.path.isfile(video_file_out): os.remove(video_file_out)
-    import skvideo.io
-    video_writer = skvideo.io.FFmpegWriter(video_file_out, outputdict={
-        '-vcodec': 'libx264',  #use the h.264 codec
-        '-crf': '0',           #set the constant rate factor to 0, which is lossless
-        '-preset':'veryslow'   #the slower the better compression, in princple, try 
-                                #other options see https://trac.ffmpeg.org/wiki/Encode/H.264
-    }) 
-
-    print('[*] writing video file %s' % video_file_out)
-    
-    ## initialize tracker for boxes and keypoints
-    sigma_l, sigma_h, sigma_iou = 0, 0.5, 0.5
-    t_min, ttl, tracker_type, keep_upper_height_ratio = 2, 1, 'CSRT', 1
-    tracker = VIoUTracker(sigma_l, sigma_h, sigma_iou, t_min, ttl, tracker_type, keep_upper_height_ratio)
-    keypoint_tracker = keypoint_tracking.KeypointTracker()
-
-    frame_idx = -1
-    frame_buffer = deque()
-    detection_buffer = deque()
-    results = []
-    running = True 
-    scale = None 
-    # ignore first 5 frames
-    for _ in range(5):
-        _, _ = video_reader.read()
-    _, frame = video_reader.read()
-    [Hframe,Wframe,_] = frame.shape
-    visualizer = visualization.Visualization([Wframe, Hframe], update_ms=5, config=config)
-    crop_dim = roi_segm.get_roi_crop_dim(config['data_dir'], config['project_id'], config['test_video_ids'].split(',')[0],Hframe)
-    
-    # fill up initial frame buffer for batch inference
-    for ib in range(config['inference_objectdetection_batchsize']-1):
-        ret, frame = video_reader.read()
-        frame_buffer.append(frame[:,:,::-1]) # trained on TF RGB, cv2 yields BGR
-
-    for frame_idx in tqdm(range(total_frame_number)):
-        config['count'] = frame_idx
-        # if buffer not empty use preloaded frames and preloaded detections
-        
-        # fill up frame buffer as you take something from it to reduce lag 
-        if video_reader.isOpened():
-            ret, frame = video_reader.read()
-            if frame is not None:
-                frame_buffer.append(frame[:,:,::-1]) # trained on TF RGB, cv2 yields BGR
-            else:
-                running = False 
-        else:
-            running = False 
-        
-        if running:
-            if len(detection_buffer) == 0:
-                # fill up frame buffer and then detect boxes for complete frame buffer
-                dettensor = np.array(list(frame_buffer)).astype(np.float32)
-                batch_detections = inference.detect_batch_bounding_boxes(config, detection_model, dettensor, min_confidence_boxes)
-                [detection_buffer.append(batch_detections[ib]) for ib in range(config['inference_objectdetection_batchsize'])]
-                keypoint_buffer = inference.inference_batch_keypoints(config, keypoint_model, crop_dim, dettensor, detection_buffer, min_confidence_keypoints)
-                
-            frame = frame_buffer.popleft()
-            detections = detection_buffer.popleft()
-                
-            boxes = np.array([d.tlwh for d in detections])
-            scores = np.array([d.confidence for d in detections])
-            features = np.array([d.feature for d in detections])
-            #indices = preprocessing.non_max_suppression(
-            #    boxes, nms_max_overlap, scores)
-            #detections = [detections[i] for i in indices]
-            #print('[*] found %i detections' % len(detections))
-            # Update tracker
-            tracker.step({'img':frame,'detections':[boxes, scores, features], 'frame_idx': frame_idx})
-
-            if keypoint_model is None:
-                keypoints, tracked_keypoints = [], []
-            else:
-                keypoints = keypoint_buffer.popleft()
-                # update tracked keypoints with new detections
-                tracked_keypoints = keypoint_tracker.update(keypoints)
-
-            # Store results.        
-            '''for track in tracker.tracks:
-                bbox = track.to_tlwh()
-                center0, center1, _, _ = tlhw2chw(bbox)
-                result = [frame_idx, track.track_id, center0, center1, bbox[0], bbox[1], bbox[2], bbox[3], track.is_confirmed(), track.time_since_update]
-                results.append(result)'''
-            
-            #print('[%i/%i] - %i detections. %i keypoints' % (config['count'], total_frame_number, len(detections), len(keypoints)),[kp for kp in keypoints])
-            out = deep_sort_app.visualize(visualizer, frame, tracker, detections, keypoint_tracker, keypoints, tracked_keypoints, crop_dim, results, sketch_file=config['sketch_file'])
-            video_writer.writeFrame(cv.cvtColor(out, cv.COLOR_BGR2RGB))
-            #video_writer.writeFrame(cv.cvtColor(out, cv.COLOR_BGR2RGB)) #out[:,:,::-1])
-            
-            if 1:
-                cv.imshow("tracking visualization", cv.resize(out,None,None,fx=0.75,fy=0.75))
-                cv.waitKey(5)
-        
-        if frame_idx % 30 == 0:
-            with open( config['file_tracking_results'], 'w') as f:
-                for result in results:
-                    f.write(','.join([str(r) for r in result])+'\n')
-

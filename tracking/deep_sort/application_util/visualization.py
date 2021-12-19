@@ -52,7 +52,7 @@ def create_unique_color_uchar(tag, hue_step=0.41):
         RGB color code in range [0, 255]
 
     """
-    if tag < 5:
+    if int(tag) < 4:
         r,g,b = [[0,.8,.8],[0,0.8,0],[0.8,0,0],[.7,0.7,0]][tag]
     else:
         r, g, b = create_unique_color_float(int(tag), hue_step)

@@ -10,7 +10,7 @@ from lapsolver import solve_dense
 from tqdm import tqdm
 from time import time
 
-from multitracker.tracking.viou.viou_tracker import iou
+from multitracker.util import iou
 
 
 
