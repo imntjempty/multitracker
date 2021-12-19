@@ -84,8 +84,8 @@ class Multitracker(_BaseDataset):
         [tracker_dets]: list (for each timestep) of lists of detections.
         """
         
-        csv_gt = '/home/alex/data/multitracker/projects/1/1/trackannotation.csv'
-        csv_tracked = '/home/alex/data/multitracker/projects/1/tracking_Tracking_under_occlusion_UpperBound_ssd_2stack_none_2020-11-25_08-47-15_22772819_rec-00.00.00.000-00.10.20.916-seg1.csv'
+        csv_gt = self.config['_csv_trackannotation']  #'/home/alex/data/multitracker/projects/1/1/trackannotation.csv'
+        csv_tracked = self.config['_csv_tracked'] #'/home/alex/data/multitracker/projects/1/tracking_Tracking_under_occlusion_UpperBound_ssd_2stack_none_2020-11-25_08-47-15_22772819_rec-00.00.00.000-00.10.20.916-seg1.csv'
         csv_path = [csv_tracked, csv_gt][int(is_gt)]
         cnt_gt, cnt_tracked = 0,0
         raw_data = {'tracker_ids':{},'tracker_classes':{},'tracker_dets':{},'gt_ids':{},'gt_classes':{},'gt_dets':{}}

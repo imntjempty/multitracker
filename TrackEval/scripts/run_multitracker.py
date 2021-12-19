@@ -33,15 +33,27 @@ Command Line Arguments: Defaults, # Comments
         'METRICS': ['Hota','Clear', 'ID', 'Count']
 """
 
+from copy import deepcopy
 import sys
 import os
 import argparse
 from multiprocessing import freeze_support
+import json 
+import numpy as np 
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import trackeval  # noqa: E402
 
-if __name__ == '__main__':
+class NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, (int, np.integer)):
+            return int(obj)
+        return json.JSONEncoder.default(self, obj)
+
+
+def do_evaluate():
     freeze_support()
 
     # Command line interface:
@@ -56,9 +68,12 @@ if __name__ == '__main__':
             parser.add_argument("--" + setting, nargs='+')
         else:
             parser.add_argument("--" + setting)
+    parser.add_argument('--json_config', default = '~/github/multitracker/TrackEval/configs/TrackingUnderOcclusion.json')
     args = parser.parse_args().__dict__
     for setting in args.keys():
         if args[setting] is not None:
+            if setting not in config:
+                config[setting] = args[setting]
             if type(config[setting]) == type(True):
                 if args[setting] == 'True':
                     x = True
@@ -73,17 +88,66 @@ if __name__ == '__main__':
             else:
                 x = args[setting]
             config[setting] = x
+            
     eval_config = {k: v for k, v in config.items() if k in default_eval_config.keys()}
     dataset_config = {k: v for k, v in config.items() if k in default_dataset_config.keys()}
     metrics_config = {k: v for k, v in config.items() if k in default_metrics_config.keys()}
 
-    # Run code
-    evaluator = trackeval.Evaluator(eval_config)
-    dataset_list = [trackeval.datasets.Multitracker(dataset_config)]
-    metrics_list = []
-    for metric in [trackeval.metrics.HOTA, trackeval.metrics.CLEAR, trackeval.metrics.Identity]:
-        if metric.get_name() in metrics_config['METRICS']:
-            metrics_list.append(metric())
-    if len(metrics_list) == 0:
-        raise Exception('No metrics selected for evaluation')
-    evaluator.evaluate(dataset_list, metrics_list)
+    if 'json_config' in config and config['json_config'] is not None:
+        with open(os.path.expanduser(config['json_config'])) as fjson:
+            user_config = json.load(fjson)
+    
+    for sequence in user_config["eval_jobs"]:
+        print('[*] starting evaluation for sequence', sequence['sequence_name'])
+
+        
+        _dataset_config = deepcopy(dataset_config)
+        _dataset_config['_csv_trackannotation'] = sequence['csv_trackannotation']
+        
+        for tracker in sequence['trackers']:
+            __dataset_config = deepcopy(_dataset_config)
+            __dataset_config['_csv_tracked'] = tracker['csv_out']
+            
+            # Run code
+            evaluator = trackeval.Evaluator(eval_config)
+            dataset_list = [trackeval.datasets.Multitracker(__dataset_config)]
+            metrics_list = []
+            for metric in [trackeval.metrics.HOTA, trackeval.metrics.CLEAR, trackeval.metrics.Identity]:
+                if metric.get_name() in metrics_config['METRICS']:
+                    metrics_list.append(metric())
+            if len(metrics_list) == 0:
+                raise Exception('No metrics selected for evaluation')
+        
+            output_res, output_msg = evaluator.evaluate(dataset_list, metrics_list)
+            #print('output_res\n\n\n')
+            #print(output_res)
+            output_res['sequence_name'] = sequence['sequence_name']
+            output_res['tracker_name'] = tracker['name']
+            json_out = '%s_%s.json' % ( sequence['sequence_name'], tracker['name'])
+            with open(json_out, 'w') as outfile:
+                json.dump(output_res, outfile, cls=NumpyEncoder)
+
+
+def plot_eval_results():
+    """ 
+        write csv with table of results
+
+                 
+        Sequence | Tracker  | HOTA, MOTA, IDF1, DetA, AssA, DetRe, DetPr, AssRe, AssPr, IDSW
+        seg1     | DeepSort |
+                 | V-IoU    |
+                 | UBT      |
+        seg2     | DeepSort |
+                 | V-IoU    |
+                 | UBT      |
+        avg      | DeepSort |
+                 | V-IoU    |
+                 | UBT      |
+
+        write bar plot where 
+    """
+
+
+if __name__ == '__main__':
+    do_evaluate()
+    plot_eval_results()

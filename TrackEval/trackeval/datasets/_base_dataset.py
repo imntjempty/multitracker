@@ -264,7 +264,7 @@ class _BaseDataset(ABC):
             raise (TrackEvalException('box_format %s is not implemented' % box_format))
 
         # layout: (x0, y0, x1, y1)
-        print('bboxes1',bboxes1.shape,bboxes2.shape)
+        #print('bboxes1',bboxes1.shape,bboxes2.shape)
         if not bboxes1.shape[0] == bboxes2.shape[0]:
             print(bboxes1)
             print()
