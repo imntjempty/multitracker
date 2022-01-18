@@ -14,6 +14,9 @@ RUN apt-get update && apt-get install -y \
     libx11-6 \
     g++ \
     cmake \
+    ffmpeg \
+    libsm6 \
+    libxext6 \
  && rm -rf /var/lib/apt/lists/*
 
 #RUN apt install nvidia-cuda-toolkit
@@ -46,3 +49,9 @@ RUN curl -sLo ~/miniconda.sh https://repo.anaconda.com/miniconda/Miniconda3-late
 
 # Set the default command to python3
 CMD ["python3"]
+
+## ---> you can clone the latest version inside docker if you want, but its a bit annoying for dev 
+RUN cd /home/user && git clone https://github.com/dolokov/multitracker.git 
+RUN cd /home/user/multitracker && python3 -m pip install .
+RUN cd /home/user/multitracker/multitracker/object_detection/YOLOX && python3 setup.py install 
+

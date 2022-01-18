@@ -6,8 +6,12 @@
     python3.7 -m multitracker.tracking --project_id 1 --train_video_ids 1 --test_video_ids 1 --upper_bound 4 --video /home/alex/data/multitracker/projects/1/videos/2020-11-25_08-47-15_22772819_rec-00.00.00.000-00.10.20.916-seg1.avi --keypoint_method none --objectdetection_model /home/alex/github/multitracker/object_detection/YOLOX/YOLOX_outputs/yolox_voc_m/last_epoch_ckpt.pth 
              --sketch_file /home/alex/data/multitracker/projects/7/13/sketch.png 
 
+    === docker build ===
+    $ cd multitracker && sudo docker build -t multitracker -f Dockerfile .
 
-    
+    == docker train ==
+    $ sudo docker run -p 6006:6006 -p 8888:8888 -v /home/alex:/home/user -t multitracker python3 -m multitracker.object_detection.YOLOX.tools.train
+    -f exps/example/custom/yolox_s.py -d 1 -b 64 --fp16 -o
 """
 
 from tqdm import tqdm 
