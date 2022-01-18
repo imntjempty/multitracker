@@ -121,14 +121,14 @@ class UpperBoundTracker(Tracker):
         self.upper_bound = config['upper_bound']
         default_config = {
             "thresh_set_inactive": 12, # after how many time steps of no matching do we consider a track lost/inactive
+            "maximum_nearest_reassign_track_distance": 2, # maximum distance (relative to image size) between a track and a detection for reassignment
             "thresh_set_dead": 100, # after how many time steps of no matching do we delete a track
-            "maximum_other_track_init_distance": 0.1, # maximum distance (relative to image size) between a track and a detection for new track creation
-            "maximum_nearest_reassign_track_distance": 0.9, # maximum distance (relative to image size) between a track and a detection for reassignment
             "track_history_length": 1000, # ideally longer than maximum occlusion time
             "matching_iou_thresh": 0.1, # min IoU to match old track with new detection
-            "stabledetection_bufferlength": 25, # how many time steps do we check for a stable detection before creating new track
+            "maximum_other_track_init_distance": 1.0, # maximum distance (relative to image size) between a track and a detection for new track creation
+            "stabledetection_bufferlength": 10, # how many time steps do we check for a stable detection before creating new track
             "stabledetection_iou_thresh": 0.2, # min IoU between detections to be considered stable enough for track creation
-            "stabledetection_confidence_thresh": 0.5 # min detection confidence to be considered for a stable detection
+            "stabledetection_confidence_thresh": 0.3 # min detection confidence to be considered for a stable detection
         }
         self.config = config #[config, default_config][int(config is None)] 
         for k in default_config.keys():
@@ -200,7 +200,7 @@ class UpperBoundTracker(Tracker):
                         # check if appropiate minimum distance to other track before initiating
                         other_track_near = False 
                         for tbox in self.tracks:
-                            other_track_near = other_track_near or np.linalg.norm(dbox[:2]-tbox.tlhw[:2]) < self.config['maximum_other_track_init_distance']*min(self.frame_shape[:2])
+                            other_track_near = other_track_near or np.linalg.norm(dbox[:2]-tbox.tlhw[:2]) > self.config['maximum_other_track_init_distance']*min(self.frame_shape[:2])
                                 
                         if not other_track_near:
                             # add new track

@@ -189,7 +189,7 @@ def inference_batch_keypoints(config, keypoint_model, crop_dim, frames_tensor, d
                 while len(lens)>0:
                     y_kpheatmaps = np.zeros((frame.shape[0],frame.shape[1],1+len(config['keypoint_names'])),np.float32)
                     for kd in range(lens[0]):
-                        y_kpheatmaps[centers[kd][0]-crop_dim//2:centers[kd][0]+crop_dim//2,centers[kd][1]-crop_dim//2:centers[kd][1]+crop_dim//2,:] = yroi[kd,:,:,:]
+                        y_kpheatmaps[centers[kd][0]-crop_dim//2:centers[kd][0]+crop_dim//2,centers[kd][1]-crop_dim//2:centers[kd][1]+crop_dim//2,:] = yroi[kd,:,:,:5]
                     yroi = yroi[lens[0]:,:,:,:]
                     centers = centers[lens[0]:]
                     keypoints = get_heatmaps_keypoints(y_kpheatmaps, thresh_detection=min_confidence_keypoints)

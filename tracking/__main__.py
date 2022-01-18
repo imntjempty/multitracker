@@ -213,8 +213,15 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
     video_file_out = inference.get_video_output_filepath(config)
     if config['file_tracking_results'] is None:
         config['file_tracking_results'] = video_file_out.replace('.%s'%video_file_out.split('.')[-1],'.csv')
+    # setup CSV for object tracking and keypoints
+    print('[*] writing csv file to', config['file_tracking_results'])
     file_csv = open( config['file_tracking_results'], 'w') 
     file_csv.write('video_id,frame_id,track_id,center_x,center_y,x1,y1,x2,y2,time_since_update\n')
+    if 'keypoint_method' in config and not config['keypoint_method'] == 'none':
+        file_csv_keypoints = open( config['file_tracking_results'].replace('.csv','_keypoints.csv'), 'w') 
+        file_csv_keypoints.write('video_id,frame_id,keypoint_class,keypoint_x,keypoint_y\n')
+    
+
     # find out if video is part of the db and has video_id
     try:
         db.execute("select id from videos where name == '%s'" % config['video'].split('/')[-1])
@@ -276,10 +283,14 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
             else:
                 running = False
                 file_csv.close()
+                if 'keypoint_method' in config and not config['keypoint_method'] == 'none':
+                    file_csv_keypoints.close()
                 return True  
         else:
             running = False 
             file_csv.close()
+            if 'keypoint_method' in config and not config['keypoint_method'] == 'none':
+                file_csv_keypoints.close()
             return True 
         timread1 = time.time()
         showing = True # frame_idx % 1000 == 0
@@ -339,6 +350,16 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
                 result = [video_id, frame_idx, track.track_id, center0, center1, bbox[0], bbox[1], bbox[2], bbox[3], _unmatched_steps]
                 file_csv.write(','.join([str(r) for r in result])+'\n')
                 results.append(result)
+            
+            if 'keypoint_method' in config and not config['keypoint_method'] == 'none':
+                results_keypoints = []
+                for kp in tracked_keypoints:
+                    try:
+                        result_keypoint = [video_id, frame_idx, kp.history_class[-1],kp.position[0],kp.position[1]]
+                        file_csv_keypoints.write(','.join([str(r) for r in result_keypoint])+'\n')
+                        results_keypoints.append(result_keypoint)
+                    except Exception as e:
+                        print(e)
             
             #print('[%i/%i] - %i detections. %i keypoints' % (config['count'], total_frame_number, len(detections), len(keypoints)))
             tvis0 = time.time()
