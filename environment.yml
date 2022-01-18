@@ -1,0 +1,25 @@
+name: base
+dependencies:
+- nvidia::cudatoolkit<12
+- python=3.8.3
+- pip=21.2.4
+- pip: 
+  - opencv-python==3.4.17.61
+  - opencv-contrib-python==3.4.17.61
+  - pillow==8.4.0
+  - scipy==1.7.1
+  - tqdm==4.62.3
+  - lapsolver
+  - tensorflow==2.4.1
+  - flask
+  - h5py
+  - pysqlite3
+  - pytz
+  - matplotlib
+  - tensorflow_addons==0.11.0
+  - natsort
+  - pandas
+  - scikit-image
+  - scikit-video
+  - torch==1.10.0
+  - torchvision==0.11.1
