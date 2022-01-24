@@ -3,7 +3,7 @@
 # Copyright (c) Megvii, Inc. and its affiliates.
 
 """
-(multitracker) ~/github/multitracker/object_detection/YOLOX$ python3.7 -m tools.train -f exps/example/custom/yolox_s.py -d 1 -b 64 --fp16 -o
+(multitracker) ~/github/multitracker/src/multitracker/object_detection/YOLOX$ python3.7 -m tools.train -f exps/example/custom/yolox_s.py -d 1 -b 64 --fp16 -o
 
 
 """

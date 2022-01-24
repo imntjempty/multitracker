@@ -6,12 +6,26 @@
     python3.7 -m multitracker.tracking --project_id 1 --train_video_ids 1 --test_video_ids 1 --upper_bound 4 --video /home/alex/data/multitracker/projects/1/videos/2020-11-25_08-47-15_22772819_rec-00.00.00.000-00.10.20.916-seg1.avi --keypoint_method none --objectdetection_model /home/alex/github/multitracker/object_detection/YOLOX/YOLOX_outputs/yolox_voc_m/last_epoch_ckpt.pth 
              --sketch_file /home/alex/data/multitracker/projects/7/13/sketch.png 
 
-    === docker build ===
+    === 1) docker build ===
     $ cd multitracker && sudo docker build -t multitracker -f Dockerfile .
+    $ chmod +x run_docker.sh
+    
 
-    == docker train ==
-    $ sudo docker run -p 6006:6006 -p 8888:8888 -v /home/alex:/home/user -t multitracker python3 -m multitracker.object_detection.YOLOX.tools.train
-    -f exps/example/custom/yolox_s.py -d 1 -b 64 --fp16 -o
+    == 2) docker start ==
+    sudo ./run_docker.sh
+
+    == 3) docker train ==
+
+    create dataset
+        root@9133fa063773:/home/alex/github/multitracker/src# python -m multitracker.object_detection.cvt2VOC --train_video_ids 1,3,4 --test_video_ids 4,6 --database /home/alex/data/multitracker/data.db
+
+    start training
+        root@9133fa063773:/home/alex/github/multitracker/src/multitracker/object_detection/YOLOX# python -m tools.train -f exps/example/yolox_voc/yolox_voc_s.py -d 1 -b 16 --fp16 -c /home/alex/data/multitracker/object_detection/yolox_s.pth
+    
+    == 4) start tracking ==
+    root@dd07d98dec1a:/home/alex/github/multitracker/src# python -m multitracker.tracking
+
+    == close docker session ==> [CTRL] + [D]
 """
 
 from tqdm import tqdm 
