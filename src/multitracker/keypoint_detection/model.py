@@ -159,7 +159,9 @@ def update_config_object_detection(config):
     return config 
 
 # </train>
-def get_config(project_id = 3):
+def get_config(project_id = 3, data_dir = os.path.expanduser('~/data/multitracker')):
+    db = dbconnection.DatabaseConnection(file_db = os.path.join(data_dir, "data.db"))
+
     config = {'batch_size': 64}
     config.update({'img_height': 224,'img_width': 224})
     config['keypoint_resolution'] = [ config[k] for k in ['img_height','img_width'] ]
@@ -188,9 +190,9 @@ def get_config(project_id = 3):
     config['max_height'] = 1024
     config['project_id'] = project_id
     config['project_name'] = db.get_project_name(project_id)
-    config['data_dir'] = os.path.expanduser('~/data/multitracker')
-    config['kp_data_dir'] = os.path.join(dbconnection.base_data_dir, 'projects/%i/data' % config['project_id'])
-    config['kp_roi_dir'] = os.path.join(dbconnection.base_data_dir, 'projects/%i/data_roi' % config['project_id'])
+    config['data_dir'] = data_dir
+    config['kp_data_dir'] = os.path.join(data_dir, 'projects/%i/data' % config['project_id'])
+    config['kp_roi_dir'] = os.path.join(data_dir, 'projects/%i/data_roi' % config['project_id'])
 
     config['keypoint_names'] = db.get_keypoint_names(config['project_id'])
 

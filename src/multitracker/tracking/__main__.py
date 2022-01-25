@@ -19,6 +19,9 @@
     create dataset
         root@9133fa063773:/home/alex/github/multitracker/src# python -m multitracker.object_detection.cvt2VOC --train_video_ids 1,3,4 --test_video_ids 4,6 --database /home/alex/data/multitracker/data.db
 
+    download pretrained network
+        $ wget https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_s.pth -P /home/alex/data/multitracker/object_detection
+
     start training
         root@9133fa063773:/home/alex/github/multitracker/src/multitracker/object_detection/YOLOX# python -m tools.train -f exps/example/yolox_voc/yolox_voc_s.py -d 1 -b 16 --fp16 -c /home/alex/data/multitracker/object_detection/yolox_s.pth
     
@@ -87,7 +90,7 @@ def main(args):
         args.video = fvo
 
     tstart = time.time()
-    config = model.get_config(project_id = args.project_id)
+    config = model.get_config(project_id = args.project_id, data_dir=args.data_dir)
     config['project_id'] = args.project_id
     config['video'] = args.video
     config['keypoint_model'] = args.keypoint_model
@@ -127,6 +130,7 @@ def main(args):
     if args.delete_all_checkpoints:
         if os.path.isdir(os.path.expanduser('~/checkpoints/multitracker')):
             shutil.rmtree(os.path.expanduser('~/checkpoints/multitracker'))
+    
     if args.data_dir:
         db = dbconnection.DatabaseConnection(file_db=os.path.join(args.data_dir,'data.db'))
         config['data_dir'] = args.data_dir 
@@ -232,6 +236,7 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
     if config['file_tracking_results'] is None:
         config['file_tracking_results'] = video_file_out.replace('.%s'%video_file_out.split('.')[-1],'.csv')
     # setup CSV for object tracking and keypoints
+    os.makedirs(os.path.split(config['file_tracking_results'])[0], exist_ok=True)
     print('[*] writing csv file to', config['file_tracking_results'])
     file_csv = open( config['file_tracking_results'], 'w') 
     file_csv.write('video_id,frame_id,track_id,center_x,center_y,x1,y1,x2,y2,time_since_update\n')
@@ -440,6 +445,7 @@ if __name__ == '__main__':
     assert args.tracking_method in ['DeepSORT', 'VIoU', 'UpperBound']
     assert args.objectdetection_method in ['fasterrcnn', 'ssd']
     assert args.keypoint_method in ['none', 'hourglass2', 'hourglass4', 'hourglass8', 'vgg16', 'efficientnet', 'efficientnetLarge', 'psp']
+    print('args.data_dir',args.data_dir)
     args.yolox_exp = os.path.expanduser(args.yolox_exp)
     args.data_dir = os.path.expanduser(args.data_dir)
     main(args)

@@ -51,8 +51,13 @@ def get_roi_crop_dim(data_dir, project_id, video_id, target_frame_height):
         the crop dimension should be high enough to see the whole animal but as small as possible
         different videos show animals in different sizes, so we scan the db for all bboxes and take 98% median as size
     """
-    [Hframe,Wframe,_] = cv.imread(glob(os.path.join(data_dir, 'projects', str(project_id), str(video_id),'frames','train','*.png'))[0]).shape
     db = dbconnection.DatabaseConnection(file_db=os.path.join(data_dir,'data.db'))
+    
+    try:
+        [Hframe,Wframe,_] = cv.imread(glob(os.path.join(data_dir, 'projects', str(project_id), str(video_id),'frames','train','*.png'))[0]).shape
+    except:
+        Hframe,Wframe = 1080, 1920
+        
     db.execute("select * from bboxes where video_id=%s and is_visible=true;" % video_id)
     db_boxxes = [x for x in db.cur.fetchall()]
     ref_vid_id = None
