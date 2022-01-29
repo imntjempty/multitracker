@@ -66,6 +66,9 @@ from multitracker.tracking.keypoint_tracking import tracker as keypoint_tracking
 from multitracker.tracking.deep_sort.application_util import preprocessing
 from multitracker.tracking.deep_sort.application_util import visualization
 
+def train_yolox():
+    raise NotImplementedError("You have to train a yolox model first!")
+
 def main(args):
     os.environ['MULTITRACKER_DATA_DIR'] = args.data_dir
     from multitracker.be import dbconnection
@@ -155,6 +158,7 @@ def main(args):
         #print('[*] trained object detection model',checkpoint_directory_object_detection)
         config['object_detection_model'] = checkpoint_directory_object_detection
         train_yolox()
+
 
     ## crop bbox detections and train keypoint estimation on extracted regions
     #point_classification.calculate_keypoints(config, detection_file_bboxes)
@@ -414,7 +418,7 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--objectdetection_model', required=False,default=None)
+    parser.add_argument('--objectdetection_model', required=True,default=None)
     parser.add_argument('--keypoint_model', required=False,default=None)
     parser.add_argument('--autoencoder_model', required=False,default=None)
     parser.add_argument('--project_id', required=True,type=int)
