@@ -72,7 +72,7 @@ def load_keypoint_model(path_model):
     return trained_model 
 
 def load_data(project_id,video_id,max_minutes=0):
-    frames_dir = inference.get_project_frame_train_dir(project_id, video_id)
+    frames_dir = get_project_frame_train_dir(project_id, video_id)
     frame_files = sorted(glob(os.path.join(frames_dir,'*.png')))
     
     #frame_files = frame_files[int(np.random.uniform(2000)):]
