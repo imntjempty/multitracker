@@ -287,7 +287,7 @@ if __name__ == '__main__':
     parser.add_argument('--project_id', default=1, type=int)
     parser.add_argument('--train_video_ids', required=True)
     parser.add_argument('--test_video_ids', required=True)
-    parser.add_argument('--outdir',default='~/github/multitracker/object_detection/YOLOX/datasets/multitracker')
+    parser.add_argument('--outdir',default='~/github/multitracker/src/multitracker/object_detection/YOLOX/datasets/multitracker')
     parser.add_argument('--database', default = '~/data/multitracker/data.db')
     parser.add_argument('--imsize', default = ['1920x1080', '960x540'][0])
     args = vars(parser.parse_args())

@@ -7,7 +7,7 @@ import torch.distributed as dist
 from yolox.data import get_yolox_datadir
 from yolox.exp import Exp as MyExp
 
-datadir = os.path.expanduser('~/github/multitracker/object_detection/YOLOX/datasets/multitracker')
+datadir = os.path.expanduser('~/github/multitracker/src/multitracker/object_detection/YOLOX/datasets/multitracker')
 
 class Exp(MyExp):
     def __init__(self):
