@@ -142,7 +142,7 @@ def draw_label(im, pos=(5,5), label="", font_size = 18, font_name = "Roboto-Regu
 
 
 
-def visualize(vis, frame, tracker, detections, keypoint_tracker, keypoints, tracked_keypoints, crop_dim, results, sketch_file = None):
+def visualize(vis, frame, tracker, detections, keypoint_tracker, keypoints, tracked_keypoints, ref_crop_dim, results, sketch_file = None):
     # draw keypoint detections 'whitish'
     im = np.array(frame, copy=True)
     font_size = int(24. * min(im.shape[:2])/1000.)
@@ -163,6 +163,7 @@ def visualize(vis, frame, tracker, detections, keypoint_tracker, keypoints, trac
     for i, track in enumerate(tracker.tracks):
         # crop image around track center
         x1,y1,x2,y2 = track.to_tlbr()
+        crop_dim = int(max(y2-y1,x2-x1) if ref_crop_dim is None else ref_crop_dim)
         center = roi_segm.get_center(x1,y1,x2,y2, frame.shape[0],frame.shape[1], crop_dim)
         vis_crop = np.array(im[center[0]-crop_dim//2:center[0]+crop_dim//2,center[1]-crop_dim//2:center[1]+crop_dim//2,:],copy=True)
 

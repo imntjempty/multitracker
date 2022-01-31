@@ -99,6 +99,8 @@ def main(args):
     config['keypoint_model'] = args.keypoint_model
     config['autoencoder_model'] = args.autoencoder_model 
     config['objectdetection_model'] = args.objectdetection_model
+    config['output_video'] = args.output_video
+    config['file_tracking_results'] = args.output_tracking_results
     config['train_video_ids'] = args.train_video_ids
     config['test_video_ids'] = args.test_video_ids
     config['minutes'] = args.minutes
@@ -109,7 +111,6 @@ def main(args):
     config['tracking_method'] = args.tracking_method
     config['track_tail'] = args.track_tail
     config['sketch_file'] = args.sketch_file
-    config['file_tracking_results'] = args.output_tracking_results
     config['use_all_data4train'] = args.use_all_data4train
     config['yolox_exp'] = args.yolox_exp
     config['yolox_name'] = args.yolox_name
@@ -206,12 +207,24 @@ def main(args):
     
     ttrack_start = time.time()
     
-    run(config, detection_model, encoder_model, keypoint_model, args.min_confidence_boxes, args.min_confidence_keypoints  )
+    output_video = None 
+    if 'output_video' in config:
+        output_video = config['output_video']
+    output_video = run(config, detection_model, encoder_model, keypoint_model, args.min_confidence_boxes, args.min_confidence_keypoints, output_video=output_video  )
     
     ttrack_end = time.time()
-    ugly_big_video_file_out = inference.get_video_output_filepath(config)
-    video_file_out = ugly_big_video_file_out.replace('.avi','.mp4')
-    convert_video_h265(ugly_big_video_file_out, video_file_out)
+
+    tmpe = False
+    if output_video[-4:] == '.mp4':
+        nname = 'e.mp4'  
+        tmpe = True 
+    else:
+        nname = '.mp4'
+    video_file_out = output_video.replace('.%s'%output_video.split('.')[-1], nname)
+    convert_video_h265(output_video, video_file_out)
+    if tmpe:
+        os.rename(video_file_out, video_file_out.replace('e.mp4','.mp4'))
+        
     print('[*] done tracking after %f minutes. outputting file' % float(int((ttrack_end-ttrack_start)*10.)/10.),video_file_out)
     
 def convert_video_h265(video_in, video_out):
@@ -223,7 +236,7 @@ def convert_video_h265(video_in, video_out):
 
 
   
-def run(config, detection_model, encoder_model, keypoint_model, min_confidence_boxes, min_confidence_keypoints, tracker = None):
+def run(config, detection_model, encoder_model, keypoint_model, min_confidence_boxes, min_confidence_keypoints, tracker = None, output_video = None):
     if 'UpperBound' == config['tracking_method']:
         assert 'upper_bound' in config and config['upper_bound'] is not None and int(config['upper_bound'])>0, "ERROR: Upper Bound Tracking requires the argument --upper_bound to bet set (eg --upper_bound 4)"
     #config['upper_bound'] = None # ---> force VIOU tracker
@@ -232,11 +245,15 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
     Wframe  = int(video_reader.get(cv.CAP_PROP_FRAME_WIDTH))
     Hframe = int(video_reader.get(cv.CAP_PROP_FRAME_HEIGHT))
     
-    crop_dim = roi_segm.get_roi_crop_dim(config['data_dir'], config['project_id'], config['test_video_ids'].split(',')[0],Hframe)
+    crop_dim = None
     total_frame_number = int(video_reader.get(cv.CAP_PROP_FRAME_COUNT))
-    print('[*] total_frame_number',total_frame_number,'Hframe,Wframe',Hframe,Wframe,'crop_dim',crop_dim)
+    print('[*] total_frame_number',total_frame_number,'Hframe,Wframe',Hframe,Wframe)
     
-    video_file_out = inference.get_video_output_filepath(config)
+    if output_video is None:
+        video_file_out = inference.get_video_output_filepath(config)
+    else:
+        video_file_out = output_video
+
     if config['file_tracking_results'] is None:
         config['file_tracking_results'] = video_file_out.replace('.%s'%video_file_out.split('.')[-1],'.csv')
     # setup CSV for object tracking and keypoints
@@ -336,6 +353,8 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
 
                 if keypoint_model is not None:
                     t_kp_inf_start = time.time()
+                    if crop_dim is None:
+                        crop_dim = roi_segm.get_roi_crop_dim(config['data_dir'], config['project_id'], config['test_video_ids'].split(',')[0],Hframe)
                     keypoint_buffer = inference.inference_batch_keypoints(config, keypoint_model, crop_dim, frames_tensor, detection_buffer, min_confidence_keypoints)
                     #[keypoint_buffer.append(batch_keypoints[ib]) for ib in range(config['inference_objectdetection_batchsize'])]
                     t_kp_inf_end = time.time()
@@ -414,14 +433,18 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
                 dur_vis = tvis1 - tvis0
                 dur_imread, dur_obdet, dur_obtrack, dur_kptrack, dur_vis = [1000. * dur for dur in [dur_imread, dur_obdet, dur_obtrack, dur_kptrack, dur_vis]]
                 print('imread',dur_imread,'obdetect',dur_obdet, 'obtrack',dur_obtrack, 'kptrack',dur_kptrack, 'vis',dur_vis)
+    return video_file_out
 
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--objectdetection_model', required=True,default=None)
+    parser.add_argument('--video', required=True,default=None)
+    parser.add_argument('--output_video', required=False,default=None)
+    parser.add_argument('--output_tracking_results', required=False,default=None)
     parser.add_argument('--keypoint_model', required=False,default=None)
     parser.add_argument('--autoencoder_model', required=False,default=None)
-    parser.add_argument('--project_id', required=True,type=int)
+    parser.add_argument('--project_id', required=False,type=int)
     parser.add_argument('--train_video_ids', default='')
     parser.add_argument('--test_video_ids', default='')
     parser.add_argument('--minutes', required=False,default=0.0,type=float,help="cut the video to the first n minutes, eg 2.5 cuts after the first 150seconds.")
@@ -429,11 +452,9 @@ if __name__ == '__main__':
     parser.add_argument('--min_confidence_keypoints', required=False,default=0.5,type=float)
     parser.add_argument('--inference_objectdetection_batchsize', required=False,default=0,type=int)
     parser.add_argument('--inference_keypoint_batchsize', required=False,default=0,type=int)
-    parser.add_argument('--output_tracking_results', required=False,default=None)
     parser.add_argument('--track_tail', required=False,default=100,type=int,help="How many steps back in the past should the path of each animal be drawn? -1 -> draw complete path")
     parser.add_argument('--sketch_file', required=False,default=None, help="Black and White Sketch of the frame without animals")
-    parser.add_argument('--video', required=False,default=None)
-    parser.add_argument('--yolox_exp', default='~/github/multitracker/object_detection/YOLOX/exps/example/yolox_voc/yolox_voc_m.py')
+    parser.add_argument('--yolox_exp', default='~/github/multitracker/src/multitracker/object_detection/YOLOX/exps/example/yolox_voc/yolox_voc_m.py')
     parser.add_argument('--yolox_name', default='yolox_m')
     parser.add_argument('--tracking_method', required=False,default='UpperBound',type=str,help="Tracking Algorithm to use: [DeepSORT, VIoU, UpperBound] defaults to VIoU")
     parser.add_argument('--objectdetection_method', required=False,default="fasterrcnn", help="Object Detection Algorithm to use [fasterrcnn, ssd] defaults to fasterrcnn") 
