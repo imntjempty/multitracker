@@ -224,7 +224,7 @@ def main(args):
     convert_video_h265(output_video, video_file_out)
     if tmpe:
         os.rename(video_file_out, video_file_out.replace('e.mp4','.mp4'))
-        
+
     print('[*] done tracking after %f minutes. outputting file' % float(int((ttrack_end-ttrack_start)*10.)/10.),video_file_out)
     
 def convert_video_h265(video_in, video_out):
@@ -329,13 +329,13 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
                 file_csv.close()
                 if 'keypoint_method' in config and not config['keypoint_method'] == 'none':
                     file_csv_keypoints.close()
-                return True  
+                #return True  
         else:
             running = False 
             file_csv.close()
             if 'keypoint_method' in config and not config['keypoint_method'] == 'none':
                 file_csv_keypoints.close()
-            return True 
+            #return True 
         timread1 = time.time()
         showing = True # frame_idx % 1000 == 0
 
