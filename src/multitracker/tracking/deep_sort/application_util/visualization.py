@@ -124,7 +124,7 @@ class Visualization(object):
             elif hasattr(track,'steps_unmatched'):
                 _unmatched_steps = track.steps_unmatched
             
-            label = 'id:%sM:%iA:%iS:%s' % (str(track.track_id), _unmatched_steps, _active, _score)
+            label = f'id:{str(track.track_id)}M:{_unmatched_steps}A:{_active}S:{_score}'
             self.viewer.rectangle(
                 *np.array(track.to_tlwh()).astype(np.int), label=label)
             # self.viewer.gaussian(track.mean[:2], track.covariance[:2, :2],

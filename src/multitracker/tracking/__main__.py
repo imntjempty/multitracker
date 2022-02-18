@@ -60,6 +60,7 @@ from multitracker import autoencoder
 from multitracker.tracking.viou import viou_tracker
 from multitracker.tracking import upperbound_tracker
 from multitracker.tracking.deep_sort.deep_sort import tracker as deepsort_tracker
+from multitracker.tracking import sort as sort_tracker
 
 from multitracker.tracking.deep_sort import deep_sort_app
 from multitracker.tracking.keypoint_tracking import tracker as keypoint_tracking
@@ -247,6 +248,8 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
     
     crop_dim = None
     total_frame_number = int(video_reader.get(cv.CAP_PROP_FRAME_COUNT))
+    total_frame_number = 2000
+    
     print('[*] total_frame_number',total_frame_number,'Hframe,Wframe',Hframe,Wframe)
     
     if output_video is None:
@@ -293,6 +296,9 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
         tracker = deepsort_tracker.DeepSORTTracker(config)
     elif config['tracking_method'] == 'VIoU':
         tracker = viou_tracker.VIoUTracker(config)
+    elif config['tracking_method'] == 'SORT':
+        tracker = sort_tracker.Sort(config)
+
     keypoint_tracker = keypoint_tracking.KeypointTracker()
 
     frame_idx = -1
@@ -345,7 +351,7 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
                 frames_tensor = np.array(list(frame_buffer)).astype(np.float32)
                 # fill up frame buffer and then detect boxes for complete frame buffer
                 t_odet_inf_start = time.time()
-                batch_detections = inference.detect_batch_bounding_boxes(config, detection_model, frames_tensor, min_confidence_boxes)
+                batch_detections = inference.detect_batch_bounding_boxes(config, detection_model, frames_tensor, min_confidence_boxes, encoder_model=encoder_model)
                 [detection_buffer.append(batch_detections[ib]) for ib in range(config['inference_objectdetection_batchsize'])]
                 t_odet_inf_end = time.time()
                 if frame_idx < 100 and frame_idx % 10 == 0:
@@ -456,7 +462,7 @@ if __name__ == '__main__':
     parser.add_argument('--sketch_file', required=False,default=None, help="Black and White Sketch of the frame without animals")
     parser.add_argument('--yolox_exp', default='~/github/multitracker/src/multitracker/object_detection/YOLOX/exps/example/yolox_voc/yolox_voc_m.py')
     parser.add_argument('--yolox_name', default='yolox_m')
-    parser.add_argument('--tracking_method', required=False,default='UpperBound',type=str,help="Tracking Algorithm to use: [DeepSORT, VIoU, UpperBound] defaults to VIoU")
+    parser.add_argument('--tracking_method', required=False,default='UpperBound',type=str,help="Tracking Algorithm to use: [DeepSORT, VIoU, UpperBound, SORT] defaults to VIoU")
     parser.add_argument('--objectdetection_method', required=False,default="fasterrcnn", help="Object Detection Algorithm to use [fasterrcnn, ssd] defaults to fasterrcnn") 
     parser.add_argument('--objectdetection_resolution', required=False, default="640x640", help="xy resolution for object detection. coco pretrained model only available for 320x320, but smaller resolution saves time")
     parser.add_argument('--keypoint_resolution', required=False, default="224x224",help="patch size to analzye keypoints of individual animals")
@@ -467,7 +473,7 @@ if __name__ == '__main__':
     parser.add_argument('--video_resolution', default=None, help='resolution the video is downscaled to before processing to reduce runtime, eg 640x480. default no downscaling')
     parser.add_argument('--use_all_data4train', action='store_true')
     args = parser.parse_args()
-    assert args.tracking_method in ['DeepSORT', 'VIoU', 'UpperBound']
+    assert args.tracking_method in ['DeepSORT', 'VIoU', 'UpperBound', 'SORT']
     assert args.objectdetection_method in ['fasterrcnn', 'ssd']
     assert args.keypoint_method in ['none', 'hourglass2', 'hourglass4', 'hourglass8', 'vgg16', 'efficientnet', 'efficientnetLarge', 'psp']
     print('args.data_dir',args.data_dir)

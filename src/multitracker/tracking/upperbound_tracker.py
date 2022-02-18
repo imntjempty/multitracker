@@ -142,7 +142,7 @@ class UpperBoundTracker(Tracker):
     
     def step(self,ob):
         self.global_step += 1
-        debug = bool(1) 
+        debug = bool(0) 
         frame = ob['img']
         self.frame_shape = frame.shape
         [detections, detected_boxes,scores, features] = ob['detections']
@@ -167,7 +167,7 @@ class UpperBoundTracker(Tracker):
                 if self.tracks[i].steps_unmatched > self.config['thresh_set_inactive']:
                     self.tracks[i].active = False
                 
-                #if debug: print('[*] unmatched track',i,self.tracks[i].steps_unmatched,self.tracks[i].active)
+                if debug: print('[*] unmatched track',i,self.tracks[i].steps_unmatched,self.tracks[i].active)
 
         # check if unmatched detection is a new track or gets assigned to inactive track (depending on upper bound number)
         for j in range(len(detected_boxes)):

@@ -282,6 +282,7 @@ def detect_batch_bounding_boxes_tf2(config, detection_model, frames, thresh_dete
 def detect_batch_bounding_boxes(config, detection_model, frames, thresh_detection, encoder_model = None):
         
     frames = np.stack(frames,axis=0) # eg (4, 1216, 1936, 3)
+    N,H,W, _ = frames.shape 
     ori_shape = frames.shape
     
     num_classes = 1 
@@ -328,28 +329,61 @@ def detect_batch_bounding_boxes(config, detection_model, frames, thresh_detectio
                 scores = outputs[:, 4] * outputs[:, 5]
 
             
-                features = np.zeros((len(bboxes),4))
-                '''if encoder_model is not None:
+                #features = np.zeros((len(bboxes),4))
+                if encoder_model is not None:
                     ae_config = autoencoder.get_autoencoder_config()
-                    ae_scaled = []
-                    for i in range(frames.shape[0]):
-                        ae_scaled.append(cv.resize( frames[i,:,:,:] ,(ae_config['ae_resolution'][0],ae_config['ae_resolution'][1])))
+                    #ae_scaled = []
+                    #for i in range(frames.shape[0]):
+                    #    ae_scaled.append(cv.resize( frames[i,:,:,:], (ae_config['ae_resolution'][0],ae_config['ae_resolution'][1])))
+                    ae_scaled = [cv.resize( frames[i,:,:,:], (ae_config['ae_resolution'][0],ae_config['ae_resolution'][1]))]
                     ae_scaled = np.stack(ae_scaled,axis=0)
                     ae_scaled = (ae_scaled / 127.5) - 1 # [0,255] => [-1,1]
-                    features = encoder_model( ae_scaled )[0]
-                    features = tf.keras.layers.GlobalAveragePooling2D()(features).numpy()
+                    features = encoder_model( ae_scaled )[0] # (1, 80, 80, 32)
+                    #print('features before',features.shape)
+                    #features = tf.keras.layers.GlobalAveragePooling2D()(features).numpy()
                     #features = (features - features.mean())/features.std()
-                    features = features / np.linalg.norm(features)'''
-
+                    #features = features / np.linalg.norm(features)
+                    #print('features',features.shape)
+                    #features = features[0,:,:,:]
                 result = []
                 for j, (bbox, class_name, score) in enumerate(zip(bboxes, cls, scores)):
                     left,top,x2,y2 = bbox
-                    width, height = x2 - left, y2-top
+                    if left > x2:
+                        left, x2 = x2, left 
+                    if top > y2:
+                        top, y2 = y2, top 
+                    #print(i,j,'left,top,x2,y2',left,top,x2,y2)
+                    width, height = x2 - left, y2 - top
+                    
                     #centerx, centery, width, height = bbox
                     #left = centerx - width/2.
                     #top = centery - height/2.
                     #print(i, left,top,width,height, score, 'features', features.shape)
-                    detection = Detection([left,top,width,height], score, features[j,:])
+                    
+                    if encoder_model is not None:
+                        ## crop from feature map downsampled box for feature calc ( 8x downsized )
+                        K = 8 # 3 downsample convs lead to 8x downsize, look at autoencoder.Encoder architecture
+                        featx1 = max(0,int( (config['object_detection_resolution'][0]/W) * left / K ) -1)
+                        featy1 = max(0,int( (config['object_detection_resolution'][1]/H) * top / K ) -1)
+                        featx2 = min(features.shape[2]-1, int( (config['object_detection_resolution'][0]/W) * x2 / K ) +1)
+                        featy2 = min(features.shape[1]-1,int( (config['object_detection_resolution'][1]/H) * y2 / K ) +1)
+                        #print(i, j, 'feat',featy1,featy2,'xx',featx1,featx2,'fmap',features.shape)
+                        feature_crop = features[:, featy1: featy2, featx1: featx2, :]
+                        #print('feature_crop',feature_crop.shape)
+                        #box_feature = feature_crop.numpy()[0,...]
+                        #box_feature = cv.resize(box_feature, (64,64))
+                        box_feature = tf.keras.layers.GlobalAveragePooling2D()(feature_crop).numpy()[0,:]
+                        box_feature = np.ravel(box_feature)
+                        
+                        #feature_crop = tf.image.resize(feature_crop,[64,64])
+                        #feature_crop = tf.keras.layers.Flatten()(feature_crop)
+                        #feature_crop = feature_crop.numpy()[0,:]
+                        # normalize to unit length
+                        #box_feature = feature_crop / np.linalg.norm(feature_crop)
+                        #print('box_feature',box_feature.shape,box_feature.min(),box_feature.max())
+                    else:
+                        box_feature = np.zeros((len(bboxes),4))
+                    detection = Detection([left,top,width,height], score, box_feature)
                     
                     result.append(detection) 
                 batch_detections.append(result) 
@@ -399,8 +433,8 @@ def load_autoencoder_feature_extractor(config):
     ## feature extractor
     config_autoencoder = autoencoder.get_autoencoder_config()
     inputs = tf.keras.layers.Input(shape=[config_autoencoder['img_height'], config_autoencoder['img_width'], 3])
-    feature_extractor,encoder = autoencoder.Encoder(inputs)
-    encoder_model = tf.keras.Model(inputs = inputs, outputs = [feature_extractor,encoder])
+    feature_extractor, encoder = autoencoder.Encoder(inputs)
+    encoder_model = tf.keras.Model(inputs = inputs, outputs = [feature_extractor, encoder])
     ckpt = tf.train.Checkpoint(encoder_model=encoder_model)
 
     ckpt_manager = tf.train.CheckpointManager(ckpt, config['autoencoder_model'], max_to_keep=5)

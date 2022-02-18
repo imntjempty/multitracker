@@ -128,20 +128,26 @@ def matching_cascade(
 
     unmatched_detections = detection_indices
     matches = []
+    #print('cascade_depth',cascade_depth)
     for level in range(cascade_depth):
         if len(unmatched_detections) == 0:  # No detections left
+            print('No detections left')
             break
-
+        
+        for k in track_indices:
+            ...#print('since update',k,tracks[k].time_since_update)
         track_indices_l = [
             k for k in track_indices
-            if tracks[k].time_since_update == 1 + level
+            if tracks[k].time_since_update == level
         ]
         if len(track_indices_l) == 0:  # Nothing to match at this level
+            #print('Nothing to match at this level')
             continue
         matches_l, _, unmatched_detections = \
             min_cost_matching(
                 distance_metric, max_distance, tracks, detections,
                 track_indices_l, unmatched_detections)
+        #print('calculated feature distances')
         matches += matches_l
     unmatched_tracks = list(set(track_indices) - set(k for k, _ in matches))
     return matches, unmatched_tracks, unmatched_detections
