@@ -39,7 +39,10 @@ import os
 import argparse
 from multiprocessing import freeze_support
 import json 
+from glob import glob 
 import numpy as np 
+import shutil
+from distutils.dir_util import copy_tree
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import trackeval  # noqa: E402
@@ -68,8 +71,55 @@ def do_evaluate():
             parser.add_argument("--" + setting, nargs='+')
         else:
             parser.add_argument("--" + setting)
-    parser.add_argument('--json_config', default = '~/github/multitracker/TrackEval/configs/TrackingUnderOcclusion.json')
+    parser.add_argument('--json_config', default = '~/github/multitracker/src/multitracker/TrackEval/configs/TrackingUnderOcclusion.json')
+    parser.add_argument('--data_dir', default = '~/data/multitracker')
+    #parser.add_argument('--project_id', type=int, default=1)
+    #parser.add_argument('--project_id', type=int, default=1)
     args = parser.parse_args().__dict__
+    args['data_dir'] = os.path.expanduser(args['data_dir'])
+    args['json_config'] = os.path.expanduser(args['json_config'])
+    os.makedirs(os.path.split(args['json_config'])[1], exist_ok=True)
+
+    ## create json with eval jobs
+    # find all csvs for all videos for all projects for given datadir
+    gtcsvs = sorted(glob(os.path.join(args['data_dir'], 'projects','*','*','trackannotation.csv')))
+    evaljobs_data = { "eval_jobs": [] }
+    
+    #gtcsvs = [gtcsvs[0]]
+    
+    for gtcsv in gtcsvs:
+        # for each gt csv find tracking csvs
+        job = { 'sequence_name': gtcsv }
+        job['csv_trackannotation'] = gtcsv
+        job['trackers'] = []
+        _video_dir = os.path.abspath(os.path.join(gtcsv, os.pardir, os.pardir))
+        trackingcsvs = sorted(glob(os.path.join( _video_dir, '*.csv' )))
+        #trackingcsvs = [trackingcsvs[0]]
+        for trackingcsv in trackingcsvs:
+            tracking_name = ''
+            if '_DeepSORT_' in trackingcsv:
+                tracking_name = 'DeepSORT'
+            elif '_SORT_' in trackingcsv:
+                tracking_name = 'SORT'
+            elif '_UpperBound_' in trackingcsv:
+                tracking_name = 'UpperBound (ours)'
+            elif '_VIoU_' in trackingcsv:
+                tracking_name = 'VIoU'
+            job['trackers'].append({
+                'name': tracking_name,
+                'csv_out': trackingcsv 
+            })
+        evaljobs_data['eval_jobs'].append(job)
+        #if len(evaljobs_data['eval_jobs']) == 0:
+        #    evaljobs_data['eval_jobs'].append(job)
+
+    config['json_config'] = args['json_config']
+    with open(config['json_config'],'w') as fout:
+        json.dump(evaljobs_data, fout, indent=4)
+    print(open(config['json_config']).readlines())
+
+
+
     for setting in args.keys():
         if args[setting] is not None:
             if setting not in config:
@@ -106,6 +156,7 @@ def do_evaluate():
         
         for tracker in sequence['trackers']:
             __dataset_config = deepcopy(_dataset_config)
+            __dataset_config['_csv_tracked'] = tracker['name']
             __dataset_config['_csv_tracked'] = tracker['csv_out']
             
             # Run code
@@ -119,13 +170,19 @@ def do_evaluate():
                 raise Exception('No metrics selected for evaluation')
         
             output_res, output_msg = evaluator.evaluate(dataset_list, metrics_list)
-            #print('output_res\n\n\n')
-            #print(output_res)
             output_res['sequence_name'] = sequence['sequence_name']
             output_res['tracker_name'] = tracker['name']
             json_out = '%s_%s.json' % ( sequence['sequence_name'], tracker['name'])
             with open(json_out, 'w') as outfile:
                 json.dump(output_res, outfile, cls=NumpyEncoder)
+
+            ## copy over output results to appropiate final directory
+            dir_out = os.path.join(args['data_dir'],'evaluation','tr4cker','seg1')
+            dir_final = os.path.join(args['data_dir'], 'evaluation',tracker['name'],os.path.split(tracker['csv_out'])[1][:-4] )
+            print(f'[*] copying from {dir_out} to {dir_final}')
+            copy_tree(dir_out, dir_final)
+            shutil.rmtree(dir_out)
+
 
 
 def plot_eval_results():
@@ -148,6 +205,38 @@ def plot_eval_results():
     """
 
 
+def create_summary():
+    dir_eval = '/home/alex/data/multitracker/evaluation'
+    csv_out = os.path.join(dir_eval, 'evaluation.csv')
+    if os.path.isfile(csv_out): os.remove(csv_out)
+
+    with open(csv_out, 'a+') as fcsv:
+        wrote_header = False
+        tracker_dirs = sorted(glob(dir_eval+'/*/'))
+        tracker_names = [os.path.split(dd[:-1])[1] for dd in tracker_dirs]
+        for i, tracker_name in enumerate(tracker_names):
+            sequence_dirs = sorted(glob(tracker_dirs[i]+'*/'))
+            sequence_names = ['_'.join(os.path.split(dd[:-1])[1].split('_')[9:]) for dd in sequence_dirs]
+            if len(sequence_dirs) > 0:
+                for j, sequence_name in enumerate(sequence_names):
+                    csv_seq = sequence_dirs[j]+'mouse_detailed.csv'
+                    with open(csv_seq, 'r') as fin:
+                        lines = fin.readlines()
+                        if wrote_header: 
+                            lines = lines[1:]
+                        for l in lines:
+                            # append 2 columns at start for tracker and seq names
+                            if not wrote_header:
+                                l = "tracker,sequence," + l 
+                                wrote_header = True 
+                            else:
+                                l = f"{tracker_name},{sequence_name},"+l
+                            if not 'COMBINED' in l:
+                                fcsv.write(l)
+    print(f'[*] wrote {csv_out} with evaluation results')
+
+
 if __name__ == '__main__':
     do_evaluate()
     plot_eval_results()
+    create_summary()

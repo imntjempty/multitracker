@@ -57,9 +57,9 @@ class Multitracker(_BaseDataset):
         """Initialise dataset, checking that all required files are present"""
         super().__init__()
         # Fill non-given config values with defaults
-        print('config',config)
+        #print('config',config)
         self.config = utils.init_config(config, self.get_default_dataset_config(), self.get_name())
-        print('self.config',self.config)
+        print('   self.config',self.config)
         self.tracker_list = ['tr4cker']
         self.seq_list = ['seg1']
         self.class_list = ['mouse']
@@ -103,8 +103,9 @@ class Multitracker(_BaseDataset):
                     raw_data['gt_ids'][frame_idx].append(idv)
                     raw_data['gt_classes'][frame_idx].append(1) # only one class
                     raw_data['gt_dets'][frame_idx].append([x1,y1,x2,y2])
+                    
                 cnt_gt += 1 
-        raw_data = filter_duplicate_gt(raw_data)
+        #raw_data = filter_duplicate_gt(raw_data)
     
         ## read and parse tracked CSV
         with open(csv_tracked, 'r') as f:
@@ -116,29 +117,25 @@ class Multitracker(_BaseDataset):
                     x2 = x1 + w 
                     y2 = y1 + h 
                     frame_idx,idv = int(frame_idx),int(idv)
-                    #for k in ['gt_ids','gt_classes','gt_dets','tracker_ids','tracker_classes','tracker_dets']:
-                    #    if frame_idx not in raw_data[k]:
-                    #        raw_data[k][frame_idx] = []
                     
                     if frame_idx in raw_data['gt_ids']:
                         raw_data['tracker_ids'][frame_idx].append(idv)
                         raw_data['tracker_classes'][frame_idx].append(1) # only one class
                         raw_data['tracker_dets'][frame_idx].append([x1,y1,x2,y2])
+
                 cnt_tracked += 1 
+
+        num_timesteps = min(len(raw_data['tracker_ids'].keys()), len(raw_data['gt_ids'].keys())) -1
 
         _raw = {}
         for k in raw_data.keys():
-            #print(k,list(raw_data[k].keys())[0],list(raw_data[k].keys())[-1])
-            #print()
             _raw[k] = []
             for frame_idx in raw_data[k].keys():
                 _raw[k].append(raw_data[k][frame_idx])
             _raw[k] = np.array(_raw[k])
 
         raw_data = _raw 
-
-
-        raw_data['num_timesteps'] = min(cnt_gt, cnt_tracked) -1
+        raw_data['num_timesteps'] = num_timesteps
         return raw_data
 
     @_timing.time
@@ -155,7 +152,6 @@ class Multitracker(_BaseDataset):
                     [gt_dets, tracker_dets]: list (for each timestep) of lists of detections.
 
         """
-        print('get_preprocessed_seq_data',cls,'ts',raw_data['num_timesteps'])
         cls_id = self.class_name_to_class_id[cls]
 
         data_keys = ['gt_ids', 'tracker_ids', 'gt_dets', 'tracker_dets', 'similarity_scores']
@@ -167,6 +163,7 @@ class Multitracker(_BaseDataset):
         unique_tracker_ids = []
         num_gt_dets = 0
         num_tracker_dets = 0
+        print('[*] num_timesteps', raw_data['num_timesteps'])
         for t in range(raw_data['num_timesteps']):
 
             # Only extract relevant dets for this class for preproc and eval (cls)

@@ -66,6 +66,7 @@ class HOTA(_BaseMetric):
 
         # Calculate overall jaccard alignment score (before unique matching) between IDs
         global_alignment_score = potential_matches_count / (gt_id_count + tracker_id_count - potential_matches_count)
+        #print('potential_matches_count', np.array(potential_matches_count).shape,'QQQ num_gt_ids',data['num_gt_ids'], data['num_tracker_ids'])
         matches_counts = [np.zeros_like(potential_matches_count) for _ in self.array_labels]
 
         # Calculate scores for each timestep
