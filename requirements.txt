@@ -28,3 +28,4 @@ onnxruntime==1.8.0
 onnx-simplifier==0.3.5
 megengine
 numpy
+filterpy
