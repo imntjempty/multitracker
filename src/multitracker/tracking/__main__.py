@@ -70,7 +70,7 @@ from multitracker.tracking.deep_sort.application_util import visualization
 def train_yolox():
     raise NotImplementedError("You have to train a yolox model first!")
 
-def main(args):
+def main(args, showing = bool(0)):
     os.environ['MULTITRACKER_DATA_DIR'] = args.data_dir
     from multitracker.be import dbconnection
     
@@ -211,22 +211,22 @@ def main(args):
     output_video = None 
     if 'output_video' in config:
         output_video = config['output_video']
-    output_video = run(config, detection_model, encoder_model, keypoint_model, args.min_confidence_boxes, args.min_confidence_keypoints, output_video=output_video  )
+    output_video = run(config, detection_model, encoder_model, keypoint_model, args.min_confidence_boxes, args.min_confidence_keypoints, output_video=output_video , showing = showing )
     
     ttrack_end = time.time()
+    if showing:
+        tmpe = False
+        if output_video[-4:] == '.mp4':
+            nname = 'e.mp4'  
+            tmpe = True 
+        else:
+            nname = '.mp4'
+        video_file_out = output_video.replace('.%s'%output_video.split('.')[-1], nname)
+        convert_video_h265(output_video, video_file_out)
+        if tmpe:
+            os.rename(video_file_out, video_file_out.replace('e.mp4','.mp4'))
 
-    tmpe = False
-    if output_video[-4:] == '.mp4':
-        nname = 'e.mp4'  
-        tmpe = True 
-    else:
-        nname = '.mp4'
-    video_file_out = output_video.replace('.%s'%output_video.split('.')[-1], nname)
-    convert_video_h265(output_video, video_file_out)
-    if tmpe:
-        os.rename(video_file_out, video_file_out.replace('e.mp4','.mp4'))
-
-    print('[*] done tracking after %f minutes. outputting file' % float(int((ttrack_end-ttrack_start)*10.)/10.),video_file_out)
+        print('[*] done tracking after %f minutes. outputting file' % float(int((ttrack_end-ttrack_start)*10.)/10.),video_file_out)
     
 def convert_video_h265(video_in, video_out):
     import subprocess 
@@ -237,7 +237,7 @@ def convert_video_h265(video_in, video_out):
 
 
   
-def run(config, detection_model, encoder_model, keypoint_model, min_confidence_boxes, min_confidence_keypoints, tracker = None, output_video = None):
+def run(config, detection_model, encoder_model, keypoint_model, min_confidence_boxes, min_confidence_keypoints, tracker = None, output_video = None, showing = True):
     if 'UpperBound' == config['tracking_method']:
         assert 'upper_bound' in config and config['upper_bound'] is not None and int(config['upper_bound'])>0, "ERROR: Upper Bound Tracking requires the argument --upper_bound to bet set (eg --upper_bound 4)"
     #config['upper_bound'] = None # ---> force VIOU tracker
@@ -261,9 +261,12 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
         config['file_tracking_results'] = video_file_out.replace('.%s'%video_file_out.split('.')[-1],'.csv')
     # setup CSV for object tracking and keypoints
     os.makedirs(os.path.split(config['file_tracking_results'])[0], exist_ok=True)
+    if os.path.isfile(config['file_tracking_results']): os.remove(config['file_tracking_results'])
+
     print('[*] writing csv file to', config['file_tracking_results'])
-    file_csv = open( config['file_tracking_results'], 'w') 
-    file_csv.write('video_id,frame_id,track_id,center_x,center_y,x1,y1,x2,y2,time_since_update\n')
+    with open( config['file_tracking_results'], 'w') as ff:
+        ff.write('video_id,frame_id,track_id,center_x,center_y,x1,y1,x2,y2,time_since_update\n')
+
     if 'keypoint_method' in config and not config['keypoint_method'] == 'none':
         file_csv_keypoints = open( config['file_tracking_results'].replace('.csv','_keypoints.csv'), 'w') 
         file_csv_keypoints.write('video_id,frame_id,keypoint_class,keypoint_x,keypoint_y\n')
@@ -277,18 +280,19 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
         video_id = -1
     print('      video_id',video_id)
 
-    if os.path.isfile(video_file_out): os.remove(video_file_out)
-    import skvideo.io
-    video_writer = skvideo.io.FFmpegWriter(video_file_out, outputdict={
-        '-vcodec': 'libx264',  #use the h.264 codec
-        '-crf': '0',           #set the constant rate factor to 0, which is lossless
-        '-preset':'veryslow'   #the slower the better compression, in princple, try 
-                                #other options see https://trac.ffmpeg.org/wiki/Encode/H.264
-    }) 
+    if showing:
+        if os.path.isfile(video_file_out): os.remove(video_file_out)
+        import skvideo.io
+        video_writer = skvideo.io.FFmpegWriter(video_file_out, outputdict={
+            '-vcodec': 'libx264',  #use the h.264 codec
+            '-crf': '0',           #set the constant rate factor to 0, which is lossless
+            '-preset':'veryslow'   #the slower the better compression, in princple, try 
+                                    #other options see https://trac.ffmpeg.org/wiki/Encode/H.264
+        }) 
 
-    visualizer = visualization.Visualization([Wframe, Hframe], update_ms=5, config=config)
-    print('[*] writing video file %s' % video_file_out)
-    
+        visualizer = visualization.Visualization([Wframe, Hframe], update_ms=5, config=config)
+        print('[*] writing video file %s' % video_file_out)
+        
     ## initialize tracker for boxes and keypoints
     if config['tracking_method'] == 'UpperBound':
         tracker = upperbound_tracker.UpperBoundTracker(config)
@@ -332,52 +336,42 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
                 frame_buffer.append(frame[:,:,::-1]) # trained on TF RGB, cv2 yields BGR
             else:
                 running = False
-                file_csv.close()
+                #file_csv.close()
                 if 'keypoint_method' in config and not config['keypoint_method'] == 'none':
                     file_csv_keypoints.close()
                 #return True  
         else:
             running = False 
-            file_csv.close()
+            #file_csv.close()
             if 'keypoint_method' in config and not config['keypoint_method'] == 'none':
                 file_csv_keypoints.close()
             #return True 
         timread1 = time.time()
-        showing = True # frame_idx % 1000 == 0
+        # frame_idx % 1000 == 0
 
         if running:
             tobdet0 = time.time()
-            if len(detection_buffer) == 0:
-                frames_tensor = np.array(list(frame_buffer)).astype(np.float32)
-                # fill up frame buffer and then detect boxes for complete frame buffer
-                t_odet_inf_start = time.time()
-                batch_detections = inference.detect_batch_bounding_boxes(config, detection_model, frames_tensor, min_confidence_boxes, encoder_model=encoder_model)
-                [detection_buffer.append(batch_detections[ib]) for ib in range(config['inference_objectdetection_batchsize'])]
-                t_odet_inf_end = time.time()
-                if frame_idx < 100 and frame_idx % 10 == 0:
-                    print('  object detection ms',(t_odet_inf_end-t_odet_inf_start)*1000.,"batch", len(batch_detections),len(detection_buffer), (t_odet_inf_end-t_odet_inf_start)*1000./len(batch_detections) ) #   roughly 70ms
-
-                if keypoint_model is not None:
-                    t_kp_inf_start = time.time()
-                    if crop_dim is None:
-                        crop_dim = roi_segm.get_roi_crop_dim(config['data_dir'], config['project_id'], config['test_video_ids'].split(',')[0],Hframe)
-                    keypoint_buffer = inference.inference_batch_keypoints(config, keypoint_model, crop_dim, frames_tensor, detection_buffer, min_confidence_keypoints)
-                    #[keypoint_buffer.append(batch_keypoints[ib]) for ib in range(config['inference_objectdetection_batchsize'])]
-                    t_kp_inf_end = time.time()
-                    if frame_idx < 200 and frame_idx % 10 == 0:
-                        print('  keypoint ms',(t_kp_inf_end-t_kp_inf_start)*1000.,"batch", len(keypoint_buffer),(t_kp_inf_end-t_kp_inf_start)*1000./ (1e-6+len(keypoint_buffer)) ) #   roughly 70ms
-            tobdet1 = time.time()
-
-            # if detection buffer not empty use preloaded frames and preloaded detections
-            frame = frame_buffer.popleft()
-            detections = detection_buffer.popleft()
+            
+            ## object detection
+            frames_tensor = np.array([frame]).astype(np.float32)
+            detections = inference.detect_batch_bounding_boxes(config, detection_model, frames_tensor, min_confidence_boxes, encoder_model = encoder_model)[0]
             boxes = np.array([d.tlwh for d in detections])
             scores = np.array([d.confidence for d in detections])
             features = np.array([d.feature for d in detections])
+            
+            tobdet1 = time.time()
             tobtrack0 = time.time()
+
+            ## keypoint detection
+            if keypoint_model is not None:
+                t_kp_inf_start = time.time()
+                if crop_dim is None:
+                    crop_dim = roi_segm.get_roi_crop_dim(config['data_dir'], config['project_id'], config['test_video_ids'].split(',')[0],Hframe)
+                keypoints = inference.inference_batch_keypoints(config, keypoint_model, crop_dim, frames_tensor, detections, min_confidence_keypoints)
+            
             # Update tracker
-            tracker.step({'img':frame,'detections':[detections, boxes, scores, features], 'frame_idx': frame_idx})
-            tobtrack1 = time.time()
+            tracker.step({'img':frame,'detections':[detections, boxes, scores, features], 'frame_idx': frame_idx, 'file_tracking_results': config['file_tracking_results']})
+            tobtrack1 = time.time() 
             tkptrack0 = time.time()
             if keypoint_model is not None:
                 keypoints = keypoint_buffer.popleft()
@@ -400,7 +394,8 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
                     raise Exception("ERROR: can't find track's attributes time_since_update or unmatched_steps")
 
                 result = [video_id, frame_idx, track.track_id, center0, center1, bbox[0], bbox[1], bbox[2], bbox[3], _unmatched_steps]
-                file_csv.write(','.join([str(r) for r in result])+'\n')
+                with open( config['file_tracking_results'], 'a') as ff:
+                    ff.write(','.join([str(r) for r in result])+'\n')
                 results.append(result)
             
             if 'keypoint_method' in config and not config['keypoint_method'] == 'none':
@@ -454,7 +449,7 @@ if __name__ == '__main__':
     parser.add_argument('--train_video_ids', default='')
     parser.add_argument('--test_video_ids', default='')
     parser.add_argument('--minutes', required=False,default=0.0,type=float,help="cut the video to the first n minutes, eg 2.5 cuts after the first 150seconds.")
-    parser.add_argument('--min_confidence_boxes', required=False,default=0.5,type=float)
+    parser.add_argument('--min_confidence_boxes', required=False,default=0.75,type=float)
     parser.add_argument('--min_confidence_keypoints', required=False,default=0.5,type=float)
     parser.add_argument('--inference_objectdetection_batchsize', required=False,default=0,type=int)
     parser.add_argument('--inference_keypoint_batchsize', required=False,default=0,type=int)
