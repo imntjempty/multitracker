@@ -26,7 +26,11 @@
         root@9133fa063773:/home/alex/github/multitracker/src/multitracker/object_detection/YOLOX# python -m tools.train -f exps/example/yolox_voc/yolox_voc_s.py -d 1 -b 16 --fp16 -c /home/alex/data/multitracker/object_detection/yolox_s.pth
     
     == 4) start tracking ==
-    root@dd07d98dec1a:/home/alex/github/multitracker/src# python -m multitracker.tracking
+    root@dd07d98dec1a:/home/alex/github/multitracker/src# sh multitracker/TrackEval/scripts/run_eval_tracking_viou.sh && sh multitracker/TrackEval/scripts/run_eval_tracking_sort.sh && sh multitracker/TrackEval/scripts/run_eval_tracking_upperbound.sh
+
+    == 5) start evaluation
+        python3.7 -m multitracker.TrackEval.scripts.run_multitracker
+        python3.7 multitracker/TrackEval/scripts/plot_eval_results.py --csv /home/alex/data/multitracker/evaluation/evaluation.csv --out /tmp/eval
 
     == close docker session ==> [CTRL] + [D]
 """
