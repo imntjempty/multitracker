@@ -97,12 +97,13 @@ class Multitracker(_BaseDataset):
                 if cnt_gt > 0:
                     [frame_idx,idv,x1,y1,x2,y2] = [float(s) for s in [frame_idx,idv,x1,y1,x2,y2]]
                     frame_idx,idv = int(frame_idx),int(idv)
-                    for k in ['gt_ids','gt_classes','gt_dets','tracker_ids','tracker_classes','tracker_dets']:
-                        if frame_idx not in raw_data[k]:
-                            raw_data[k][frame_idx] = []
-                    raw_data['gt_ids'][frame_idx].append(idv)
-                    raw_data['gt_classes'][frame_idx].append(1) # only one class
-                    raw_data['gt_dets'][frame_idx].append([x1,y1,x2,y2])
+                    if frame_idx > 5 * 30:
+                        for k in ['gt_ids','gt_classes','gt_dets','tracker_ids','tracker_classes','tracker_dets']:
+                            if frame_idx not in raw_data[k]:
+                                raw_data[k][frame_idx] = []
+                        raw_data['gt_ids'][frame_idx].append(idv)
+                        raw_data['gt_classes'][frame_idx].append(1) # only one class
+                        raw_data['gt_dets'][frame_idx].append([x1,y1,x2,y2])
                     
                 cnt_gt += 1 
         #raw_data = filter_duplicate_gt(raw_data)
@@ -118,11 +119,11 @@ class Multitracker(_BaseDataset):
                     x2 = x1 + w 
                     y2 = y1 + h 
                     frame_idx,idv = int(frame_idx),int(idv)
-                    
-                    if frame_idx in raw_data['gt_ids']:
-                        raw_data['tracker_ids'][frame_idx].append(idv)
-                        raw_data['tracker_classes'][frame_idx].append(1) # only one class
-                        raw_data['tracker_dets'][frame_idx].append([x1,y1,x2,y2])
+                    if frame_idx > 5 * 30:
+                        if frame_idx in raw_data['gt_ids']:
+                            raw_data['tracker_ids'][frame_idx].append(idv)
+                            raw_data['tracker_classes'][frame_idx].append(1) # only one class
+                            raw_data['tracker_dets'][frame_idx].append([x1,y1,x2,y2])
 
                 cnt_tracked += 1 
 
