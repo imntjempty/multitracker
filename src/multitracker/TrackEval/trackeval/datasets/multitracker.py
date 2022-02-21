@@ -113,6 +113,7 @@ class Multitracker(_BaseDataset):
             cnt_tracked = 0 
             for [video_id,frame_idx,idv,centerx,centery,x1,y1,w,h,time_since_update] in lines_tracked:
                 if cnt_tracked > 0:
+                    #print('huqu',frame_idx,idv,x1,y1,w,h)
                     [frame_idx,idv,x1,y1,w,h] = [float(s) for s in [frame_idx,idv,x1,y1,w,h]]
                     x2 = x1 + w 
                     y2 = y1 + h 
@@ -130,7 +131,7 @@ class Multitracker(_BaseDataset):
         _raw = {}
         for k in raw_data.keys():
             _raw[k] = []
-            for frame_idx in raw_data[k].keys():
+            for frame_idx in sorted(list(raw_data[k].keys())):
                 _raw[k].append(raw_data[k][frame_idx])
             _raw[k] = np.array(_raw[k])
 
