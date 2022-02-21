@@ -154,9 +154,9 @@ def associate_detections_to_tracks(detections,tracks,iou_threshold = 0.3):
   Assigns detections to tracked object (both represented as bounding boxes)
   Returns 3 lists of matches, unmatched_detections and unmatched_tracks
   """
-  if(len(tracks)==0):
+  if len(tracks)==0 or len(detections) == 0:
     return np.empty((0,2),dtype=int), np.arange(len(detections)), np.empty((0,5),dtype=int)
-
+  
   iou_matrix = iou_batch(detections, tracks)
 
   if min(iou_matrix.shape) > 0:
