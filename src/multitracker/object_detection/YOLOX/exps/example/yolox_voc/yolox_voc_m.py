@@ -22,7 +22,7 @@ class Exp(MyExp):
         self.mixup_prob = 1.0
         self.hsv_prob = 0.2 #1.0
         self.flip_prob = 0.5
-        self.enable_mixup = False
+        self.enable_mixup = True
 
         self.max_epoch = 5000
         self.data_num_workers = 7
