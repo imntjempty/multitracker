@@ -235,9 +235,10 @@ class UpperBoundTracker(Tracker):
 
                                 # delete wrong history of track (since the track was matched the last time)
                                 num_delete_history = 0
-                                while not closest_possible_tracks[0]['track'].history[-1]['matched']: 
-                                    popped = closest_possible_tracks[0]['track'].history.pop()
-                                    num_delete_history += 1 
+                                if hasattr(closest_possible_tracks[0]['track'],'history') and len(closest_possible_tracks[0]['track'].history) > 0:
+                                    while len(closest_possible_tracks[0]['track'].history) > 0 and not closest_possible_tracks[0]['track'].history[-1]['matched']: 
+                                        popped = closest_possible_tracks[0]['track'].history.pop()
+                                        num_delete_history += 1 
 
                                 if should_correct_csv:
                                     # delete num_delete_history lines in csv with closest_possible_track id
@@ -269,7 +270,10 @@ class UpperBoundTracker(Tracker):
                                 # add linear interpolation between last bbox track was matched with beginning of stable detection history
                                 step_start_inter = self.global_step - num_delete_history
                                 step_end_inter = self.global_step - self.config['stabledetection_bufferlength']
-                                start_box = np.array(closest_possible_tracks[0]['track'].history[-1]['bbox'])
+                                if hasattr(closest_possible_tracks[0]['track'],'history') and len(closest_possible_tracks[0]['track'].history) > 0:
+                                    start_box = np.array(closest_possible_tracks[0]['track'].history[-1]['bbox'])
+                                else:
+                                    start_box = np.array(closest_possible_tracks[0]['track'].tlhw)
                                 end_box = np.array(stable_path[0])
                                 
                                 for inter_step in range(step_start_inter, step_end_inter):
