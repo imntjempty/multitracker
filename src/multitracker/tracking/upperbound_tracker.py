@@ -31,6 +31,7 @@ from copy import deepcopy
 from collections import deque
 from tqdm import tqdm
 from lapsolver import solve_dense
+import pandas as pd
 
 from multitracker.tracking.deep_sort.deep_sort.detection import Detection
 from multitracker import util 
@@ -38,6 +39,7 @@ from multitracker.experiments.roi_curve import calc_iou
 
 colors = util.get_colors()
 
+should_correct_csv = True
 
 
 class Track(object):
@@ -167,7 +169,7 @@ class UpperBoundTracker(Tracker):
                 if self.tracks[i].steps_unmatched > self.config['thresh_set_inactive']:
                     self.tracks[i].active = False
                 
-                if debug: print('[*] unmatched track',i,self.tracks[i].steps_unmatched,self.tracks[i].active)
+                #if debug: print('[*] unmatched track',i,self.tracks[i].steps_unmatched,self.tracks[i].active)
 
         # check if unmatched detection is a new track or gets assigned to inactive track (depending on upper bound number)
         for j in range(len(detected_boxes)):
@@ -234,28 +236,83 @@ class UpperBoundTracker(Tracker):
                                 # delete wrong history of track (since the track was matched the last time)
                                 num_delete_history = 0
                                 while not closest_possible_tracks[0]['track'].history[-1]['matched']: 
-                                    closest_possible_tracks[0]['track'].history.pop()
+                                    popped = closest_possible_tracks[0]['track'].history.pop()
                                     num_delete_history += 1 
 
+                                if should_correct_csv:
+                                    # delete num_delete_history lines in csv with closest_possible_track id
+                                    with open(ob['file_tracking_results'],'r') as fread:
+                                        csv_dat = fread.readlines() #[ l.replace('\n','') for l in fread.readlines()]
+                                        header_elems = csv_dat[0].split(',') # video_id,frame_id,track_id,center_x,center_y,x1,y1,x2,y2,time_since_update
+                                        _cntcsv = 0 
+                                        last_frame_id = csv_dat[-1].split(',')[1]
+                                        line_pointer = len(csv_dat)-2
+                                        inlen = len(csv_dat)-1
+                                        done = False
+                                        while not done:
+                                            video_id,frame_id,track_id,center_x,center_y,x1,y1,w,h,time_since_update =  csv_dat[line_pointer].split(',')
+                                            # if match in time and track id, delete
+                                            if int(frame_id) > int(last_frame_id)-num_delete_history  and int(track_id) == int(closest_possible_tracks[0]['track'].track_id):
+                                                #print('[*] deleting csv line', line_pointer, csv_dat[line_pointer][:-1])
+                                                del csv_dat[line_pointer]
+                                            if int(frame_id) <= int(last_frame_id) - num_delete_history or line_pointer == 1:
+                                                done = True 
+                                            line_pointer -= 1
+                                    
+                                # save updated csvs back to disk
+                                with open(ob['file_tracking_results'],'w') as fwrite:
+                                    for l in csv_dat:
+                                        fwrite.write(l)
+                                
+                                cnt_addedlines = 0
+                                track_id = closest_possible_tracks[0]['track'].track_id
                                 # add linear interpolation between last bbox track was matched with beginning of stable detection history
                                 step_start_inter = self.global_step - num_delete_history
                                 step_end_inter = self.global_step - self.config['stabledetection_bufferlength']
                                 start_box = np.array(closest_possible_tracks[0]['track'].history[-1]['bbox'])
                                 end_box = np.array(stable_path[0])
+                                
                                 for inter_step in range(step_start_inter, step_end_inter):
                                     ratio = (inter_step-step_start_inter) / (step_end_inter-step_start_inter)
                                     inter_tlhw = start_box + ratio * (end_box - start_box)
                                     closest_possible_tracks[0]['track'].history.append({'global_step': inter_step, 'bbox': inter_tlhw, 
                                         'matched': False, 'speed_px': closest_possible_tracks[0]['track'].speed_px})
-    
+                                    
+                                    if should_correct_csv:
+                                        with open(ob['file_tracking_results'],'a') as fappend:
+                                            y1, x1, h, w = inter_tlhw
+                                            y2, x2 = y1+h, x1+w
+                                            time_since_update = closest_possible_tracks[0]['track'].steps_unmatched
+                                            fappend.write(','.join([str(q) for q in [-1,inter_step,track_id,x1 + (x2-x1)/2.,y1 + (y2-y1)/2.,x1,y1,w,h,time_since_update]])+'\n')
+                                            cnt_addedlines += 1 
+                                
                                 # add stable detection history
                                 for istable in range(min(len(stable_path),self.config['stabledetection_bufferlength'])):
                                     closest_possible_tracks[0]['track'].history.append({'global_step': step_end_inter+istable, 'bbox': stable_path[istable], 
                                         'matched': True, 'speed_px': closest_possible_tracks[0]['track'].speed_px})
 
+                                    if should_correct_csv:
+                                        with open(ob['file_tracking_results'],'a') as fappend:
+                                            track_id = closest_possible_tracks[0]['track'].track_id
+                                            y1,x1,h,w = stable_path[istable]
+                                            y2, x2 = y1+h,x1+w
+                                            time_since_update = closest_possible_tracks[0]['track'].steps_unmatched
+                                            fappend.write(','.join([str(q) for q in [-1,step_end_inter+istable,track_id,x1 + (x2-x1)/2.,y1 + (y2-y1)/2.,x1,y1,w,h,time_since_update]])+'\n')
+                                            cnt_addedlines += 1
+                                
+                                ## sort csv lines by frame_id 
+                                with open(ob['file_tracking_results'],'r') as fread:
+                                    csv_data = fread.readlines()
+                                csv_data = [csv_data[0]] + sorted(csv_data[1:], key = lambda line: line.split(',')[1])
+                                os.remove(ob['file_tracking_results'])
+                                with open(ob['file_tracking_results'],'w') as fo:
+                                    for line in csv_data:
+                                        fo.write(line)
+
                                 ## update closest possibly assigned track with current position
                                 matched_detections[j] = True
                                 matched_tracks[closest_possible_tracks[0]['idx']] = True
+                               
                                 self.tracks[closest_possible_tracks[0]['idx']].update(detected_boxes[j], self.global_step)
                                 self.tracks[closest_possible_tracks[0]['idx']].steps_age += self.config['stabledetection_bufferlength'] - num_delete_history
 
