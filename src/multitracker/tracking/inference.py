@@ -383,9 +383,12 @@ def detect_batch_bounding_boxes(config, detection_model, frames, thresh_detectio
                         #print('box_feature',box_feature.shape,box_feature.min(),box_feature.max())
                     else:
                         box_feature = np.zeros((len(bboxes),4))
-                    detection = Detection([left,top,width,height], score, box_feature)
-                    
-                    result.append(detection) 
+
+                    #if np.mean(np.abs(width-height)) > 5:
+                    if np.abs(left-top) > 10:
+                        detection = Detection([left,top,width,height], score, box_feature)
+                        result.append(detection) 
+
                 batch_detections.append(result) 
 
     return batch_detections 
