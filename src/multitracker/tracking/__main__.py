@@ -74,7 +74,7 @@ from multitracker.tracking.deep_sort.application_util import visualization
 def train_yolox():
     raise NotImplementedError("You have to train a yolox model first!")
 
-def main(args, showing = bool(0)):
+def main(args, showing = bool(1)):
     os.environ['MULTITRACKER_DATA_DIR'] = args.data_dir
     from multitracker.be import dbconnection
     
@@ -371,14 +371,14 @@ def run(config, detection_model, encoder_model, keypoint_model, min_confidence_b
                 t_kp_inf_start = time.time()
                 if crop_dim is None:
                     crop_dim = roi_segm.get_roi_crop_dim(config['data_dir'], config['project_id'], config['test_video_ids'].split(',')[0],Hframe)
-                keypoints = inference.inference_batch_keypoints(config, keypoint_model, crop_dim, frames_tensor, detections, min_confidence_keypoints)
-            
+                keypoints = inference.inference_batch_keypoints(config, keypoint_model, crop_dim, frames_tensor, [detections], min_confidence_keypoints)[0]
+                
             # Update tracker
             tracker.step({'img':frame,'detections':[detections, boxes, scores, features], 'frame_idx': frame_idx, 'file_tracking_results': config['file_tracking_results']})
             tobtrack1 = time.time() 
             tkptrack0 = time.time()
             if keypoint_model is not None:
-                keypoints = keypoint_buffer.popleft()
+                #keypoints = keypoint_buffer.popleft()
                 # update tracked keypoints with new detections
                 tracked_keypoints = keypoint_tracker.update(keypoints)
             else:
