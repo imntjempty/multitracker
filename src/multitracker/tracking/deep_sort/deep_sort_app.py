@@ -157,9 +157,10 @@ def visualize(vis, frame, tracker, detections, keypoint_tracker, keypoints, trac
             p2 = tuple(np.int32(np.around(tracked_keypoints[i].history_estimated[j-1])))
             im = cv.line(im, p1, p2, color_keypoint, 2)
 
-    history_heatmap = draw_heatmap(frame, results, sketch_file)
+    #history_heatmap = draw_heatmap(frame, results, sketch_file)
     # crop keypointed vis 
-    vis_crops = [ history_heatmap ]
+    #vis_crops = [ history_heatmap ]
+    vis_crops = []
     for i, track in enumerate(tracker.tracks):
         # crop image around track center
         x1,y1,x2,y2 = track.to_tlbr()
