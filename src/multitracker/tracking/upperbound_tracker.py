@@ -184,7 +184,7 @@ class UpperBoundTracker(Tracker):
                 xd1, yd1, wd1, hd1 = dbox
                 stable_path = []
                 for step_back in range(1,self.config['stabledetection_bufferlength']):
-                    [detections, last_detected_boxes, last_scores, last_features] = self.detection_buffer[-step_back]
+                    [last_detections, last_detected_boxes, last_scores, last_features] = self.detection_buffer[-step_back]
                     _stable_detection = False
                     for jo in range(len(last_detected_boxes)):
                         xd2, yd2, wd2, hd2 = last_detected_boxes[jo]
